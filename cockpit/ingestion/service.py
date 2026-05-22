@@ -4,7 +4,7 @@ import logging
 import pathlib
 import shutil
 import sqlite3
-from typing import Sequence
+from typing import Sequence, Callable, Any
 
 from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.notes_checklist import BuildNotesChecklistRepository
@@ -21,6 +21,7 @@ from . import gatekeeper
 from . import hashing
 from .errors import FileStorageError
 from .parsers import audit_bom, coordinate_map, eco_build_notes, traveler
+from .progress import ProgressEvent, ProgressStage
 
 logger = logging.getLogger(__name__)
 
@@ -44,15 +45,23 @@ class IngestionService:
         self.coord_map = coord_map
         self.file_storage_root = file_storage_root
 
-    def ingest(self, paths: Sequence[pathlib.Path]) -> ActiveAudit:
+    def ingest(self, paths: Sequence[pathlib.Path], progress: Callable[[ProgressEvent], None] | None = None) -> ActiveAudit:
         """Ingest a dropped trio, atomically persist, and return the new audit."""
         
+        def _emit(stage: ProgressStage, detail: dict[str, Any] | None = None) -> None:
+            if progress is not None:
+                progress(ProgressEvent(stage=stage, detail=detail))
+
         gatekeeper.validate(paths)
+        _emit(ProgressStage.GATEKEEPER_PASSED)
+
         trio = categorizer.categorize(paths)
+        _emit(ProgressStage.FILES_CATEGORIZED)
         
         bom_hash = hashing.sha256_hex(trio.bom_path)
         trav_hash = hashing.sha256_hex(trio.traveler_path)
         notes_hash = hashing.sha256_hex(trio.notes_path)
+        _emit(ProgressStage.FILES_HASHED)
 
         # Parse part number early from BOM name to construct storage path
         # In case of mismatch, cross_validation will catch it, but we need
@@ -79,21 +88,30 @@ class IngestionService:
                 if not dst.exists():
                     shutil.copy2(src, dst)
                     copied_paths.append(dst)
+            _emit(ProgressStage.FILES_COPIED)
         except Exception as e:
             for cp in copied_paths:
                 try:
                     cp.unlink()
                 except Exception:
                     pass
-            # src is where it failed, dst is where it was trying to go
+            if isinstance(e, FileStorageError):
+                raise
             raise FileStorageError(src, dst, e)
 
         # Parse from stored locations
         try:
             bom_result = audit_bom.parse(stored_bom)
+            _emit(ProgressStage.BOM_PARSED)
+
             eco_result = eco_build_notes.parse(stored_notes)
+            _emit(ProgressStage.ECO_PARSED, {"eco_item_count": len(eco_result.items) if eco_result.items else 0})
+
             trav_result = traveler.parse(stored_trav, self.coord_map)
+            _emit(ProgressStage.TRAVELER_PARSED)
+
             intent = cross_validation.reconcile(bom_result, eco_result, trav_result, self.coord_map)
+            _emit(ProgressStage.CROSS_VALIDATED)
         except Exception:
             for cp in copied_paths:
                 try:
@@ -134,6 +152,8 @@ class IngestionService:
                         row_sequence=item.row_sequence, original_text=item.original_text
                     ) for item in intent.eco_items
                 ])
+
+            _emit(ProgressStage.PERSISTED, {"tht_item_count": len(intent.bom_items) if intent.bom_items else 0})
 
             self.conn.execute("RELEASE SAVEPOINT ingest")
             return audit

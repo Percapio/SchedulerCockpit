@@ -1,0 +1,127 @@
+"""Main window."""
+
+import pathlib
+from PyQt6.QtCore import Qt, QThread
+from PyQt6.QtGui import QCloseEvent
+from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox, QApplication
+
+from cockpit.ingestion.progress import ProgressStage
+from cockpit.ui.bootstrap import BootstrappedApp
+from cockpit.ui.error_messages import FailurePayload
+from cockpit.ui.widgets import DropArea, ProgressView, Toast, ErrorDialog
+from cockpit.ui.workers import IngestionWorker, AuditSummary
+
+
+class MainWindow(QMainWindow):
+    def __init__(self, app: QApplication, bootstrapped: BootstrappedApp) -> None:
+        super().__init__()
+        self._app = app
+        self._bootstrapped = bootstrapped
+        
+        self.setWindowTitle("Local Audit & Routing Checklist Utility")
+        self.resize(800, 600)
+        
+        self._worker_in_flight = False
+        self._close_requested = False
+        self._worker = None
+        self._thread = None
+        
+        self.stacked = QStackedWidget()
+        self.setCentralWidget(self.stacked)
+        
+        self.drop_area = DropArea()
+        self.drop_area.drop_received.connect(self._on_drop_received)
+        self.stacked.addWidget(self.drop_area)
+        
+        stages = list(ProgressStage)
+        self.progress_view = ProgressView(stages)
+        self.progress_view.cancel_requested.connect(self._on_cancel_requested)
+        self.stacked.addWidget(self.progress_view)
+        
+        self.toast = Toast(self)
+        
+    def _on_drop_received(self, paths: list[pathlib.Path]) -> None:
+        if self._worker_in_flight:
+            return
+            
+        self._worker_in_flight = True
+        self.drop_area.setEnabled(False)
+        self.progress_view.reset()
+        self.stacked.setCurrentWidget(self.progress_view)
+        
+        self._thread = QThread()
+        self._worker = IngestionWorker(self._bootstrapped.ingestion_service, paths)
+        self._worker.moveToThread(self._thread)
+        
+        self._thread.started.connect(self._worker.run)
+        
+        self._worker.progress_signal.connect(self._on_progress)
+        self._worker.succeeded_signal.connect(self._on_succeeded)
+        self._worker.failed_signal.connect(self._on_failed)
+        self._worker.cancelled_signal.connect(self._on_cancelled)
+        
+        # Cleanup
+        self._worker.succeeded_signal.connect(self._thread.quit)
+        self._worker.failed_signal.connect(self._thread.quit)
+        self._worker.cancelled_signal.connect(self._thread.quit)
+        
+        self._thread.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+        self._thread.finished.connect(self._on_worker_finished)
+        
+        self._thread.start()
+
+    def _on_cancel_requested(self) -> None:
+        if self._worker:
+            self._worker.request_cancel()
+
+    def _on_progress(self, stage_str: str) -> None:
+        try:
+            stage = ProgressStage(stage_str)
+            self.progress_view.advance(stage)
+        except ValueError:
+            pass
+
+    def _on_succeeded(self, summary: AuditSummary) -> None:
+        self.stacked.setCurrentWidget(self.drop_area)
+        self.toast.show_success(summary)
+
+    def _on_failed(self, payload: FailurePayload) -> None:
+        self.stacked.setCurrentWidget(self.drop_area)
+        dialog = ErrorDialog(payload, self)
+        dialog.exec()
+
+    def _on_cancelled(self) -> None:
+        self.stacked.setCurrentWidget(self.drop_area)
+        self.toast.show_cancel()
+
+    def _on_worker_finished(self) -> None:
+        self._worker_in_flight = False
+        self._worker = None
+        self._thread = None
+        self.drop_area.setEnabled(True)
+        
+        if self._close_requested:
+            self.close()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self._worker_in_flight:
+            event.ignore()
+            confirmed = QMessageBox.question(
+                self, 
+                "Cancel ingest?", 
+                "An ingest is currently in flight. Are you sure you want to cancel and exit?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if confirmed == QMessageBox.StandardButton.Yes:
+                self._close_requested = True
+                if self._worker:
+                    self._worker.request_cancel()
+        else:
+            self._bootstrapped.conn.close()
+            event.accept()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if self.toast.isVisible():
+            self.toast._position_bottom_right()

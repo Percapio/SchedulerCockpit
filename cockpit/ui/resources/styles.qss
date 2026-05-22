@@ -1,0 +1,61 @@
+/* DropArea styles */
+
+DropArea {
+    background-color: #fafafa;
+}
+
+DropArea[state="resting"] {
+    border: 3px dashed #cccccc;
+    border-radius: 12px;
+}
+
+DropArea[state="active"] {
+    border: 4px dashed #4caf50;
+    border-radius: 12px;
+    background-color: #e8f5e9;
+}
+
+DropArea[state="disabled"] {
+    border: none;
+    background-color: #f0f0f0;
+}
+
+QLabel#DropAreaMainLabel {
+    font-size: 24px;
+    font-weight: bold;
+    color: #555555;
+}
+
+DropArea[state="active"] QLabel#DropAreaMainLabel {
+    color: #2e7d32;
+}
+
+QLabel#DropAreaSubLabel {
+    font-size: 16px;
+    color: #888888;
+}
+
+DropArea[state="active"] QLabel#DropAreaSubLabel {
+    color: #4caf50;
+}
+
+/* ProgressView styles */
+QLabel#ProgressText {
+    font-size: 16px;
+}
+
+QLabel#ProgressIcon {
+    font-size: 18px;
+}
+
+/* ErrorDialog styles */
+QLabel#ErrorSummary {
+    font-size: 14px;
+    font-weight: bold;
+}
+
+QLabel#ErrorFooter {
+    font-family: monospace;
+    font-size: 11px;
+    color: #666666;
+}

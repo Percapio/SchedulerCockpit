@@ -1,2 +1,5 @@
 openpyxl
 python-docx
+PyQt6
+pytest
+pytest-qt

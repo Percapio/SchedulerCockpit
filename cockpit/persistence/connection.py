@@ -50,7 +50,7 @@ def open_connection(db_path: pathlib.Path) -> sqlite3.Connection:
     try:
         # isolation_level=None disables the sqlite3 module's implicit transaction
         # management, allowing us to explicitly use BEGIN IMMEDIATE / COMMIT.
-        conn = sqlite3.connect(str(db_path), isolation_level=None)
+        conn = sqlite3.connect(str(db_path), isolation_level=None, check_same_thread=False)
         
         # Enforce required PRAGMAs
         conn.execute("PRAGMA foreign_keys = ON;")

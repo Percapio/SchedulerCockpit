@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "template_revisions": ["Rev H", "Rev I"],
+  "sheet_name": "Sheet1",
+  "anchors": [
+    { "field_key": "customer_category",      "anchor_cell": "A5",  "anchor_text": "CUSTOMER:",  "value_offset": [0, 1], "value_type": "string",  "required": true  },
+    { "field_key": "customer_name",          "anchor_cell": "A5",  "anchor_text": "CUSTOMER:",  "value_offset": [0, 3], "value_type": "string",  "required": true  },
+    { "field_key": "quantity",               "anchor_cell": "F5",  "anchor_text": "QTY:",       "value_offset": [0, 1], "value_type": "integer", "required": true  },
+    { "field_key": "lead_time_weeks",        "anchor_cell": "I5",  "anchor_text": "LEAD TIME:", "value_offset": [0, 2], "value_type": "integer", "required": false },
+    { "field_key": "sales_order_number",     "anchor_cell": "A6",  "anchor_text": "S/O #:",     "value_offset": [0, 1], "value_type": "string",  "required": true  },
+    { "field_key": "assembly_number",        "anchor_cell": "A7",  "anchor_text": "ASSY #:",    "value_offset": [0, 1], "value_type": "string",  "required": true  },
+    { "field_key": "purchase_order_number",  "anchor_cell": "A8",  "anchor_text": "PO #:",      "value_offset": [0, 1], "value_type": "string",  "required": false },
+    { "field_key": "release_date",           "anchor_cell": "A9",  "anchor_text": "REL DATE:",  "value_offset": [0, 1], "value_type": "date",    "required": false },
+    { "field_key": "assembly_type",          "anchor_cell": "A11", "anchor_text": "ASSY TYPE:", "value_offset": [0, 1], "value_type": "string",  "required": false },
+    { "field_key": "process",                "anchor_cell": "A12", "anchor_text": "PROCESS:",   "value_offset": [0, 1], "value_type": "string",  "required": false },
+    { "field_key": "assembly_class",         "anchor_cell": "I7",  "anchor_text": "CLASS:",     "value_offset": [0, 2], "value_type": "integer", "required": false },
+    { "field_key": "rowc_ref",               "anchor_cell": "F11", "anchor_text": ["ROWC:", "RONC:"], "value_offset": [0, 1], "value_type": "string", "required": false }
+  ],
+  "identity_mapping": {
+    "part_number_field": "assembly_number",
+    "work_order_ref_field": "sales_order_number",
+    "quantity_field": "quantity"
+  }
+}

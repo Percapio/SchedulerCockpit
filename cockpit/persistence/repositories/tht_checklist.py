@@ -41,7 +41,7 @@ class ThtChecklistRepository:
                 if row["audit_id"] != audit_id:
                     raise ForeignKeyMismatch(audit_id, item.source_file_id, row["audit_id"])
 
-        cur.execute("BEGIN IMMEDIATE")
+        cur.execute("SAVEPOINT insert_many_tht")
         results = []
         try:
             for item in items:
@@ -67,9 +67,10 @@ class ThtChecklistRepository:
                 row = cur.fetchone()
                 assert row is not None
                 results.append(ThtChecklistItem(**row))
-            cur.execute("COMMIT")
+            cur.execute("RELEASE SAVEPOINT insert_many_tht")
         except Exception:
-            cur.execute("ROLLBACK")
+            cur.execute("ROLLBACK TO SAVEPOINT insert_many_tht")
+            cur.execute("RELEASE SAVEPOINT insert_many_tht")
             raise
 
         return results

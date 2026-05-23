@@ -85,3 +85,32 @@ class OpenAuditDigest:
     quantity: int
     status: AuditStatus
     updated_at: datetime
+
+
+import pathlib
+from cockpit.persistence.errors import PersistenceError
+
+@dataclass(frozen=True)
+class ReapReport:
+    deleted_paths: list[pathlib.Path]
+    retained_files: list[tuple[pathlib.Path, str]]
+    failed_paths: list[tuple[pathlib.Path, str]]
+    pruned_directories: list[pathlib.Path]
+
+
+@dataclass(frozen=True)
+class CompletionOutcome:
+    audit_id: int
+    reap_report: ReapReport
+
+
+@dataclass(frozen=True)
+class ReconciliationReport:
+    cleaned: list[CompletionOutcome]
+    partial: list[tuple[int, ReapReport]]
+    errors: list[tuple[int, PersistenceError]]
+    orphans_deleted: list[pathlib.Path]
+    orphan_delete_failed: list[tuple[pathlib.Path, Exception]]
+    unreadable: list[tuple[pathlib.Path, Exception]]
+    pruned: list[pathlib.Path]
+    notes: list[str]

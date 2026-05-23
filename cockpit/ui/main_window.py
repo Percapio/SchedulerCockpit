@@ -17,20 +17,22 @@ from cockpit.ui.workers import IngestionWorker, AuditSummary
 from cockpit.services.audit_read import AuditReadService
 from cockpit.services.checklist import ChecklistService
 from cockpit.services.split import AuditSplitService
+from cockpit.services.completion import CompletionService
 
 
 class MainWindow(QMainWindow):
     def __init__(
         self,
         app: QApplication,
-        bootstrapped: BootstrappedApp,
+        bootstrapped_app: BootstrappedApp,
         audit_read_svc: AuditReadService,
         checklist_svc: ChecklistService,
         split_svc: AuditSplitService,
+        completion_svc: CompletionService
     ) -> None:
         super().__init__()
         self._app = app
-        self._bootstrapped = bootstrapped
+        self._bootstrapped = bootstrapped_app
         self._audit_read_svc = audit_read_svc
         
         self.setWindowTitle("Local Audit & Routing Checklist Utility")
@@ -58,7 +60,7 @@ class MainWindow(QMainWindow):
         self.picker.new_audit_requested.connect(self._on_picker_new_audit_requested)
         self.stacked.addWidget(self.picker)
         
-        self.dashboard = Dashboard(checklist_svc, split_svc)
+        self.dashboard = Dashboard(checklist_svc, split_svc, completion_svc)
         self.dashboard.exit_requested.connect(self._on_dashboard_exit)
         self.dashboard.error_occurred.connect(self._on_failed)
         self.stacked.addWidget(self.dashboard)

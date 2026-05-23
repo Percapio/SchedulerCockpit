@@ -183,6 +183,18 @@ class AuditRepository:
         )
         return [ActiveAudit(**row) for row in cur.fetchall()]
 
+    def list_completed(self) -> list[ActiveAudit]:
+        cur = self.conn.cursor()
+        cur.execute(
+            """
+            SELECT * FROM active_audits
+            WHERE status = ?
+            ORDER BY created_at ASC
+            """,
+            (AuditStatus.COMPLETED.value,)
+        )
+        return [ActiveAudit(**row) for row in cur.fetchall()]
+
     def _validate_suffix_shape(self, suffix: str) -> None:
         if suffix is None:
             raise InvalidArgumentError("suffix", suffix, "Cannot be None")

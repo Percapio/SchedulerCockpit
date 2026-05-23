@@ -18,6 +18,12 @@ from cockpit.services.audit_read import AuditReadService
 from cockpit.services.checklist import ChecklistService
 from cockpit.services.split import AuditSplitService
 
+from cockpit.services.storage_reaper import StorageReaper
+from cockpit.services.completion import CompletionService
+from cockpit.services.startup_reconciler import StartupReconciler
+from cockpit.services.views import ReconciliationReport
+from cockpit.ingestion.hashing import sha256_hex
+
 from .config import AppConfig
 
 
@@ -29,6 +35,8 @@ class BootstrappedApp:
     audit_read_svc: AuditReadService
     checklist_svc: ChecklistService
     split_svc: AuditSplitService
+    completion_svc: CompletionService
+    reconciliation_report: ReconciliationReport
 
 
 def bootstrap(config: AppConfig) -> BootstrappedApp:
@@ -80,6 +88,23 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     audit_read_svc = AuditReadService(audit_repo)
     checklist_svc = ChecklistService(audit_repo, tht_repo, notes_repo)
     split_svc = AuditSplitService(conn, audit_repo)
+    
+    storage_reaper = StorageReaper(source_file_repo)
+    completion_svc = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)
+    
+    startup_reconciler = StartupReconciler(
+        audit_repo=audit_repo,
+        source_file_repo=source_file_repo,
+        completion_service=completion_svc,
+        file_storage_root=config.file_storage_root,
+        hash_for_path=sha256_hex
+    )
+    report = startup_reconciler.reconcile()
+    
+    if report.errors or report.orphan_delete_failed:
+        logger.warning(f"Reconciliation encountered issues: errors={len(report.errors)}, orphan_delete_failed={len(report.orphan_delete_failed)}")
+    else:
+        logger.info("Reconciliation completed successfully.")
 
     return BootstrappedApp(
         config=config,
@@ -87,5 +112,7 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
         ingestion_service=ingestion_service,
         audit_read_svc=audit_read_svc,
         checklist_svc=checklist_svc,
-        split_svc=split_svc
+        split_svc=split_svc,
+        completion_svc=completion_svc,
+        reconciliation_report=report
     )

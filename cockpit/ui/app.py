@@ -52,9 +52,31 @@ def main() -> None:
         bootstrapped,
         bootstrapped.audit_read_svc,
         bootstrapped.checklist_svc,
-        bootstrapped.split_svc
+        bootstrapped.split_svc,
+        bootstrapped.completion_svc
     )
     window.show()
+    
+    report = bootstrapped.reconciliation_report
+    if report.errors or report.orphan_delete_failed:
+        from cockpit.ui.widgets import ErrorDialog
+        from cockpit.ui.error_messages import FailurePayload
+        
+        detail = []
+        for audit_id, exc in report.errors:
+            detail.append((f"Audit {audit_id}", str(exc)))
+        for path, exc in report.orphan_delete_failed:
+            detail.append((str(path), str(exc)))
+            
+        payload = FailurePayload(
+            exception_class=Exception,
+            title="Startup Cleanup Issues",
+            summary="Some background cleanup tasks encountered errors. They will be retried on the next launch.",
+            detail=detail,
+            reason_code="RECONCILIATION_PARTIAL_FAILURE"
+        )
+        dialog = ErrorDialog(payload, window)
+        dialog.exec()
     
     sys.exit(app.exec())
 

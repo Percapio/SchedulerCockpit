@@ -6,10 +6,11 @@ from PyQt6.QtWidgets import (
 )
 
 from cockpit.services.checklist import ChecklistService
+from cockpit.services.completion import CompletionService, CleanupFailedError
 from cockpit.services.split import AuditSplitService
 from cockpit.services.views import ActiveAuditView, ChecklistRowKey
 from cockpit.persistence.types import AuditStatus
-from cockpit.persistence.errors import PersistenceError
+from cockpit.persistence.errors import PersistenceError, IncompleteChecklistError, IllegalStateTransition
 from cockpit.ui.error_messages import render
 
 from .identity_header import IdentityHeader
@@ -33,11 +34,13 @@ class Dashboard(QWidget):
         self,
         checklist_service: ChecklistService,
         split_service: AuditSplitService,
+        completion_service: CompletionService,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._checklist_service = checklist_service
         self._split_service = split_service
+        self._completion_service = completion_service
         self._view: ActiveAuditView | None = None
         self._current_audit_id: int | None = None
         
@@ -182,7 +185,20 @@ class Dashboard(QWidget):
         if self._current_audit_id is None:
             return
         try:
-            self._checklist_service.complete(self._current_audit_id)
+            outcome = self._completion_service.complete_and_cleanup(self._current_audit_id)
+            win = self.window()
+            if hasattr(win, "toast"):
+                win.toast.show_toast(f"Completed and cleaned up", "")
             self.exit_requested.emit()
-        except Exception as e:
-            self.error_occurred.emit(render(e))
+        except (IncompleteChecklistError, IllegalStateTransition) as exc:
+            payload = render(exc)
+            self.error_occurred.emit(payload)
+            self.reload()
+        except CleanupFailedError as exc:
+            payload = render(exc)
+            self.error_occurred.emit(payload)
+            self.exit_requested.emit()
+        except PersistenceError as exc:
+            payload = render(exc)
+            self.error_occurred.emit(payload)
+            self.reload()

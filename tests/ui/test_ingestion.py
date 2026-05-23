@@ -34,7 +34,8 @@ def main_window(qtbot, bootstrapped_app):
         bootstrapped_app,
         bootstrapped_app.audit_read_svc,
         bootstrapped_app.checklist_svc,
-        bootstrapped_app.split_svc
+        bootstrapped_app.split_svc,
+        bootstrapped_app.completion_svc
     )
     qtbot.addWidget(window)
     window.show()
@@ -56,11 +57,19 @@ def get_sample_trio():
     return []
 
 
-def test_gatekeeper_violation(qtbot, main_window):
+def test_gatekeeper_violation(qtbot, main_window, monkeypatch):
     """Criterion 4: Dropping a broken trio raises GatekeeperViolation and shows ErrorDialog."""
     trio = get_sample_trio()
     if not trio:
         pytest.skip("No sample trio found")
+        
+    dialog_shown = False
+    def mock_exec(self):
+        nonlocal dialog_shown
+        dialog_shown = True
+        
+    from cockpit.ui.widgets import ErrorDialog
+    monkeypatch.setattr(ErrorDialog, "exec", mock_exec)
         
     # Send only 2 files
     bad_trio = trio[:2]

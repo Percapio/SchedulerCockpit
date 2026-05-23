@@ -12,6 +12,7 @@ from cockpit.ingestion.errors import (
     FileStorageError, GatekeeperViolation, HashingError, MalformedBomError, MalformedEcoError,
     MalformedTravelerError
 )
+from cockpit.services.completion import CleanupFailedError
 
 logger = logging.getLogger(__name__)
 
@@ -214,6 +215,19 @@ def render(exc: Exception) -> FailurePayload:
                 ("to_status", str(exc.to_status))
             ],
             reason_code="ILLEGAL_STATE_TRANSITION"
+        )
+
+    if isinstance(exc, CleanupFailedError):
+        detail = [("audit_id", str(exc.audit_id))]
+        for path, reason in exc.reap_report.failed_paths:
+            detail.append((str(path), reason))
+        
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Audit completed, but file cleanup failed",
+            summary="The database was updated successfully, but some physical files could not be deleted. The system will retry deleting them on the next application startup.",
+            detail=detail,
+            reason_code="CLEANUP_FAILED"
         )
 
     # Catch-all

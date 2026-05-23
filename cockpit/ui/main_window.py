@@ -8,15 +8,30 @@ from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox, QApplicati
 from cockpit.ingestion.progress import ProgressStage
 from cockpit.ui.bootstrap import BootstrappedApp
 from cockpit.ui.error_messages import FailurePayload
-from cockpit.ui.widgets import DropArea, ProgressView, Toast, ErrorDialog
+from cockpit.ui.widgets import (
+    DropArea, ProgressView, Toast, ErrorDialog,
+    OpenAuditPicker, Dashboard
+)
 from cockpit.ui.workers import IngestionWorker, AuditSummary
+
+from cockpit.services.audit_read import AuditReadService
+from cockpit.services.checklist import ChecklistService
+from cockpit.services.split import AuditSplitService
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, app: QApplication, bootstrapped: BootstrappedApp) -> None:
+    def __init__(
+        self,
+        app: QApplication,
+        bootstrapped: BootstrappedApp,
+        audit_read_svc: AuditReadService,
+        checklist_svc: ChecklistService,
+        split_svc: AuditSplitService,
+    ) -> None:
         super().__init__()
         self._app = app
         self._bootstrapped = bootstrapped
+        self._audit_read_svc = audit_read_svc
         
         self.setWindowTitle("Local Audit & Routing Checklist Utility")
         self.resize(800, 600)
@@ -38,8 +53,38 @@ class MainWindow(QMainWindow):
         self.progress_view.cancel_requested.connect(self._on_cancel_requested)
         self.stacked.addWidget(self.progress_view)
         
+        self.picker = OpenAuditPicker()
+        self.picker.audit_selected.connect(self._on_picker_audit_selected)
+        self.picker.new_audit_requested.connect(self._on_picker_new_audit_requested)
+        self.stacked.addWidget(self.picker)
+        
+        self.dashboard = Dashboard(checklist_svc, split_svc)
+        self.dashboard.exit_requested.connect(self._on_dashboard_exit)
+        self.dashboard.error_occurred.connect(self._on_failed)
+        self.stacked.addWidget(self.dashboard)
+        
         self.toast = Toast(self)
         
+        self._resolve_initial_page()
+        
+    def _resolve_initial_page(self) -> None:
+        open_audits = self._audit_read_svc.list_open()
+        if not open_audits:
+            self.stacked.setCurrentWidget(self.drop_area)
+        elif len(open_audits) == 1:
+            self.dashboard.load(open_audits[0].audit_id)
+            self.stacked.setCurrentWidget(self.dashboard)
+        else:
+            self.picker.populate(open_audits)
+            self.stacked.setCurrentWidget(self.picker)
+            
+    def _on_picker_audit_selected(self, audit_id: int) -> None:
+        self.dashboard.load(audit_id)
+        self.stacked.setCurrentWidget(self.dashboard)
+        
+    def _on_picker_new_audit_requested(self) -> None:
+        self.stacked.setCurrentWidget(self.drop_area)
+
     def _on_drop_received(self, paths: list[pathlib.Path]) -> None:
         if self._worker_in_flight:
             return
@@ -56,7 +101,7 @@ class MainWindow(QMainWindow):
         self._thread.started.connect(self._worker.run)
         
         self._worker.progress_signal.connect(self._on_progress)
-        self._worker.succeeded_signal.connect(self._on_succeeded)
+        self._worker.succeeded_signal.connect(self._on_ingest_succeeded)
         self._worker.failed_signal.connect(self._on_failed)
         self._worker.cancelled_signal.connect(self._on_cancelled)
         
@@ -82,12 +127,18 @@ class MainWindow(QMainWindow):
         except ValueError:
             pass
 
-    def _on_succeeded(self, summary: AuditSummary) -> None:
-        self.stacked.setCurrentWidget(self.drop_area)
+    def _on_ingest_succeeded(self, summary: AuditSummary) -> None:
+        self.dashboard.load(summary.audit_id)
+        self.stacked.setCurrentWidget(self.dashboard)
         self.toast.show_success(summary)
 
+    def _on_dashboard_exit(self) -> None:
+        self._resolve_initial_page()
+
     def _on_failed(self, payload: FailurePayload) -> None:
-        self.stacked.setCurrentWidget(self.drop_area)
+        # We only go to drop area if we were doing ingest
+        if self.stacked.currentWidget() == self.progress_view:
+            self.stacked.setCurrentWidget(self.drop_area)
         dialog = ErrorDialog(payload, self)
         dialog.exec()
 

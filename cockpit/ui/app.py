@@ -47,7 +47,13 @@ def main() -> None:
         import logging
         logging.getLogger("cockpit.ui").warning(f"Could not load stylesheet: {e}")
 
-    window = MainWindow(app, bootstrapped)
+    window = MainWindow(
+        app, 
+        bootstrapped,
+        bootstrapped.audit_read_svc,
+        bootstrapped.checklist_svc,
+        bootstrapped.split_svc
+    )
     window.show()
     
     sys.exit(app.exec())

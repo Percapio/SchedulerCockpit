@@ -1,6 +1,7 @@
 """Audit repository implementation."""
 
 import json
+import re
 import sqlite3
 from typing import Any
 
@@ -169,3 +170,187 @@ class AuditRepository:
     def hard_delete(self, audit_id: int) -> None:
         cur = self.conn.cursor()
         cur.execute("DELETE FROM active_audits WHERE id = ?", (audit_id,))
+
+    def list_open(self) -> list[ActiveAudit]:
+        cur = self.conn.cursor()
+        cur.execute(
+            """
+            SELECT * FROM active_audits
+            WHERE status != ?
+            ORDER BY updated_at DESC, created_at DESC
+            """,
+            (AuditStatus.COMPLETED.value,)
+        )
+        return [ActiveAudit(**row) for row in cur.fetchall()]
+
+    def _validate_suffix_shape(self, suffix: str) -> None:
+        if suffix is None:
+            raise InvalidArgumentError("suffix", suffix, "Cannot be None")
+        if not suffix.strip():
+            raise InvalidArgumentError("suffix", suffix, "Cannot be empty after strip")
+        if not suffix.startswith("-"):
+            raise InvalidArgumentError("suffix", suffix, "Must start with '-'")
+        if len(suffix) > 16:
+            raise InvalidArgumentError("suffix", suffix, "Must be <= 16 chars")
+        if not re.fullmatch(r"-[A-Za-z0-9]*", suffix):
+            raise InvalidArgumentError("suffix", suffix, "Must contain only alphanumeric chars after '-'")
+
+    def relabel_suffix(self, audit_id: int, new_suffix: str) -> ActiveAudit:
+        self._validate_suffix_shape(new_suffix)
+        
+        cur = self.conn.cursor()
+        cur.execute("SELECT status, part_number, work_order_ref FROM active_audits WHERE id = ?", (audit_id,))
+        row = cur.fetchone()
+        if not row:
+            raise AuditNotFound(audit_id)
+            
+        if row["status"] == AuditStatus.COMPLETED.value:
+            raise IllegalStateTransition(audit_id, AuditStatus.COMPLETED, AuditStatus.COMPLETED)
+            
+        try:
+            cur.execute(
+                "UPDATE active_audits SET split_suffix = ? WHERE id = ?",
+                (new_suffix, audit_id)
+            )
+        except sqlite3.IntegrityError as e:
+            if "UNIQUE constraint failed" in str(e):
+                raise DuplicateIdentityError(row["part_number"], row["work_order_ref"], new_suffix) from e
+            raise
+            
+        return self.find_by_id(audit_id)  # type: ignore
+
+    def set_quantity(self, audit_id: int, new_quantity: int) -> ActiveAudit:
+        if new_quantity < 1:
+            raise InvalidArgumentError("new_quantity", new_quantity, "Must be >= 1")
+            
+        cur = self.conn.cursor()
+        cur.execute("SELECT status FROM active_audits WHERE id = ?", (audit_id,))
+        row = cur.fetchone()
+        if not row:
+            raise AuditNotFound(audit_id)
+            
+        if row["status"] == AuditStatus.COMPLETED.value:
+            raise IllegalStateTransition(audit_id, AuditStatus.COMPLETED, AuditStatus.COMPLETED)
+            
+        cur.execute("UPDATE active_audits SET quantity = ? WHERE id = ?", (new_quantity, audit_id))
+        return self.find_by_id(audit_id)  # type: ignore
+
+    def clone_to_suffix(
+        self,
+        source_audit_id: int,
+        new_suffix: str,
+        new_quantity: int,
+        reason: str,
+    ) -> ActiveAudit:
+        self._validate_suffix_shape(new_suffix)
+        if new_quantity < 1:
+            raise InvalidArgumentError("new_quantity", new_quantity, "Must be >= 1")
+        if not reason or not reason.strip():
+            raise InvalidArgumentError("reason", reason, "Cannot be blank")
+            
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM active_audits WHERE id = ?", (source_audit_id,))
+        source = cur.fetchone()
+        if not source:
+            raise AuditNotFound(source_audit_id)
+            
+        if source["status"] == AuditStatus.COMPLETED.value:
+            raise IllegalStateTransition(source_audit_id, AuditStatus.COMPLETED, AuditStatus.PENDING)
+            
+        now_iso = utcnow().isoformat()
+        
+        try:
+            cur.execute(
+                """
+                INSERT INTO active_audits (
+                    part_number, schedule_job_id, work_order_ref, split_suffix,
+                    quantity, status, traveler_metadata, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    source["part_number"],
+                    source["schedule_job_id"],
+                    source["work_order_ref"],
+                    new_suffix,
+                    new_quantity,
+                    AuditStatus.PENDING.value,
+                    json.dumps(source["traveler_metadata"]) if source["traveler_metadata"] is not None else None,
+                    now_iso,
+                    now_iso
+                )
+            )
+        except sqlite3.IntegrityError as e:
+            if "UNIQUE constraint failed" in str(e):
+                raise DuplicateIdentityError(source["part_number"], source["work_order_ref"], new_suffix) from e
+            raise
+            
+        sibling_id = cur.lastrowid
+        assert sibling_id is not None
+        
+        # Clone source_files by reference (same local_storage_path and file_hash)
+        cur.execute("SELECT * FROM source_files WHERE audit_id = ?", (source_audit_id,))
+        source_files = cur.fetchall()
+        
+        file_id_map = {} # old_id -> new_id
+        for sf in source_files:
+            cur.execute(
+                """
+                INSERT INTO source_files (
+                    audit_id, file_category, original_filename,
+                    local_storage_path, file_hash, ingested_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    sibling_id,
+                    sf["file_category"],
+                    sf["original_filename"],
+                    str(sf["local_storage_path"]),
+                    sf["file_hash"],
+                    now_iso
+                )
+            )
+            file_id_map[sf["id"]] = cur.lastrowid
+            
+        # Clone THT rows
+        cur.execute("SELECT * FROM tht_verification_checklist WHERE audit_id = ?", (source_audit_id,))
+        tht_rows = cur.fetchall()
+        for tr in tht_rows:
+            cur.execute(
+                """
+                INSERT INTO tht_verification_checklist (
+                    audit_id, source_file_id, component_mpn, description,
+                    is_verified, notes
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    sibling_id,
+                    file_id_map[tr["source_file_id"]],
+                    tr["component_mpn"],
+                    tr["description"],
+                    0,
+                    None
+                )
+            )
+            
+        # Clone Notes rows
+        cur.execute("SELECT * FROM build_notes_checklist WHERE audit_id = ?", (source_audit_id,))
+        notes_rows = cur.fetchall()
+        for nr in notes_rows:
+            cur.execute(
+                """
+                INSERT INTO build_notes_checklist (
+                    audit_id, source_file_id, row_sequence, original_text,
+                    is_verified, notes
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    sibling_id,
+                    file_id_map[nr["source_file_id"]],
+                    nr["row_sequence"],
+                    nr["original_text"],
+                    0,
+                    None
+                )
+            )
+            
+        return self.find_by_id(sibling_id)  # type: ignore

@@ -14,6 +14,9 @@ from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepositor
 from cockpit.persistence.repositories.notes_checklist import BuildNotesChecklistRepository
 from cockpit.ingestion.service import IngestionService
 from cockpit.ingestion.parsers.coordinate_map import load as load_map
+from cockpit.services.audit_read import AuditReadService
+from cockpit.services.checklist import ChecklistService
+from cockpit.services.split import AuditSplitService
 
 from .config import AppConfig
 
@@ -23,6 +26,9 @@ class BootstrappedApp:
     config: AppConfig
     conn: sqlite3.Connection
     ingestion_service: IngestionService
+    audit_read_svc: AuditReadService
+    checklist_svc: ChecklistService
+    split_svc: AuditSplitService
 
 
 def bootstrap(config: AppConfig) -> BootstrappedApp:
@@ -71,8 +77,15 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
         file_storage_root=config.file_storage_root
     )
     
+    audit_read_svc = AuditReadService(audit_repo)
+    checklist_svc = ChecklistService(audit_repo, tht_repo, notes_repo)
+    split_svc = AuditSplitService(conn, audit_repo)
+
     return BootstrappedApp(
         config=config,
         conn=conn,
-        ingestion_service=ingestion_service
+        ingestion_service=ingestion_service,
+        audit_read_svc=audit_read_svc,
+        checklist_svc=checklist_svc,
+        split_svc=split_svc
     )

@@ -29,7 +29,13 @@ def bootstrapped_app(app_config):
 
 @pytest.fixture
 def main_window(qtbot, bootstrapped_app):
-    window = MainWindow(QApplication.instance(), bootstrapped_app)
+    window = MainWindow(
+        QApplication.instance(), 
+        bootstrapped_app,
+        bootstrapped_app.audit_read_svc,
+        bootstrapped_app.checklist_svc,
+        bootstrapped_app.split_svc
+    )
     qtbot.addWidget(window)
     window.show()
     qtbot.waitForWindowShown(window)
@@ -90,5 +96,5 @@ def test_successful_ingestion(qtbot, main_window):
     qtbot.waitUntil(lambda: main_window._worker_in_flight is False, timeout=5000)
     
     assert main_window.toast.isVisible()
-    assert main_window.stacked.currentWidget() == main_window.drop_area
+    assert main_window.stacked.currentWidget() == main_window.dashboard
 

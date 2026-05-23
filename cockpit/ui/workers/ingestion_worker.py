@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class AuditSummary:
+    audit_id: int
     part_number: str
     work_order_ref: str
     tht_item_count: int
@@ -44,6 +45,7 @@ class IngestionWorker(QObject):
             assert "eco_item_count" in self._last_detail, "eco_item_count missing from progress stream"
             
             summary = AuditSummary(
+                audit_id=audit.id,
                 part_number=audit.part_number,
                 work_order_ref=audit.work_order_ref,
                 tht_item_count=self._last_detail["tht_item_count"],

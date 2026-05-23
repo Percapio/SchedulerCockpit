@@ -4,7 +4,8 @@ import logging
 from dataclasses import dataclass
 
 from cockpit.persistence.errors import (
-    DuplicateIdentityError, PersistenceUnavailable, SchemaInitializationError, SchemaMismatch
+    DuplicateIdentityError, PersistenceUnavailable, SchemaInitializationError, SchemaMismatch,
+    IncompleteChecklistError, IllegalStateTransition
 )
 from cockpit.ingestion.errors import (
     AnchorNotFound, CategorizationError, CoercionError, CoordinateMapError, CrossValidationError,
@@ -189,6 +190,30 @@ def render(exc: Exception) -> FailurePayload:
                 ("expected_version", str(exc.expected_version))
             ],
             reason_code="SCHEMA_MISMATCH"
+        )
+
+    if isinstance(exc, IncompleteChecklistError):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Internal verification state error",
+            summary="Please escalate to development.",
+            detail=[
+                ("tht_unverified", str(exc.tht_unverified)),
+                ("notes_unverified", str(exc.notes_unverified))
+            ],
+            reason_code="INCOMPLETE_CHECKLIST"
+        )
+
+    if isinstance(exc, IllegalStateTransition):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Cannot change audit at this stage",
+            summary="Please refresh and re-select.",
+            detail=[
+                ("from_status", str(exc.from_status)),
+                ("to_status", str(exc.to_status))
+            ],
+            reason_code="ILLEGAL_STATE_TRANSITION"
         )
 
     # Catch-all

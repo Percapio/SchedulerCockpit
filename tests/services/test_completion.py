@@ -10,21 +10,23 @@ from cockpit.services.storage_reaper import StorageReaper
 from cockpit.services.completion import CompletionService, CleanupFailedError
 from cockpit.services.startup_reconciler import StartupReconciler
 from cockpit.ingestion.hashing import sha256_hex
+from cockpit.persistence.connection import hydrating_row_factory
+from cockpit.persistence.schema import migrate
 from cockpit.persistence.errors import PersistenceError, IncompleteChecklistError
-from cockpit.persistence.schema import migrate_to_v1
 
 
 def test_hard_delete_failure_leaves_completed(tmp_path, monkeypatch):
     db_path = tmp_path / "test.db"
     conn = sqlite3.connect(db_path, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    migrate_to_v1(conn)
+    conn = sqlite3.connect(db_path, isolation_level=None)
+    conn.row_factory = hydrating_row_factory
+    migrate(conn)
         
     audit_repo = AuditRepository(conn)
     source_file_repo = SourceFileRepository(conn)
     
     # insert an audit
-    conn.execute("INSERT INTO active_audits (id, part_number, work_order_ref, split_suffix, quantity, status, created_at, updated_at) VALUES (1, 'p', 'w', '', 1, 'InProgress', '2020', '2020')")
+    conn.execute("INSERT INTO active_audits (id, part_number, work_order_ref, split_suffix, quantity, status, created_at, updated_at) VALUES (1, 'p', 'w', '', 1, 'InProgress', '2020-01-01T00:00:00', '2020-01-01T00:00:00')")
     # complete checklists so transition works
     conn.execute("INSERT INTO tht_verification_checklist (audit_id, component_mpn, is_verified) VALUES (1, 'c', 1)")
     
@@ -42,14 +44,15 @@ def test_hard_delete_failure_leaves_completed(tmp_path, monkeypatch):
     # verify status is Completed
     cur = conn.cursor()
     cur.execute("SELECT status FROM active_audits WHERE id = 1")
-    assert cur.fetchone()[0] == AuditStatus.COMPLETED.value
+    assert cur.fetchone()["status"] == AuditStatus.COMPLETED.value
 
 
 def test_startup_reconciler_orphan_file(tmp_path):
     db_path = tmp_path / "test.db"
     conn = sqlite3.connect(db_path, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    migrate_to_v1(conn)
+    conn = sqlite3.connect(db_path, isolation_level=None)
+    conn.row_factory = hydrating_row_factory
+    migrate(conn)
         
     audit_repo = AuditRepository(conn)
     source_file_repo = SourceFileRepository(conn)
@@ -78,8 +81,9 @@ def test_startup_reconciler_orphan_file(tmp_path):
 def test_incomplete_checklist_rollback(tmp_path):
     db_path = tmp_path / "test.db"
     conn = sqlite3.connect(db_path, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    migrate_to_v1(conn)
+    conn = sqlite3.connect(db_path, isolation_level=None)
+    conn.row_factory = hydrating_row_factory
+    migrate(conn)
         
     audit_repo = AuditRepository(conn)
     source_file_repo = SourceFileRepository(conn)
@@ -87,7 +91,7 @@ def test_incomplete_checklist_rollback(tmp_path):
     completion_service = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)
     
     # insert an audit
-    conn.execute("INSERT INTO active_audits (id, part_number, work_order_ref, split_suffix, quantity, status, created_at, updated_at) VALUES (1, 'p', 'w', '', 1, 'InProgress', '2020', '2020')")
+    conn.execute("INSERT INTO active_audits (id, part_number, work_order_ref, split_suffix, quantity, status, created_at, updated_at) VALUES (1, 'p', 'w', '', 1, 'InProgress', '2020-01-01T00:00:00', '2020-01-01T00:00:00')")
     # leave checklist incomplete
     conn.execute("INSERT INTO tht_verification_checklist (audit_id, component_mpn, is_verified) VALUES (1, 'c', 0)")
     
@@ -97,4 +101,4 @@ def test_incomplete_checklist_rollback(tmp_path):
     # verify status is still InProgress
     cur = conn.cursor()
     cur.execute("SELECT status FROM active_audits WHERE id = 1")
-    assert cur.fetchone()[0] == AuditStatus.IN_PROGRESS.value
+    assert cur.fetchone()["status"] == AuditStatus.IN_PROGRESS.value

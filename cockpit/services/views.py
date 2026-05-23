@@ -1,7 +1,7 @@
 """View-layer dataclasses for the UI."""
 
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, date
 from enum import StrEnum
 from typing import Any
 
@@ -38,6 +38,7 @@ class ActiveAuditView:
     status: AuditStatus
     split_reason: str | None
     traveler_metadata: dict[str, Any] | None
+    ship_date: date | None
     tht_rows: list[ChecklistRowView]
     notes_rows: list[ChecklistRowView]
 
@@ -68,6 +69,9 @@ class ActiveAuditView:
             raise KeyError(f"Row {updated.key} not found in view")
             
         return replace(self, tht_rows=tht, notes_rows=notes)
+
+    def with_ship_date(self, new_value: date | None) -> "ActiveAuditView":
+        return replace(self, ship_date=new_value)
 
 
 @dataclass(frozen=True)

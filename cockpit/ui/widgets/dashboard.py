@@ -8,6 +8,7 @@ from PyQt6.QtWidgets import (
 from cockpit.services.checklist import ChecklistService
 from cockpit.services.completion import CompletionService, CleanupFailedError
 from cockpit.services.split import AuditSplitService
+from cockpit.services.audit_metadata import AuditMetadataService
 from cockpit.services.views import ActiveAuditView, ChecklistRowKey
 from cockpit.persistence.types import AuditStatus
 from cockpit.persistence.errors import PersistenceError, IncompleteChecklistError, IllegalStateTransition
@@ -21,7 +22,7 @@ from .split_dialog import SplitDialog
 _METADATA_DISPLAY_FIELDS: tuple[str, ...] = (
     "customer_name",
     "sales_order_number",
-    "lead_time_weeks",
+    "lead_time_days",
     "release_date",
 )
 
@@ -35,12 +36,14 @@ class Dashboard(QWidget):
         checklist_service: ChecklistService,
         split_service: AuditSplitService,
         completion_service: CompletionService,
+        audit_metadata_service: AuditMetadataService,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._checklist_service = checklist_service
         self._split_service = split_service
         self._completion_service = completion_service
+        self._audit_metadata_service = audit_metadata_service
         self._view: ActiveAuditView | None = None
         self._current_audit_id: int | None = None
         
@@ -48,6 +51,7 @@ class Dashboard(QWidget):
         
         self.header = IdentityHeader()
         self.header.back_requested.connect(self.exit_requested.emit)
+        self.header.ship_date_commit_requested.connect(self._on_ship_date_commit)
         layout.addWidget(self.header)
         
         self.metadata_band = QWidget()
@@ -66,6 +70,10 @@ class Dashboard(QWidget):
         footer.addWidget(self.split_btn)
         
         footer.addStretch()
+        
+        self.verify_all_btn = QPushButton("Verify All")
+        self.verify_all_btn.clicked.connect(self._on_verify_all_clicked)
+        footer.addWidget(self.verify_all_btn)
         
         self.complete_btn = QPushButton("Mark Complete")
         self.complete_btn.clicked.connect(self._on_complete_clicked)
@@ -112,11 +120,15 @@ class Dashboard(QWidget):
         if self._view.status == AuditStatus.COMPLETED:
             self.checklist.setEnabled(False)
             self.split_btn.setEnabled(False)
+            self.verify_all_btn.setEnabled(False)
             self.complete_btn.setEnabled(False)
+            self.header.ship_date_fld.setEnabled(False)
         else:
             self.checklist.setEnabled(True)
             self.split_btn.setEnabled(True)
+            self.verify_all_btn.setEnabled(not self._view.is_fully_verified)
             self.complete_btn.setEnabled(self._view.is_fully_verified)
+            self.header.ship_date_fld.setEnabled(True)
 
     def _current_notes_for(self, row_key: ChecklistRowKey) -> str | None:
         if self._view is None:
@@ -202,3 +214,33 @@ class Dashboard(QWidget):
             payload = render(exc)
             self.error_occurred.emit(payload)
             self.reload()
+
+    def _on_verify_all_clicked(self) -> None:
+        if self._view is None:
+            return
+            
+        self.verify_all_btn.setEnabled(False)
+        self.complete_btn.setEnabled(False)
+        try:
+            reloaded = self._checklist_service.verify_all(self._view.audit_id)
+            self._view = reloaded
+            self.checklist.populate(reloaded)
+            self._update_enablement()
+        except PersistenceError as exc:
+            self.reload()
+            payload = render(exc)
+            self.error_occurred.emit(payload)
+
+    def _on_ship_date_commit(self, new_value) -> None:
+        if self._view is None:
+            return
+            
+        try:
+            self._audit_metadata_service.set_ship_date(self._view.audit_id, new_value)
+            self._view = self._view.with_ship_date(new_value)
+            self.header.set_audit(self._view)
+        except PersistenceError as exc:
+            self.header.ship_date_revert()
+            self.reload()
+            payload = render(exc)
+            self.error_occurred.emit(payload)

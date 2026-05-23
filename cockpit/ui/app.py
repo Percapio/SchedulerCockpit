@@ -53,7 +53,8 @@ def main() -> None:
         bootstrapped.audit_read_svc,
         bootstrapped.checklist_svc,
         bootstrapped.split_svc,
-        bootstrapped.completion_svc
+        bootstrapped.completion_svc,
+        bootstrapped.audit_metadata_svc
     )
     window.show()
     

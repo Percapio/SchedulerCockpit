@@ -27,6 +27,9 @@ def hydrating_row_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
             if dt.tzinfo is None:
                 dt = dt.replace(tzinfo=timezone.utc)
             d[name] = dt
+        elif name == "ship_date":
+            from datetime import date
+            d[name] = date.fromisoformat(val)
         elif name == "traveler_metadata":
             d[name] = json.loads(val)
         elif name == "local_storage_path":

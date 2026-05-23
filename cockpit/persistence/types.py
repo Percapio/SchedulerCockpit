@@ -1,7 +1,7 @@
 """Persistence types (dataclasses and enums)."""
 import pathlib
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, date
 from enum import StrEnum
 from typing import Any
 
@@ -31,6 +31,7 @@ class ActiveAudit:
     status: AuditStatus
     split_reason: str | None
     traveler_metadata: dict[str, Any] | None
+    ship_date: date | None       # NEW (Phase 6)
     created_at: datetime         # UTC, tz-aware
     updated_at: datetime         # UTC, tz-aware
 

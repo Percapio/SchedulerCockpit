@@ -18,6 +18,7 @@ from cockpit.services.audit_read import AuditReadService
 from cockpit.services.checklist import ChecklistService
 from cockpit.services.split import AuditSplitService
 from cockpit.services.completion import CompletionService
+from cockpit.services.audit_metadata import AuditMetadataService
 
 
 class MainWindow(QMainWindow):
@@ -28,7 +29,8 @@ class MainWindow(QMainWindow):
         audit_read_svc: AuditReadService,
         checklist_svc: ChecklistService,
         split_svc: AuditSplitService,
-        completion_svc: CompletionService
+        completion_svc: CompletionService,
+        audit_metadata_svc: AuditMetadataService
     ) -> None:
         super().__init__()
         self._app = app
@@ -60,7 +62,7 @@ class MainWindow(QMainWindow):
         self.picker.new_audit_requested.connect(self._on_picker_new_audit_requested)
         self.stacked.addWidget(self.picker)
         
-        self.dashboard = Dashboard(checklist_svc, split_svc, completion_svc)
+        self.dashboard = Dashboard(checklist_svc, split_svc, completion_svc, audit_metadata_svc)
         self.dashboard.exit_requested.connect(self._on_dashboard_exit)
         self.dashboard.error_occurred.connect(self._on_failed)
         self.stacked.addWidget(self.dashboard)

@@ -59,3 +59,11 @@ QLabel#ErrorFooter {
     font-size: 11px;
     color: #666666;
 }
+
+ChecklistRow {
+    border-bottom: 1px solid palette(mid);
+}
+
+ChecklistRow:last-child {
+    border-bottom: none;
+}

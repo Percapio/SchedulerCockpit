@@ -1114,3 +1114,360 @@
 2026-05-21 21:17:27  INFO      NOT FOUND  [Traveler]  in  E:\BACKUP FOR JOB FOLDERS\B139xxx\B1391xx\B139135 Delsys - REWORK B134170
 2026-05-21 21:17:27  INFO      NOT FOUND  [AUDIT BOM]  in  E:\BACKUP FOR JOB FOLDERS\B139xxx\B1391xx\B139135 Delsys - REWORK B134170
 2026-05-21 21:17:27  INFO      NOT FOUND  [ECO]  in  E:\BACKUP FOR JOB FOLDERS\B139xxx\B1391xx\B139135 Delsys - REWORK B134170
+2026-05-23 00:13:49  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136031 Crescent Systems (CUI)
+2026-05-23 00:13:49  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136038 GatesAir\B136038_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1360xx\B136038 GatesAir\B136038_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136053 Nextern\B136053_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1360xx\B136053 Nextern\B136053_SMT.pdf
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136054 Nextern
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136055 Nextern\B136055_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1360xx\B136055 Nextern\B136055_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136069 Altec Industries\B136069_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1360xx\B136069 Altec Industries\B136069_SMT.pdf
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136072 Urban Sky Theory
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136078 Anduril Maritime (CUI)
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136082 New Potato Technologies (CUI)
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136083 Spectro\B136083_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1360xx\B136083 Spectro\B136083_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136084 Candela\B136084_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1360xx\B136084 Candela\B136084_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1360xx\B136088 Diversified Supply\B136088_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1360xx\B136088 Diversified Supply\B136088_SMT.pdf
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1361xx\B136109 Palantir (CUI)
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1361xx\B136133 John Hopkins University Applied Physics Lab (CUI)
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1361xx\B136143 Urban Sky Theory\B136143_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1361xx\B136143 Urban Sky Theory\B136143_SMT.pdf
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1361xx\B136144 Urban Sky Theory
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1361xx\B136171 Anduril Maritime Quincy, MA
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1361xx\B136176 Machine Solutions\B136176_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1361xx\B136176 Machine Solutions\B136176_SMT.pdf
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1361xx\B136195 Hoverfly Technologies
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1361xx\B136196 Hoverfly Technologies\B136196_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1361xx\B136196 Hoverfly Technologies\B136196_SMT.pdf
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1361xx\B136197 Hoverfly Technologies
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1361xx\B136198 Hoverfly Technologies\B136198_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1361xx\B136198 Hoverfly Technologies\B136198_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1361xx\B136199 Hoverfly Technologies\B136199_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1361xx\B136199 Hoverfly Technologies\B136199_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136200 Hoverfly Technologies\B136200_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136200 Hoverfly Technologies\B136200_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136201 Hoverfly Technologies\B136201_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136201 Hoverfly Technologies\B136201_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136202 Hoverfly Technologies\B136202_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136202 Hoverfly Technologies\B136202_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136203 Hoverfly Technologies\B136203_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136203 Hoverfly Technologies\B136203_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136204 Hoverfly Technologies\B136204_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136204 Hoverfly Technologies\B136204_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136205 Hoverfly Technologies\B136205_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136205 Hoverfly Technologies\B136205_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136206 Hoverfly Technologies\B136206_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136206 Hoverfly Technologies\B136206_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136207 Hoverfly Technologies\B136207_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136207 Hoverfly Technologies\B136207_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136208 Hoverfly Technologies\B136208_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136208 Hoverfly Technologies\B136208_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136209 Hoverfly Technologies\B136209_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136209 Hoverfly Technologies\B136209_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136210 Hoverfly Technologies\B136210_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136210 Hoverfly Technologies\B136210_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136212 Hoverfly Technologies\B136212_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136212 Hoverfly Technologies\B136212_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136213 Hoverfly Technologies\B136213_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136213 Hoverfly Technologies\B136213_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136220 NOV Tuboscope\B136220_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136220 NOV Tuboscope\B136220_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136225 Engenious Design\B136225_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136225 Engenious Design\B136225_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136231 Wabtec\B136231_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136231 Wabtec\B136231_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136232 Wabtec\B136232_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136232 Wabtec\B136232_SMT.pdf
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136233 Wabtec
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136236 Engenious Design
+2026-05-23 00:13:50  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136243 Ocean Aero
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136247 Becton, Dickinson and Company\B136247_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136247 Becton, Dickinson and Company\B136247_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136248 Becton, Dickinson and Company\B136248_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136248 Becton, Dickinson and Company\B136248_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136275 Terabit Wireless\B136275_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136275 Terabit Wireless\B136275_SMT.pdf
+2026-05-23 00:13:50  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136276 Terabit Wireless\B136276_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136276 Terabit Wireless\B136276_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136285 NSI-MI Technologies (CUI)
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136286 Wabtec
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1362xx\B136296 Diversified Supply\B136296_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1362xx\B136296 Diversified Supply\B136296_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1363xx\B136311 Diversified Supply\B136311_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1363xx\B136311 Diversified Supply\B136311_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1363xx\B136317 Xodus Imaging\B136317_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1363xx\B136317 Xodus Imaging\B136317_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1363xx\B136318 Anderson Connectivity (CUI)
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1363xx\B136319 Anderson Connectivity (CUI)
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1363xx\B136320 Federal Aviation Association\B136320_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1363xx\B136320 Federal Aviation Association\B136320_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1363xx\B136323 Nordson Corporation
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1363xx\B136331 Infinitum Electric\B136331_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1363xx\B136331 Infinitum Electric\B136331_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1363xx\B136357 NextPhase Medical Devices\B136357_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1363xx\B136357 NextPhase Medical Devices\B136357_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1363xx\B136373 Lighthouse Instruments
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1363xx\B136394 Fast Enterprises\B136394_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1363xx\B136394 Fast Enterprises\B136394_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1363xx\B136398 GPS Networking\B136398_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1363xx\B136398 GPS Networking\B136398_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1364xx\B136428 Meso Scale Discovery\B136428_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1364xx\B136428 Meso Scale Discovery\B136428_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1364xx\B136429 Meso Scale Discovery\B136429_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1364xx\B136429 Meso Scale Discovery\B136429_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1364xx\B136450 HunterLab\B136450_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1364xx\B136450 HunterLab\B136450_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1364xx\B136467 Hoverfly Technologies\B136467_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1364xx\B136467 Hoverfly Technologies\B136467_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1364xx\B136473 Technical Marine Service
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1364xx\B136475 Spectro\B136475_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1364xx\B136475 Spectro\B136475_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1364xx\B136479 Sealed Air Corporation
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1364xx\B136488 Diversified Supply
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136501 Phenix Fiber Optics - Cancelled
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136507 John Hopkins University Applied Physics Lab (CUI)
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136508 John Hopkins University Applied Physics Lab (CUI)
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136509 John Hopkins University Applied Physics Lab (CUI)
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136513 Plasma Ruggedized Solutions (CUI)\B136513_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1365xx\B136513 Plasma Ruggedized Solutions (CUI)\B136513_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136539 HONEYWELL INTERNATIONAL S.R.O. (ITAR)
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136544 Diversified Supply\B136544_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1365xx\B136544 Diversified Supply\B136544_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136545 Diversified Supply\B136545_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1365xx\B136545 Diversified Supply\B136545_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136552 Biolog
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136553 AimLock (ITAR)\B136553_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1365xx\B136553 AimLock (ITAR)\B136553_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136554 Flex Radio Systems
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136555 Plexus Engineering Solutions\B136555_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1365xx\B136555 Plexus Engineering Solutions\B136555_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1365xx\B136582 Open Source Instruments\B136582_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1365xx\B136582 Open Source Instruments\B136582_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1366xx\B136603 OXOS Medical
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1366xx\B136604 Infraredx\B136604_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1366xx\B136604 Infraredx\B136604_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1366xx\B136629 Honeywell International (AS9100-ITAR)
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1366xx\B136681 Carnegie Robotics
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1366xx\B136691 Smith & Nephew
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1367xx\B136700 Diversified Supply
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1367xx\B136702 Luna Innovations (CUI)
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1367xx\B136777 Anduril Maritime Quincy, MA\B136777_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1367xx\B136777 Anduril Maritime Quincy, MA\B136777_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1367xx\B136787 TMC Technical Manufacturing Corp\B136787_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1367xx\B136787 TMC Technical Manufacturing Corp\B136787_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1367xx\B136794 Moxtek\B136794_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1367xx\B136794 Moxtek\B136794_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136804 Field Medical\B136804_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136804 Field Medical\B136804_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136809 Phoenix Contact\B136809_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136809 Phoenix Contact\B136809_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136814 Sick\B136814_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136814 Sick\B136814_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136828 Jefferson Labs (ITAR)
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136837 Acutronic USA (AS9100-ITAR)
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136849 Atlas Devices\B136849_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136849 Atlas Devices\B136849_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136852 Metrea (CUI)
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136861 Anderson Connectivity (CUI)
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136862 Anderson Connectivity (CUI)
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136871 FreeFlight Systems\B136871_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136871 FreeFlight Systems\B136871_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136872 Beckman Coulter
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136873 Beckman Coulter
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136877 Diversified Supply\B136877_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136877 Diversified Supply\B136877_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136880 Diversified Supply\B136880_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136880 Diversified Supply\B136880_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136881 Diversified Supply\B136881_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136881 Diversified Supply\B136881_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136882 Diversified Supply\B136882_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136882 Diversified Supply\B136882_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136883 Diversified Supply
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136887 Diversified Supply\B136887_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136887 Diversified Supply\B136887_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136888 Diversified Supply\B136888_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136888 Diversified Supply\B136888_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136889 Diversified Supply\B136889_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136889 Diversified Supply\B136889_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136890 Diversified Supply\B136890_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136890 Diversified Supply\B136890_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1368xx\B136891 Diversified Supply\B136891_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1368xx\B136891 Diversified Supply\B136891_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1369xx\B136904 Diversified Supply\B136904_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1369xx\B136904 Diversified Supply\B136904_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1369xx\B136905 Diversified Supply\B136905_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1369xx\B136905 Diversified Supply\B136905_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1369xx\B136936 Nextern\B136936_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1369xx\B136936 Nextern\B136936_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1369xx\B136937 Infraredx\B136937_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1369xx\B136937 Infraredx\B136937_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1369xx\B136940 Cubic GATR Technologies
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1369xx\B136953 Carnegie Robotics\B136953_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1369xx\B136953 Carnegie Robotics\B136953_SMT.pdf
+2026-05-23 00:13:51  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B136xxx\B1369xx\B136965 New Potato Technologies (ITAR)
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1369xx\B136995 Dynamic Structures and Materials\B136995_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1369xx\B136995 Dynamic Structures and Materials\B136995_SMT.pdf
+2026-05-23 00:13:51  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B136xxx\B1369xx\B136998 NextPhase Medical Devices\B136998_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B136xxx\B1369xx\B136998 NextPhase Medical Devices\B136998_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137000 TMC Technical Manufacturing Corp\B137000_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137000 TMC Technical Manufacturing Corp\B137000_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137027 Spectro\B137027_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137027 Spectro\B137027_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137033 Nextern\B137033_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137033 Nextern\B137033_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137041 Stellar Exploration\B137041_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137041 Stellar Exploration\B137041_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137044 Infinitum Electric\B137044_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137044 Infinitum Electric\B137044_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137045 Infinitum Electric\B137045_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137045 Infinitum Electric\B137045_SMT.pdf
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137049 Infinitum Electric
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137052 Infinitum Electric
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137061 Infinitum Electric\B137061_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137061 Infinitum Electric\B137061_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137062 Specialized Manufacturing\B137062_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137062 Specialized Manufacturing\B137062_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137066 Medtronic\B137066_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137066 Medtronic\B137066_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137069 NextPhase Medical Devices\B137069_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137069 NextPhase Medical Devices\B137069_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137071 Samtec\B137071_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137071 Samtec\B137071_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137093 Shanklin Corporation\B137093_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137093 Shanklin Corporation\B137093_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137094 Shanklin Corporation\B137094_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1370xx\B137094 Shanklin Corporation\B137094_SMT.pdf
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1370xx\B137096 HRL Laboratories (ITAR)
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1371xx\B137110 Machine Solutions\B137110_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1371xx\B137110 Machine Solutions\B137110_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1371xx\B137110 Machine Solutions, Inc\B137110_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1371xx\B137110 Machine Solutions, Inc\B137110_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1371xx\B137118 Specialty Coating Systems (ITAR)\B137118_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1371xx\B137118 Specialty Coating Systems (ITAR)\B137118_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1371xx\B137144 Coastal Designs\B137144_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1371xx\B137144 Coastal Designs\B137144_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1371xx\B137150 Liquid Robotics\B137150_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1371xx\B137150 Liquid Robotics\B137150_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1371xx\B137188 Quantum Computing\B137188_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1371xx\B137188 Quantum Computing\B137188_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1371xx\B137188 Quantum Computing, Inc\B137188_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1371xx\B137188 Quantum Computing, Inc\B137188_SMT.pdf
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1371xx\B137198 Honeywell International (AS9100-ITAR)
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1372xx\B137218 Open Source\B137218_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1372xx\B137218 Open Source\B137218_SMT.pdf
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1372xx\B137225 Diversified Supply
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1372xx\B137253 Packet Digital\B137253_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1372xx\B137253 Packet Digital\B137253_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1372xx\B137265 Teal Drones\B137625_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1372xx\B137265 Teal Drones\B137625_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1372xx\B137272 RX Monitoring Service\B137272_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1372xx\B137272 RX Monitoring Service\B137272_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1372xx\B137296 Micro Systems Engineering Inc\B137296_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1372xx\B137296 Micro Systems Engineering Inc\B137296_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1372xx\B137297 Boston Dynamics\B137297_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1372xx\B137297 Boston Dynamics\B137297_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137303 Advanced Acoustic Concepts\B137303_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1373xx\B137303 Advanced Acoustic Concepts\B137303_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137321 Anduril Maritime\B137321_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1373xx\B137321 Anduril Maritime\B137321_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137325 Coastal Designs (ITAR)\B137325_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1373xx\B137325 Coastal Designs (ITAR)\B137325_SMT.pdf
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137354 Urban Sky Theory
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137355 Urban Sky Theory\B137355_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1373xx\B137355 Urban Sky Theory\B137355_SMT.pdf
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137356 Urban Sky Theory
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137357 Urban Sky Theory\B137357_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1373xx\B137357 Urban Sky Theory\B137357_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137364 Advanced Acoustic Concepts\B137364_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1373xx\B137364 Advanced Acoustic Concepts\B137364_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137365 NextPhase Medical Devices\B137365_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1373xx\B137365 NextPhase Medical Devices\B137365_SMT.pdf
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137367 Nordson Corporation
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137372 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137373 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1373xx\B137377 NextPhase Medical Devices\B137377_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1373xx\B137377 NextPhase Medical Devices\B137377_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1374xx\B137407 Archaius\B137407_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1374xx\B137407 Archaius\B137407_SMT.pdf
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1374xx\B137408 Archaius
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1374xx\B137409 Guided Therapeutics\B137409_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1374xx\B137409 Guided Therapeutics\B137409_SMT.pdf
+2026-05-23 00:13:52  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1374xx\B137410 Guided Therapeutics
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1374xx\B137428 Ascent AeroSystems\B137428_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1374xx\B137428 Ascent AeroSystems\B137428_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1374xx\B137431 Nordson Corporation\B137431_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1374xx\B137431 Nordson Corporation\B137431_SMT.pdf
+2026-05-23 00:13:52  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1374xx\B137461 Nordson Corporation\B137461_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1374xx\B137461 Nordson Corporation\B137461_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137549 Anduril Maritime\B137549_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1375xx\B137549 Anduril Maritime\B137549_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137560 TMC Technical Manufacturing Corp\B137560_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1375xx\B137560 TMC Technical Manufacturing Corp\B137560_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137578 Safe Foods\B137578_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1375xx\B137578 Safe Foods\B137578_SMT.pdf
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137583 Atlas Devices (ITAR)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137589 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137590 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137591 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137592 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137593 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137594 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137595 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137596 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137597 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137598 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1375xx\B137599 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1376xx\B137600 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1376xx\B137625 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1376xx\B137632 CACI (DoD-ITAR-CUI)
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1376xx\B137655 Clarity Design\B137655_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1376xx\B137655 Clarity Design\B137655_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1376xx\B137656 Clarity Design\B137656_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1376xx\B137656 Clarity Design\B137656_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1376xx\B137667 PCM of NC\B137667_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1376xx\B137667 PCM of NC\B137667_SMT.pdf
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1376xx\B137694 Access Sensor Technologies
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137724 Southwest Research Institute (ITAR)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137725 Diversified Supply
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137727 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137740 Nextern\B137740_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1377xx\B137740 Nextern\B137740_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137748 Nordson Corporation\B137748_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1377xx\B137748 Nordson Corporation\B137748_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137749 Nordson Corporation\B137749_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1377xx\B137749 Nordson Corporation\B137749_SMT.pdf
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137757 Anderson Connectivity (AS9100-ITAR-CUI)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137770 John Hopkins University Applied Physics Lab (ITAR)
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137778 HunterLab\B137778_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1377xx\B137778 HunterLab\B137778_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137779 HunterLab\B137779_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1377xx\B137779 HunterLab\B137779_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137780 QT Imaging\B137780_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1377xx\B137780 QT Imaging\B137780_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137781 QT Imaging\B137781_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1377xx\B137781 QT Imaging\B137781_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137795 Blur Development Group\B137795_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1377xx\B137795 Blur Development Group\B137795_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1377xx\B137796 Open Source Instruments\B137796_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1377xx\B137796 Open Source Instruments\B137796_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137807 GL Communications\B137807_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1378xx\B137807 GL Communications\B137807_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137811 ODU-NAL (North American Logistics), ODU-USA\B137811_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1378xx\B137811 ODU-NAL (North American Logistics), ODU-USA\B137811_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137818 OXOS Medical\B137818_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1378xx\B137818 OXOS Medical\B137818_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137819 OXOS Medical\B137819_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1378xx\B137819 OXOS Medical\B137819_SMT.pdf
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137829 Addium (ITAR)
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137830 NextPhase Medical Devices\B137830_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1378xx\B137830 NextPhase Medical Devices\B137830_SMT.pdf
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137845 EOI Space (AS9100-ITAR)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137848 Meso Scale Discovery
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137862 Urban Sky Theory\B137862_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1378xx\B137862 Urban Sky Theory\B137862_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137863 Urban Sky Theory\B137863_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1378xx\B137863 Urban Sky Theory\B137863_SMT.pdf
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137864 Urban Sky Theory
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137872 NextPhase Medical Devices\B137872_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1378xx\B137872 NextPhase Medical Devices\B137872_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137873 NextPhase Medical Devices\B137873_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1378xx\B137873 NextPhase Medical Devices\B137873_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137874 NextPhase Medical Devices\B137874_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1378xx\B137874 NextPhase Medical Devices\B137874_SMT.pdf
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1378xx\B137877 Delsys
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1379xx\B137901 Nordson Corporation\B137901_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1379xx\B137901 Nordson Corporation\B137901_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1379xx\B137911 Diversified Supply\B137911_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1379xx\B137911 Diversified Supply\B137911_SMT.pdf
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B137xxx\B1379xx\B137912 Diversified Supply\B137912_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B137xxx\B1379xx\B137912 Diversified Supply\B137912_SMT.pdf
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1379xx\B137922 Bruker Nano, RMR (FKA RAVE LLC)
+2026-05-23 00:13:53  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B137xxx\B1379xx\B137944 Addium (ITAR)
+2026-05-23 00:13:53  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1380xx\B138013 NOV Tuboscope\B138013_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1380xx\B138013 NOV Tuboscope\B138013_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1380xx\B138020 New Potato Technologies (ITAR)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1380xx\B138057 Colorado State University
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1380xx\B138065 Atlas Devices\B138065_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1380xx\B138065 Atlas Devices\B138065_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1380xx\B138070 Graph-Tech USA\B138070_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1380xx\B138070 Graph-Tech USA\B138070_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1380xx\B138071 QT Imaging\B138071_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1380xx\B138071 QT Imaging\B138071_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1380xx\B138082 Flex Radio Systems
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1380xx\B138090 Diversified Supply\B138090_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1380xx\B138090 Diversified Supply\B138090_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1380xx\B138091 Diversified Supply
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1381xx\B138116 Reprieve Cardiovascular\B138116_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1381xx\B138116 Reprieve Cardiovascular\B138116_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1381xx\B138131 Boston Dynamics\B138131_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1381xx\B138131 Boston Dynamics\B138131_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1381xx\B138133 Droplet Measurement Technologies\B138133_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1381xx\B138133 Droplet Measurement Technologies\B138133_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1381xx\B138137 Blur Development Group
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138200 Engenious Design
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138212 Sea Land Aire (DoD-ITAR-CUI)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138213 Sea Land Aire (ITAR)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138214 Sea Land Aire (DoD-ITAR-CUI)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138215 Diversified Supply
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138241 Addium (ITAR)
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138245 Forza Ametek\B138245_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1382xx\B138245 Forza Ametek\B138245_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138246 Shield AI
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138257 Varex Imaging Corporation\B138257_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1382xx\B138257 Varex Imaging Corporation\B138257_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138258 Wabtec\B138258_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1382xx\B138258 Wabtec\B138258_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138263 John Hopkins University Applied Physics Lab (DoD-ITAR-CUI)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138271 Addium (ITAR)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138284 Nordson Corporation
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138291 GatesAir
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138297 SEALED AIR SHANKLIN\B138297_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1382xx\B138297 SEALED AIR SHANKLIN\B138297_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1382xx\B138298 SEALED AIR SHANKLIN
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1383xx\B138324 Qualcomm
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1383xx\B138331 Anduril Maritime Quincy, MA
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1383xx\B138337 Technical Manufacturing Corp\B138337_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1383xx\B138337 Technical Manufacturing Corp\B138337_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1383xx\B138383 Acutronic USA\B138383_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1383xx\B138383 Acutronic USA\B138383_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1383xx\B138383 Acutronic USA, Inc\B138383_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1383xx\B138383 Acutronic USA, Inc\B138383_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1383xx\B138392 AstroForge (AS9100-ITAR)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1383xx\B138396 Liquid Robotics (ITAR)
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138404 Hoverfly Technologies\B138404_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138404 Hoverfly Technologies\B138404_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138405 Hoverfly Technologies\B138405_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138405 Hoverfly Technologies\B138405_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138406 Hoverfly Technologies
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138407 Hoverfly Technologies\B138407_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138407 Hoverfly Technologies\B138407_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138408 Hoverfly Technologies\B138408_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138408 Hoverfly Technologies\B138408_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138409 Hoverfly Technologies\B138409_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138409 Hoverfly Technologies\B138409_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138410 Hoverfly Technologies
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138411 Hoverfly Technologies\B138411_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138411 Hoverfly Technologies\B138411_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138412 Hoverfly Technologies\B138412_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138412 Hoverfly Technologies\B138412_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138413 Hoverfly Technologies
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138414 Hoverfly Technologies
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138415 Hoverfly Technologies\B138415_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138415 Hoverfly Technologies\B138415_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138416 Hoverfly Technologies\B138416_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138416 Hoverfly Technologies\B138416_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138417 Hoverfly Technologies\B138417_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138417 Hoverfly Technologies\B138417_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138418 Hoverfly Technologies\B138418_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138418 Hoverfly Technologies\B138418_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138419 Hoverfly Technologies\B138419_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138419 Hoverfly Technologies\B138419_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138420 Hoverfly Technologies\B138420_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138420 Hoverfly Technologies\B138420_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138421 Hoverfly Technologies\B138421_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138421 Hoverfly Technologies\B138421_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138422 Hoverfly Technologies\B138422_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138422 Hoverfly Technologies\B138422_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138423 Hoverfly Technologies\B138423_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138423 Hoverfly Technologies\B138423_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138424 Hoverfly Technologies\B138424_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138424 Hoverfly Technologies\B138424_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138425 Hoverfly Technologies\B138425_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138425 Hoverfly Technologies\B138425_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138426 Hoverfly Technologies\B138426_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138426 Hoverfly Technologies\B138426_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138427 Hoverfly Technologies\B138427_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138427 Hoverfly Technologies\B138427_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138428 Hoverfly Technologies\B138428_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138428 Hoverfly Technologies\B138428_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138429 Hoverfly Technologies\B138429_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138429 Hoverfly Technologies\B138429_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138430 Hoverfly Technologies\B138430_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138430 Hoverfly Technologies\B138430_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138431 Hoverfly Technologies\B138431_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138431 Hoverfly Technologies\B138431_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138432 Hoverfly Technologies
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138433 Hoverfly Technologies\B138433_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138433 Hoverfly Technologies\B138433_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138434 Hoverfly Technologies\B138434_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138434 Hoverfly Technologies\B138434_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138435 Hoverfly Technologies\B138435_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138435 Hoverfly Technologies\B138435_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138436 Hoverfly Technologies\B138436_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1384xx\B138436 Hoverfly Technologies\B138436_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138444 Hoverfly Technologies
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1384xx\B138480 Nextern
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1385xx\B138506 Thermon Heating Systems\B138506_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1385xx\B138506 Thermon Heating Systems\B138506_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1385xx\B138509 Ocean Aero
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1385xx\B138537 Benchmark Electronics (ITAR)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1385xx\B138538 Benchmark Electronics (ITAR)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1385xx\B138539 Benchmark Electronics (ITAR)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1385xx\B138540 Benchmark Electronics (ITAR)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1385xx\B138542 Benchmark Electronics (ITAR)
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1385xx\B138562 Sealed Air Corporation\B138562_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1385xx\B138562 Sealed Air Corporation\B138562_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1385xx\B138563 Sealed Air Corporation\B138563_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1385xx\B138563 Sealed Air Corporation\B138563_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1385xx\B138577 NOV Tuboscope\B138577_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1385xx\B138577 NOV Tuboscope\B138577_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1385xx\B138578 Packet Digital\B138578_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1385xx\B138578 Packet Digital\B138578_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1386xx\B138609 John Hopkins University Applied Physics Lab (DoD-ITAR-CUI)
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1386xx\B138631 Teledyne Instruments (ITAR)
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1386xx\B138643 Hoverfly Technologies\B138643_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1386xx\B138643 Hoverfly Technologies\B138643_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1386xx\B138655 Neocis\B138655_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1386xx\B138655 Neocis\B138655_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1386xx\B138677 Rocky Research (ITAR)
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1387xx\B138712 NSI-MI Technologies\B138712_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1387xx\B138712 NSI-MI Technologies\B138712_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1387xx\B138733 Solo Pace
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1387xx\B138734 Solo Pace
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1387xx\B138738 Carnegie Robotics (ITAR)
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1387xx\B138741 Fifth Gait Technologies (ITAR)\B138741_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1387xx\B138741 Fifth Gait Technologies (ITAR)\B138741_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1387xx\B138752 Infinitum Electric\B138752_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1387xx\B138752 Infinitum Electric\B138752_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1387xx\B138753 Infinitum Electric\B138753_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1387xx\B138753 Infinitum Electric\B138753_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1387xx\B138771 Phoenix Contact\B138771_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1387xx\B138771 Phoenix Contact\B138771_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1387xx\B138796 Ergotron
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1387xx\B138798 Nextern\B138798_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1387xx\B138798 Nextern\B138798_SMT.pdf
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1387xx\B138799 Plexus Engineering Solutions\B138799_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1387xx\B138799 Plexus Engineering Solutions\B138799_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1388xx\B138801 Infinitum Electric
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1388xx\B138826 LongPath Technologies\B138826_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1388xx\B138826 LongPath Technologies\B138826_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1388xx\B138843 Droplet Measurement Technologies
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1388xx\B138874 Infinitum Electric\B138874_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1388xx\B138874 Infinitum Electric\B138874_SMT.pdf
+2026-05-23 00:13:54  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138910 Infinitum Electric
+2026-05-23 00:13:54  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138915 IonQ\B138915_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1389xx\B138915 IonQ\B138915_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138916 LongPath Technologies\B138916_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1389xx\B138916 LongPath Technologies\B138916_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138927 Infinitum Electric\B138927_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1389xx\B138927 Infinitum Electric\B138927_SMT.pdf
+2026-05-23 00:13:55  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138929 Wabtec
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138930 Wabtec\B138930_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1389xx\B138930 Wabtec\B138930_SMT.pdf
+2026-05-23 00:13:55  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138931 Wabtec
+2026-05-23 00:13:55  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138932 Wabtec
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138933 Wabtec\B138933_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1389xx\B138933 Wabtec\B138933_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138934 Nextern\B138934_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1389xx\B138934 Nextern\B138934_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138935 Nextern\B138935_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1389xx\B138935 Nextern\B138935_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138936 Nextern\B138396_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1389xx\B138936 Nextern\B138396_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138942 LongPath Technologies\B138942_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1389xx\B138942 LongPath Technologies\B138942_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138968 Saronic Technologies\B138968_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1389xx\B138968 Saronic Technologies\B138968_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B138xxx\B1389xx\B138988 Nextern\B138988_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B138xxx\B1389xx\B138988 Nextern\B138988_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B139xxx\B1390xx\B139039 Marshall Radio Telemetry\B139039_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B139xxx\B1390xx\B139039 Marshall Radio Telemetry\B139039_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B139xxx\B1390xx\B139055 Moxtek\B139055_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B139xxx\B1390xx\B139055 Moxtek\B139055_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B139xxx\B1390xx\B139058 Solo Pace\B139058_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B139xxx\B1390xx\B139058 Solo Pace\B139058_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B139xxx\B1390xx\B139073 SignalQuest, LLC\B139073_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B139xxx\B1390xx\B139073 SignalQuest, LLC\B139073_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B139xxx\B1390xx\B139092 Nova Tech\B139092_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B139xxx\B1390xx\B139092 Nova Tech\B139092_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B139xxx\B1391xx\B139104 Specialty Coating Systems\B139104_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B139xxx\B1391xx\B139104 Specialty Coating Systems\B139104_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B139xxx\B1391xx\B139106 GPS Networking\B139106_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B139xxx\B1391xx\B139106 GPS Networking\B139106_SMT.pdf
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B139xxx\B1391xx\B139107 GPS Networking\B139107_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B139xxx\B1391xx\B139107 GPS Networking\B139107_SMT.pdf
+2026-05-23 00:13:55  INFO      NOT FOUND  [*_SMT.pdf]  in  E:\BACKUP FOR JOB FOLDERS\B139xxx\B1391xx\B139114 Rogue Signal Processing Corporation (ITAR)
+2026-05-23 00:13:55  INFO      COPIED     E:\BACKUP FOR JOB FOLDERS\B139xxx\B1391xx\B139117 Thermon Heating Systems\B139117_SMT.pdf  ->  D:\Dev\Scheduler\Cockpit\backend\data\B139xxx\B1391xx\B139117 Thermon Heating Systems\B139117_SMT.pdf

@@ -14,13 +14,17 @@ from cockpit.services.views import (
 )
 
 
+import sqlite3
+
 class ChecklistService:
     def __init__(
         self,
+        conn: sqlite3.Connection,
         audit_repo: AuditRepository,
         tht_repo: ThtChecklistRepository,
         notes_repo: BuildNotesChecklistRepository,
     ) -> None:
+        self._conn = conn
         self._audit_repo = audit_repo
         self._tht_repo = tht_repo
         self._notes_repo = notes_repo
@@ -62,6 +66,7 @@ class ChecklistService:
             status=audit.status,
             split_reason=audit.split_reason,
             traveler_metadata=audit.traveler_metadata,
+            ship_date=audit.ship_date,
             tht_rows=tht_views,
             notes_rows=notes_views,
         )
@@ -93,4 +98,17 @@ class ChecklistService:
 
     def complete(self, audit_id: int) -> ActiveAuditView:
         self._audit_repo.transition_status(audit_id, AuditStatus.COMPLETED)
+        return self.load_active_audit(audit_id)
+
+    def verify_all(self, audit_id: int) -> ActiveAuditView:
+        self._conn.execute("SAVEPOINT verify_all")
+        try:
+            self._tht_repo.mark_all_verified(audit_id)
+            self._notes_repo.mark_all_verified(audit_id)
+            self._conn.execute("RELEASE SAVEPOINT verify_all")
+        except Exception:
+            self._conn.execute("ROLLBACK TO SAVEPOINT verify_all")
+            self._conn.execute("RELEASE SAVEPOINT verify_all")
+            raise
+            
         return self.load_active_audit(audit_id)

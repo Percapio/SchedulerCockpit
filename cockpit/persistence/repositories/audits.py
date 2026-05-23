@@ -156,6 +156,26 @@ class AuditRepository:
         if cur.rowcount == 0:
             raise AuditNotFound(audit_id)
 
+    def set_ship_date(self, audit_id: int, new_value: Any) -> ActiveAudit:
+        from datetime import date, datetime
+        if new_value is not None and not isinstance(new_value, date):
+            raise InvalidArgumentError("new_value", new_value, "Must be date or None")
+        if isinstance(new_value, datetime):
+            raise InvalidArgumentError("new_value", new_value, "Must be date, not datetime")
+            
+        cur = self.conn.cursor()
+        cur.execute("SELECT status FROM active_audits WHERE id = ?", (audit_id,))
+        row = cur.fetchone()
+        if not row:
+            raise AuditNotFound(audit_id)
+            
+        if row["status"] == AuditStatus.COMPLETED.value:
+            raise IllegalStateTransition(audit_id, AuditStatus.COMPLETED, AuditStatus.COMPLETED)
+            
+        val = new_value.isoformat() if new_value is not None else None
+        cur.execute("UPDATE active_audits SET ship_date = ? WHERE id = ?", (val, audit_id))
+        return self.find_by_id(audit_id)  # type: ignore
+
     def set_traveler_metadata(self, audit_id: int, payload: dict[str, Any] | None) -> None:
         try:
             traveler_json = json.dumps(payload) if payload is not None else None

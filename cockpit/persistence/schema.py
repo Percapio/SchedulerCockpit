@@ -118,3 +118,59 @@ def migrate_to_v1(conn: sqlite3.Connection) -> None:
     except Exception:
         cur.execute("ROLLBACK")
         raise
+
+
+import json
+
+SCHEMA_V2_DDL: str = """
+ALTER TABLE active_audits ADD COLUMN ship_date TEXT NULL
+"""
+
+def migrate_to_v2(conn: sqlite3.Connection) -> None:
+    cur = conn.cursor()
+    cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=1)
+        
+    version = row["version"]
+    if version == 2:
+        return
+    if version > 2:
+        raise SchemaMismatch(found_version=version, expected_version=2)
+    if version < 1:
+        raise SchemaMismatch(found_version=version, expected_version=1)
+        
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        try:
+            cur.execute(SCHEMA_V2_DDL)
+        except sqlite3.Error as e:
+            raise SchemaInitializationError(statement=SCHEMA_V2_DDL, cause=e)
+            
+        cur.execute("SELECT id, traveler_metadata FROM active_audits WHERE traveler_metadata IS NOT NULL")
+        rows = cur.fetchall()
+        for r in rows:
+            # hydrating_row_factory already deserialised traveler_metadata to a dict
+            payload = r["traveler_metadata"]
+            if "lead_time_weeks" in payload:
+                payload["lead_time_days"] = payload.pop("lead_time_weeks")
+                cur.execute(
+                    "UPDATE active_audits SET traveler_metadata = ? WHERE id = ?",
+                    (json.dumps(payload), r["id"])
+                )
+                
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 2, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+    except Exception:
+        cur.execute("ROLLBACK")
+        raise
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    migrate_to_v1(conn)
+    migrate_to_v2(conn)

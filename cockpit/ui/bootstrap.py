@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass
 
 from cockpit.persistence.connection import open_connection
-from cockpit.persistence.schema import migrate_to_v1
+from cockpit.persistence.schema import migrate
 from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
@@ -21,6 +21,7 @@ from cockpit.services.split import AuditSplitService
 from cockpit.services.storage_reaper import StorageReaper
 from cockpit.services.completion import CompletionService
 from cockpit.services.startup_reconciler import StartupReconciler
+from cockpit.services.audit_metadata import AuditMetadataService
 from cockpit.services.views import ReconciliationReport
 from cockpit.ingestion.hashing import sha256_hex
 
@@ -36,6 +37,7 @@ class BootstrappedApp:
     checklist_svc: ChecklistService
     split_svc: AuditSplitService
     completion_svc: CompletionService
+    audit_metadata_svc: AuditMetadataService
     reconciliation_report: ReconciliationReport
 
 
@@ -66,7 +68,7 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     logging.getLogger("cockpit").info("Bootstrapping Cockpit application...")
     
     conn = open_connection(config.db_path)
-    migrate_to_v1(conn)
+    migrate(conn)
     
     audit_repo = AuditRepository(conn)
     source_file_repo = SourceFileRepository(conn)
@@ -86,8 +88,9 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     )
     
     audit_read_svc = AuditReadService(audit_repo)
-    checklist_svc = ChecklistService(audit_repo, tht_repo, notes_repo)
+    checklist_svc = ChecklistService(conn, audit_repo, tht_repo, notes_repo)
     split_svc = AuditSplitService(conn, audit_repo)
+    audit_metadata_svc = AuditMetadataService(conn)
     
     storage_reaper = StorageReaper(source_file_repo)
     completion_svc = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)
@@ -114,5 +117,6 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
         checklist_svc=checklist_svc,
         split_svc=split_svc,
         completion_svc=completion_svc,
+        audit_metadata_svc=audit_metadata_svc,
         reconciliation_report=report
     )

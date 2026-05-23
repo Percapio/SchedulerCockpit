@@ -7,10 +7,11 @@ from ..errors import (
     AuditNotFound,
     ChecklistItemNotFound,
     ForeignKeyMismatch,
+    IllegalStateTransition,
     InvalidArgumentError,
     SourceFileNotFound,
 )
-from ..types import ThtChecklistItem, ThtChecklistItemDraft
+from ..types import ThtChecklistItem, ThtChecklistItemDraft, AuditStatus
 
 
 class ThtChecklistRepository:
@@ -93,3 +94,19 @@ class ThtChecklistRepository:
         row = cur.fetchone()
         assert row is not None
         return ThtChecklistItem(**row)
+
+    def mark_all_verified(self, audit_id: int) -> int:
+        cur = self.conn.cursor()
+        cur.execute("SELECT status FROM active_audits WHERE id = ?", (audit_id,))
+        row = cur.fetchone()
+        if not row:
+            raise AuditNotFound(audit_id)
+            
+        if row["status"] == AuditStatus.COMPLETED.value:
+            raise IllegalStateTransition(audit_id, AuditStatus.COMPLETED, AuditStatus.COMPLETED)
+            
+        cur.execute(
+            "UPDATE tht_verification_checklist SET is_verified = 1 WHERE audit_id = ? AND is_verified = 0",
+            (audit_id,)
+        )
+        return cur.rowcount

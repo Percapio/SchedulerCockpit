@@ -1,7 +1,7 @@
 """Parser result dataclasses."""
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from cockpit.persistence.types import ActiveAuditDraft
 
@@ -10,15 +10,18 @@ from cockpit.persistence.types import ActiveAuditDraft
 class BomItem:
     component_mpn: str                  # PartNum column, stripped
     description: str | None             # Description column
-    ref_des: str | None                 # Ref_Des column
+    ref_des_raw: str | None             # Ref_Des column (original text)
+    ref_des_list: tuple[str, ...]       # Split Ref_Des values
+    mount_type: Literal['T', 'S']       # MountType column
 
 
 @dataclass(frozen=True)
 class BomResult:
     declared_part_number: str           # parsed from filename prefix
-    items: list[BomItem]                # only THT rows that pass the DNI filter
+    items: list[BomItem]                # All items (THT and SMT)
     raw_row_count: int                  # total non-header rows scanned
-    excluded_dni_count: int             # rows that matched startswith('T') but were filtered as DNI
+    excluded_dni_count: int             # rows that were filtered as DNI
+    excluded_pcb_count: int             # rows that were excluded as PCBs
 
 
 @dataclass(frozen=True)

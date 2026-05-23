@@ -67,6 +67,10 @@ class MalformedTravelerError(ParseError):
     pass
 
 
+class MalformedPdfError(ParseError):
+    pass
+
+
 class AnchorNotFound(ParseError):
     """Traveler anchor cell does not contain the expected label."""
     def __init__(self, path: pathlib.Path, field_key: str,

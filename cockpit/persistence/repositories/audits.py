@@ -13,12 +13,22 @@ from ..errors import (
     IncompleteChecklistError,
     InvalidArgumentError,
 )
-from ..types import ActiveAudit, ActiveAuditDraft, AuditStatus
+from ..types import ActiveAudit, ActiveAuditDraft, AuditStatus, SourceFileCategory
+
+from .bom_components import AuditBomComponentRepository
+from .pdf_coords import PdfComponentCoordRepository
 
 
 class AuditRepository:
-    def __init__(self, conn: sqlite3.Connection) -> None:
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        bom_component_repo: AuditBomComponentRepository,
+        pdf_coord_repo: PdfComponentCoordRepository,
+    ) -> None:
         self.conn = conn
+        self.bom_component_repo = bom_component_repo
+        self.pdf_coord_repo = pdf_coord_repo
 
     def create(self, draft: ActiveAuditDraft) -> ActiveAudit:
         if not draft.part_number:
@@ -342,6 +352,12 @@ class AuditRepository:
                 )
             )
             file_id_map[sf["id"]] = cur.lastrowid
+            
+            # Phase 7 side-table clones
+            if sf["file_category"] == SourceFileCategory.BOM.value:
+                self.bom_component_repo.clone_for_source_file(sf["id"], file_id_map[sf["id"]])
+            elif sf["file_category"] == SourceFileCategory.PDF.value:
+                self.pdf_coord_repo.clone_for_source_file(sf["id"], file_id_map[sf["id"]])
             
         # Clone THT rows
         cur.execute("SELECT * FROM tht_verification_checklist WHERE audit_id = ?", (source_audit_id,))

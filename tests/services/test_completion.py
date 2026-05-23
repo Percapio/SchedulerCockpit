@@ -12,6 +12,9 @@ from cockpit.services.startup_reconciler import StartupReconciler
 from cockpit.ingestion.hashing import sha256_hex
 from cockpit.persistence.connection import hydrating_row_factory
 from cockpit.persistence.schema import migrate
+from cockpit.persistence.repositories.bom_components import AuditBomComponentRepository
+from cockpit.persistence.repositories.pdf_coords import PdfComponentCoordRepository
+from cockpit.protocols import ParserRegistry
 from cockpit.persistence.errors import PersistenceError, IncompleteChecklistError
 
 
@@ -20,9 +23,15 @@ def test_hard_delete_failure_leaves_completed(tmp_path, monkeypatch):
     conn = sqlite3.connect(db_path, isolation_level=None)
     conn = sqlite3.connect(db_path, isolation_level=None)
     conn.row_factory = hydrating_row_factory
-    migrate(conn)
+    class DummyParser:
+        def parse(self, path): return None
         
-    audit_repo = AuditRepository(conn)
+    registry = ParserRegistry(DummyParser(), None, None, None, None)
+    migrate(conn, registry)
+        
+    bom_repo = AuditBomComponentRepository(conn)
+    pdf_repo = PdfComponentCoordRepository(conn)
+    audit_repo = AuditRepository(conn, bom_repo, pdf_repo)
     source_file_repo = SourceFileRepository(conn)
     
     # insert an audit
@@ -52,9 +61,15 @@ def test_startup_reconciler_orphan_file(tmp_path):
     conn = sqlite3.connect(db_path, isolation_level=None)
     conn = sqlite3.connect(db_path, isolation_level=None)
     conn.row_factory = hydrating_row_factory
-    migrate(conn)
+    class DummyParser:
+        def parse(self, path): return None
         
-    audit_repo = AuditRepository(conn)
+    registry = ParserRegistry(DummyParser(), None, None, None, None)
+    migrate(conn, registry)
+        
+    bom_repo = AuditBomComponentRepository(conn)
+    pdf_repo = PdfComponentCoordRepository(conn)
+    audit_repo = AuditRepository(conn, bom_repo, pdf_repo)
     source_file_repo = SourceFileRepository(conn)
     storage_reaper = StorageReaper(source_file_repo)
     completion_service = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)
@@ -83,9 +98,15 @@ def test_incomplete_checklist_rollback(tmp_path):
     conn = sqlite3.connect(db_path, isolation_level=None)
     conn = sqlite3.connect(db_path, isolation_level=None)
     conn.row_factory = hydrating_row_factory
-    migrate(conn)
+    class DummyParser:
+        def parse(self, path): return None
         
-    audit_repo = AuditRepository(conn)
+    registry = ParserRegistry(DummyParser(), None, None, None, None)
+    migrate(conn, registry)
+        
+    bom_repo = AuditBomComponentRepository(conn)
+    pdf_repo = PdfComponentCoordRepository(conn)
+    audit_repo = AuditRepository(conn, bom_repo, pdf_repo)
     source_file_repo = SourceFileRepository(conn)
     storage_reaper = StorageReaper(source_file_repo)
     completion_service = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)

@@ -115,3 +115,23 @@ class ForeignKeyMismatch(PersistenceError):
         self.audit_id = audit_id
         self.source_file_id = source_file_id
         self.source_file_audit_id = source_file_audit_id
+
+
+class DuplicateRefDesError(PersistenceError):
+    """UNIQUE(source_file_id, ref_des) violated on audit_bom_components."""
+    def __init__(self, source_file_id: int, ref_des: str):
+        super().__init__(f"Duplicate RefDes '{ref_des}' for source_file_id={source_file_id}")
+        self.source_file_id = source_file_id
+        self.ref_des = ref_des
+
+
+class DuplicatePdfCoordError(PersistenceError):
+    """UNIQUE(source_file_id, ref_des, page_index) violated on pdf_component_coords."""
+    def __init__(self, source_file_id: int, ref_des: str, page_index: int):
+        super().__init__(
+            f"Duplicate PDF coord for RefDes '{ref_des}' on page {page_index} "
+            f"(source_file_id={source_file_id})"
+        )
+        self.source_file_id = source_file_id
+        self.ref_des = ref_des
+        self.page_index = page_index

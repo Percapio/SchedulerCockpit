@@ -12,6 +12,8 @@ from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
 from cockpit.persistence.repositories.notes_checklist import BuildNotesChecklistRepository
+from cockpit.persistence.repositories.bom_components import AuditBomComponentRepository
+from cockpit.persistence.repositories.pdf_coords import PdfComponentCoordRepository
 from cockpit.ingestion.service import IngestionService
 from cockpit.ingestion.parsers.coordinate_map import load as load_map
 from cockpit.services.audit_read import AuditReadService
@@ -68,9 +70,31 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     logging.getLogger("cockpit").info("Bootstrapping Cockpit application...")
     
     conn = open_connection(config.db_path)
-    migrate(conn)
     
-    audit_repo = AuditRepository(conn)
+    bom_component_repo = AuditBomComponentRepository(conn)
+    pdf_coord_repo = PdfComponentCoordRepository(conn)
+    
+    from cockpit.layout.parser import PdfLayoutParser
+    from cockpit.protocols import ParserRegistry
+    from cockpit.ingestion.parsers import audit_bom, eco_build_notes, traveler
+    
+    class _BomParserWrapper:
+        def parse(self, path):
+            return audit_bom.parse(path)
+            
+    coord_map = load_map(config.coord_map_path)
+            
+    parser_registry = ParserRegistry(
+        bom_parser=_BomParserWrapper(),
+        eco_parser=eco_build_notes,
+        traveler_parser=traveler,
+        pdf_layout_parser=PdfLayoutParser(),
+        coord_map=coord_map
+    )
+    
+    migrate(conn, parser_registry)
+    
+    audit_repo = AuditRepository(conn, bom_component_repo, pdf_coord_repo)
     source_file_repo = SourceFileRepository(conn)
     tht_repo = ThtChecklistRepository(conn)
     notes_repo = BuildNotesChecklistRepository(conn)
@@ -83,6 +107,9 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
         source_file_repo=source_file_repo,
         tht_repo=tht_repo,
         notes_repo=notes_repo,
+        bom_component_repo=bom_component_repo,
+        pdf_coord_repo=pdf_coord_repo,
+        layout_parser=parser_registry.pdf_layout_parser,
         coord_map=coord_map,
         file_storage_root=config.file_storage_root
     )
@@ -90,7 +117,7 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     audit_read_svc = AuditReadService(audit_repo)
     checklist_svc = ChecklistService(conn, audit_repo, tht_repo, notes_repo)
     split_svc = AuditSplitService(conn, audit_repo)
-    audit_metadata_svc = AuditMetadataService(conn)
+    audit_metadata_svc = AuditMetadataService(conn, audit_repo)
     
     storage_reaper = StorageReaper(source_file_repo)
     completion_svc = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)

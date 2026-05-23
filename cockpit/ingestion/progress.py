@@ -11,9 +11,12 @@ class ProgressStage(StrEnum):
     FILES_CATEGORIZED   = "files_categorized"
     FILES_HASHED        = "files_hashed"
     FILES_COPIED        = "files_copied"
+    PDF_HASHED          = "pdf_hashed"
+    PDF_COPIED          = "pdf_copied"
     BOM_PARSED          = "bom_parsed"
     ECO_PARSED          = "eco_parsed"
     TRAVELER_PARSED     = "traveler_parsed"
+    PDF_PARSED          = "pdf_parsed"
     CROSS_VALIDATED     = "cross_validated"
     PERSISTED           = "persisted"
 

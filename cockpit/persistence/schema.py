@@ -3,6 +3,7 @@
 import sqlite3
 from .clock import utcnow
 from .errors import SchemaInitializationError, SchemaMismatch
+from ..protocols import ParserRegistry
 
 
 DDL_STATEMENTS = [
@@ -85,10 +86,8 @@ def migrate_to_v1(conn: sqlite3.Connection) -> None:
         row = cur.fetchone()
         if row:
             version = row["version"]
-            if version == 1:
-                return  # Idempotent return
-            if version > 1:
-                raise SchemaMismatch(found_version=version, expected_version=1)
+            if version >= 1:
+                return  # v1 already applied; later migrations may have advanced the version
     except sqlite3.OperationalError:
         # Table does not exist -> fresh DB
         pass
@@ -134,10 +133,8 @@ def migrate_to_v2(conn: sqlite3.Connection) -> None:
         raise SchemaMismatch(found_version=0, expected_version=1)
         
     version = row["version"]
-    if version == 2:
-        return
-    if version > 2:
-        raise SchemaMismatch(found_version=version, expected_version=2)
+    if version >= 2:
+        return  # v2 already applied; later migrations may have advanced the version
     if version < 1:
         raise SchemaMismatch(found_version=version, expected_version=1)
         
@@ -171,6 +168,124 @@ def migrate_to_v2(conn: sqlite3.Connection) -> None:
         raise
 
 
-def migrate(conn: sqlite3.Connection) -> None:
+SCHEMA_V3_DDL_BOM_COMPONENTS: str = """
+CREATE TABLE audit_bom_components (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_file_id  INTEGER NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
+    component_mpn   TEXT    NOT NULL,
+    ref_des         TEXT    NOT NULL,
+    mount_type      TEXT    NOT NULL CHECK (mount_type IN ('T','S')),
+    description     TEXT    NULL,
+    UNIQUE (source_file_id, ref_des)
+)
+"""
+
+SCHEMA_V3_DDL_PDF_COORDS: str = """
+CREATE TABLE pdf_component_coords (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_file_id  INTEGER NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
+    ref_des         TEXT    NOT NULL,
+    page_index      INTEGER NOT NULL,
+    x1              REAL    NOT NULL,
+    y1              REAL    NOT NULL,
+    x2              REAL    NOT NULL,
+    y2              REAL    NOT NULL,
+    UNIQUE (source_file_id, ref_des, page_index)
+)
+"""
+
+SCHEMA_V3_DDL_SOURCE_FILES_REBUILD: str = """
+CREATE TABLE source_files_v3 (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    audit_id           INTEGER NOT NULL REFERENCES active_audits(id) ON DELETE CASCADE,
+    file_category      TEXT    NOT NULL CHECK (file_category IN ('BOM','Traveler','Notes','PDF')),
+    original_filename  TEXT    NOT NULL,
+    local_storage_path TEXT    NOT NULL,
+    file_hash          TEXT    NOT NULL,
+    ingested_at        TEXT    NOT NULL
+)
+"""
+
+def migrate_to_v3(
+    conn: sqlite3.Connection,
+    parser_registry: ParserRegistry,
+) -> None:
+    cur = conn.cursor()
+    cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=2)
+        
+    version = row["version"]
+    if version == 3:
+        return
+    if version < 2:
+        raise SchemaMismatch(found_version=version, expected_version=2)
+    if version > 3:
+        raise SchemaMismatch(found_version=version, expected_version=3)
+        
+    cur.execute("PRAGMA foreign_keys = OFF")
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        try:
+            cur.execute(SCHEMA_V3_DDL_BOM_COMPONENTS)
+            cur.execute(SCHEMA_V3_DDL_PDF_COORDS)
+            cur.execute("CREATE INDEX ix_abc_source_file ON audit_bom_components(source_file_id)")
+            cur.execute("CREATE INDEX ix_abc_mpn ON audit_bom_components(source_file_id, component_mpn)")
+            cur.execute("CREATE INDEX ix_pcc_source_file_page ON pdf_component_coords(source_file_id, page_index)")
+            
+            cur.execute(SCHEMA_V3_DDL_SOURCE_FILES_REBUILD)
+            cur.execute("INSERT INTO source_files_v3 SELECT * FROM source_files")
+            cur.execute("DROP TABLE source_files")
+            cur.execute("ALTER TABLE source_files_v3 RENAME TO source_files")
+            cur.execute("CREATE INDEX ix_source_files_audit ON source_files(audit_id)")
+            cur.execute("CREATE INDEX ix_source_files_hash ON source_files(file_hash)")
+            
+            cur.execute("PRAGMA foreign_key_check")
+            fk_violations = cur.fetchall()
+            if fk_violations:
+                raise sqlite3.IntegrityError(f"Foreign key check failed: {fk_violations}")
+        except sqlite3.Error as e:
+            raise SchemaInitializationError(statement="v3 DDL/rebuild", cause=e)
+            
+        cur.execute("SELECT DISTINCT id, local_storage_path FROM source_files WHERE file_category = 'BOM'")
+        bom_files = cur.fetchall()
+        import pathlib
+        from ..ingestion.errors import MalformedBomError
+        
+        for sf in bom_files:
+            sf_id = sf["id"]
+            path = pathlib.Path(sf["local_storage_path"])
+            if not path.exists():
+                raise MalformedBomError(path, "BACKFILL_FILE_MISSING", {"source_file_id": sf_id, "local_storage_path": str(path)})
+            
+            bom_result = parser_registry.bom_parser.parse(path)
+            for item in bom_result.items:
+                if item.ref_des_list:
+                    for rd in item.ref_des_list:
+                        cur.execute(
+                            """
+                            INSERT INTO audit_bom_components 
+                            (source_file_id, component_mpn, ref_des, mount_type, description)
+                            VALUES (?, ?, ?, ?, ?)
+                            """,
+                            (sf_id, item.component_mpn, rd, item.mount_type, item.description)
+                        )
+                        
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 3, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+    except Exception:
+        cur.execute("ROLLBACK")
+        raise
+    finally:
+        cur.execute("PRAGMA foreign_keys = ON")
+
+
+def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> None:
     migrate_to_v1(conn)
     migrate_to_v2(conn)
+    migrate_to_v3(conn, parser_registry)

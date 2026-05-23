@@ -16,6 +16,7 @@ class SourceFileCategory(StrEnum):
     BOM = "BOM"
     TRAVELER = "Traveler"
     NOTES = "Notes"
+    PDF = "PDF"
 
 
 # ---------- row types (returned by repositories) ----------
@@ -105,6 +106,45 @@ class BuildNoteItemDraft:
     audit_id: int
     row_sequence: int
     original_text: str
-    source_file_id: int | None = None
-    is_verified: bool = False
-    notes: str | None = None
+
+
+@dataclass(frozen=True)
+class AuditBomComponent:
+    id: int
+    source_file_id: int
+    component_mpn: str
+    ref_des: str
+    mount_type: str  # Literal['T', 'S']
+    description: str | None
+
+
+@dataclass(frozen=True)
+class AuditBomComponentDraft:
+    source_file_id: int
+    component_mpn: str
+    ref_des: str
+    mount_type: str  # Literal['T', 'S']
+    description: str | None = None
+
+
+@dataclass(frozen=True)
+class PdfComponentCoord:
+    id: int
+    source_file_id: int
+    ref_des: str
+    page_index: int
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+
+
+@dataclass(frozen=True)
+class PdfComponentCoordDraft:
+    source_file_id: int
+    ref_des: str
+    page_index: int
+    x1: float
+    y1: float
+    x2: float
+    y2: float

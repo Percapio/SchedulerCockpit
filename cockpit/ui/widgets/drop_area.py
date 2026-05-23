@@ -18,11 +18,11 @@ class DropArea(QWidget):
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        self.main_label = QLabel("Drop the three files for this audit here")
+        self.main_label = QLabel("Drop the files for this audit here (3 or 4)")
         self.main_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.main_label.setObjectName("DropAreaMainLabel")
         
-        self.sub_label = QLabel("(\"Audit BOM\", \"Traveler\", and a .docx)")
+        self.sub_label = QLabel("(\"Audit BOM\", \"Traveler\", .docx, optional .pdf)")
         self.sub_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.sub_label.setObjectName("DropAreaSubLabel")
         

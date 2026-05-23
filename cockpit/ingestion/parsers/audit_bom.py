@@ -14,6 +14,14 @@ CANONICAL_HEADER = [
 ]
 
 
+def _split_ref_des(raw: str | None) -> tuple[str, ...]:
+    if not raw:
+        return ()
+    if "-" in raw or ";" in raw:
+        raise ValueError("DELIMITER_NOT_SUPPORTED")
+    return tuple(tok.strip() for tok in raw.split(",") if tok.strip())
+
+
 def parse(path: pathlib.Path) -> BomResult:
     """Parse the Audit BOM Excel file and extract THT items."""
     declared_part_number = path.name.split()[0].strip()
@@ -46,6 +54,10 @@ def parse(path: pathlib.Path) -> BomResult:
         items = []
         raw_row_count = 0
         excluded_dni_count = 0
+        excluded_pcb_count = 0
+        
+        seen_mpns = set()
+        duplicate_mpns = set()
         
         for row in ws.iter_rows(min_row=2, values_only=True):
             raw_row_count += 1
@@ -56,26 +68,54 @@ def parse(path: pathlib.Path) -> BomResult:
             if flag is None:
                 continue
                 
-            if str(flag).strip().upper().startswith('T'):
-                part_number = str(row[1]).strip() if len(row) > 1 and row[1] is not None else ""
-                if part_number.upper() == "DNI":
-                    excluded_dni_count += 1
-                    continue
-                    
-                description = str(row[8]) if len(row) > 8 and row[8] is not None else None
-                ref_des = str(row[6]) if len(row) > 6 and row[6] is not None else None
+            flag_str = str(flag).strip().upper()
+            if flag_str.startswith('T'):
+                mount_type = 'T'
+            elif flag_str.startswith('S'):
+                mount_type = 'S'
+            else:
+                continue
                 
-                items.append(BomItem(
-                    component_mpn=part_number,
-                    description=description,
-                    ref_des=ref_des
-                ))
+            part_number = str(row[1]).strip() if len(row) > 1 and row[1] is not None else ""
+            if not part_number:
+                continue
                 
+            if part_number.upper() == "DNI":
+                excluded_dni_count += 1
+                continue
+            if part_number.upper() == "PCB":
+                excluded_pcb_count += 1
+                continue
+                
+            description = str(row[8]) if len(row) > 8 and row[8] is not None else None
+            ref_des_raw = str(row[6]) if len(row) > 6 and row[6] is not None else None
+            
+            try:
+                ref_des_list = _split_ref_des(ref_des_raw)
+            except ValueError as ve:
+                raise MalformedBomError(path, str(ve), {"raw": ref_des_raw, "mpn": part_number})
+                
+            if part_number in seen_mpns:
+                duplicate_mpns.add(part_number)
+            seen_mpns.add(part_number)
+            
+            items.append(BomItem(
+                component_mpn=part_number,
+                description=description,
+                ref_des_raw=ref_des_raw,
+                ref_des_list=ref_des_list,
+                mount_type=mount_type
+            ))
+            
+        if duplicate_mpns:
+            raise MalformedBomError(path, "DUPLICATE_MPN", {"duplicates": list(duplicate_mpns)})
+            
         return BomResult(
             declared_part_number=declared_part_number,
             items=items,
             raw_row_count=raw_row_count,
-            excluded_dni_count=excluded_dni_count
+            excluded_dni_count=excluded_dni_count,
+            excluded_pcb_count=excluded_pcb_count
         )
     finally:
         wb.close()

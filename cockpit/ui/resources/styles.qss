@@ -67,3 +67,15 @@ ChecklistRow {
 ChecklistRow:last-child {
     border-bottom: none;
 }
+
+ChecklistRow[selected="true"] {
+    background-color: #E3F2FD;
+    border-left: 3px solid #1976D2;
+}
+
+QPushButton[indicator="true"] {
+    /* Using background to simulate a dot in the top right corner */
+    background-image: url(data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><circle cx="4" cy="4" r="3" fill="blue"/></svg>);
+    background-repeat: no-repeat;
+    background-position: top right;
+}

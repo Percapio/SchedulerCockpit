@@ -60,6 +60,7 @@ class AuditView(QWidget):
         self._dashboard.exit_requested.connect(self.exit_requested.emit)
         self._dashboard.error_occurred.connect(self.error_occurred.emit)
         self._layout_canvas.error_occurred.connect(self.error_occurred.emit)
+        self._dashboard.selection_changed.connect(self._layout_canvas.set_selection)
         
         self._first_show = True
 

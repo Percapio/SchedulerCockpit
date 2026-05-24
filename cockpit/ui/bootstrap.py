@@ -107,7 +107,9 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     
     layout_query_svc = LayoutQueryService(
         source_file_repo=source_file_repo,
-        pdf_renderer=pdf_renderer
+        pdf_renderer=pdf_renderer,
+        bom_component_repo=bom_component_repo,
+        pdf_coord_repo=pdf_coord_repo
     )
     
     coord_map = load_map(config.coord_map_path)

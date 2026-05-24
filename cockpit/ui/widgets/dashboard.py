@@ -1,6 +1,7 @@
 """Dashboard widget."""
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 )
@@ -9,7 +10,7 @@ from cockpit.services.checklist import ChecklistService
 from cockpit.services.completion import CompletionService, CleanupFailedError
 from cockpit.services.split import AuditSplitService
 from cockpit.services.audit_metadata import AuditMetadataService
-from cockpit.services.views import ActiveAuditView, ChecklistRowKey
+from cockpit.services.views import ActiveAuditView, ChecklistRowKey, SelectionIntent, SelectionKind, ChecklistRowKind
 from cockpit.persistence.types import AuditStatus
 from cockpit.persistence.errors import PersistenceError, IncompleteChecklistError, IllegalStateTransition
 from cockpit.ui.error_messages import render
@@ -30,6 +31,7 @@ _METADATA_DISPLAY_FIELDS: tuple[str, ...] = (
 class Dashboard(QWidget):
     exit_requested = pyqtSignal()
     error_occurred = pyqtSignal(object)
+    selection_changed = pyqtSignal(object)
 
     def __init__(
         self,
@@ -46,6 +48,11 @@ class Dashboard(QWidget):
         self._audit_metadata_service = audit_metadata_service
         self._view: ActiveAuditView | None = None
         self._current_audit_id: int | None = None
+        self._current_selection: SelectionIntent | None = None
+        
+        self._esc_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        self._esc_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self._esc_shortcut.activated.connect(self._clear_selection)
         
         layout = QVBoxLayout(self)
         
@@ -62,6 +69,8 @@ class Dashboard(QWidget):
         self.checklist = ChecklistView()
         self.checklist.toggle_requested.connect(self._on_row_toggle)
         self.checklist.notes_commit_requested.connect(self._on_row_notes_commit)
+        self.checklist.body_clicked.connect(self._on_row_body_clicked)
+        self.checklist.empty_space_clicked.connect(self._on_empty_space_clicked)
         layout.addWidget(self.checklist, stretch=1)
         
         footer = QHBoxLayout()
@@ -82,6 +91,7 @@ class Dashboard(QWidget):
         layout.addLayout(footer)
 
     def load(self, audit_id: int) -> None:
+        self._clear_selection()
         self._current_audit_id = audit_id
         try:
             self._view = self._checklist_service.load_active_audit(audit_id)
@@ -90,6 +100,7 @@ class Dashboard(QWidget):
             self.error_occurred.emit(render(e))
 
     def reload(self) -> None:
+        self._clear_selection()
         if self._current_audit_id is not None:
             self.load(self._current_audit_id)
 
@@ -244,3 +255,38 @@ class Dashboard(QWidget):
             self.reload()
             payload = render(exc)
             self.error_occurred.emit(payload)
+
+    def _on_row_body_clicked(self, row_key: ChecklistRowKey) -> None:
+        if self._view is None:
+            return
+        
+        if row_key.kind == ChecklistRowKind.NOTES:
+            return
+
+        try:
+            mpn = next(
+                row.primary_label
+                for row in self._view.tht_rows
+                if row.key == row_key
+            )
+        except StopIteration:
+            return
+
+        if (self._current_selection is not None
+                and self._current_selection.kind == SelectionKind.THT_MPN
+                and self._current_selection.mpn == mpn):
+            self._clear_selection()
+            return
+
+        intent = SelectionIntent(kind=SelectionKind.THT_MPN, mpn=mpn)
+        self._current_selection = intent
+        self.checklist.set_selected_row(row_key)
+        self.selection_changed.emit(intent)
+
+    def _on_empty_space_clicked(self) -> None:
+        self._clear_selection()
+
+    def _clear_selection(self) -> None:
+        self._current_selection = None
+        self.checklist.clear_selected_row()
+        self.selection_changed.emit(SelectionIntent(kind=SelectionKind.CLEAR, mpn=None))

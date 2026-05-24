@@ -18,6 +18,7 @@ class PageSwitcher(QWidget):
         
         self.buttons: list[QPushButton] = []
         self._current_index: int = 0
+        self._other_page_indicator_visible: bool = False
 
     def set_page_count(self, count: int) -> None:
         """Rebuild the segments based on the page count."""
@@ -54,3 +55,18 @@ class PageSwitcher(QWidget):
         self._current_index = index
         
         self.page_changed.emit(index)
+
+    def set_other_page_indicator(self, visible: bool) -> None:
+        self._other_page_indicator_visible = visible
+        if len(self.buttons) < 2:
+            return
+
+        other_index = 1 if self._current_index == 0 else 0
+        self.buttons[other_index].setProperty("indicator", visible)
+        self.buttons[other_index].style().unpolish(self.buttons[other_index])
+        self.buttons[other_index].style().polish(self.buttons[other_index])
+
+        # Make sure the current index does not have it
+        self.buttons[self._current_index].setProperty("indicator", False)
+        self.buttons[self._current_index].style().unpolish(self.buttons[self._current_index])
+        self.buttons[self._current_index].style().polish(self.buttons[self._current_index])

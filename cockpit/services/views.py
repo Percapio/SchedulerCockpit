@@ -20,6 +20,51 @@ class ChecklistRowKey:
     item_id: int
 
 
+class SelectionKind(StrEnum):
+    THT_MPN = "tht_mpn"
+    CLEAR = "clear"
+
+
+class ResolutionKind(StrEnum):
+    SINGLE_REFDES = "single_refdes"
+    MULTI_REFDES = "multi_refdes"
+    ABSENT_FROM_PDF = "absent_from_pdf"
+    NO_PDF = "no_pdf"
+    UNKNOWN_MPN = "unknown_mpn"
+
+
+@dataclass(frozen=True)
+class SelectionIntent:
+    kind: SelectionKind
+    mpn: str | None
+
+    def __post_init__(self) -> None:
+        if self.kind == SelectionKind.THT_MPN:
+            if self.mpn is None or not self.mpn.strip():
+                raise ValueError("mpn must not be empty when kind is THT_MPN")
+        elif self.kind == SelectionKind.CLEAR:
+            if self.mpn is not None:
+                raise ValueError("mpn must be None when kind is CLEAR")
+
+
+@dataclass(frozen=True)
+class HighlightCoord:
+    ref_des: str
+    page_index: int
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+
+
+@dataclass(frozen=True)
+class ResolvedSelection:
+    kind: ResolutionKind
+    mpn: str
+    ref_des_list: tuple[str, ...]
+    coords: tuple[HighlightCoord, ...]
+
+
 @dataclass(frozen=True)
 class LayoutContext:
     """The canvas's view of one audit's PDF state."""

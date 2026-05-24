@@ -1,14 +1,16 @@
 """Checklist row widget."""
 
 from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtGui import QMouseEvent
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QCheckBox, QLabel, QLineEdit
 
-from cockpit.services.views import ChecklistRowView, ChecklistRowKey
+from cockpit.services.views import ChecklistRowView, ChecklistRowKey, ChecklistRowKind
 
 
 class ChecklistRow(QWidget):
     toggle_requested = pyqtSignal(object, bool)
     notes_commit_requested = pyqtSignal(object, object)
+    body_clicked = pyqtSignal(object)
 
     def __init__(self, row: ChecklistRowView, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -79,3 +81,22 @@ class ChecklistRow(QWidget):
         self.checkbox.setEnabled(False)
         self.notes_input.setEnabled(False)
         self.notes_commit_requested.emit(self._row.key, new_notes)
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if self._row.key.kind == ChecklistRowKind.NOTES:
+            super().mousePressEvent(event)
+            return
+
+        pos = event.position().toPoint()
+        if (self.checkbox.geometry().contains(pos) or
+            self.primary_lbl.geometry().contains(pos) or
+            self.secondary_lbl.geometry().contains(pos) or
+            self.notes_input.geometry().contains(pos)):
+            super().mousePressEvent(event)
+        else:
+            self.body_clicked.emit(self._row.key)
+
+    def set_selected(self, selected: bool) -> None:
+        self.setProperty("selected", selected)
+        self.style().unpolish(self)
+        self.style().polish(self)

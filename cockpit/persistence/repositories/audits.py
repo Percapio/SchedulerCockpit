@@ -125,6 +125,8 @@ class AuditRepository:
                 allowed = True
             elif current_status == AuditStatus.IN_PROGRESS and target == AuditStatus.COMPLETED:
                 allowed = True
+            elif current_status == AuditStatus.PENDING and target == AuditStatus.COMPLETED:
+                allowed = True
             
             if not allowed:
                 raise IllegalStateTransition(audit_id, current_status, target)

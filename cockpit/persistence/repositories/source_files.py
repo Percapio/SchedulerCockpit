@@ -3,8 +3,8 @@
 import sqlite3
 
 from ..clock import utcnow
-from ..errors import AuditNotFound, InvalidArgumentError
-from ..types import SourceFile, SourceFileDraft
+from ..errors import AuditNotFound, InvalidArgumentError, PersistenceInvariantViolation
+from ..types import SourceFile, SourceFileDraft, SourceFileCategory
 
 
 class SourceFileRepository:
@@ -60,3 +60,33 @@ class SourceFileRepository:
         if not row:
             return 0
         return row["cnt"]
+
+    def find_by_audit_and_category(
+        self,
+        audit_id: int,
+        category: SourceFileCategory,
+    ) -> SourceFile | None:
+        cur = self.conn.cursor()
+        cur.execute(
+            "SELECT * FROM source_files WHERE audit_id = ? AND file_category = ?",
+            (audit_id, category.value)
+        )
+        rows = cur.fetchall()
+        
+        if not rows:
+            # AuditNotFound isn't strictly required here unless we want to query `active_audits`
+            # The spec says: "Returns None if no row exists for this pair".
+            # "Raises AuditNotFound (re-raises Phase 1's existing pattern)".
+            # Actually, to raise AuditNotFound we'd need to verify the audit exists,
+            # but usually we just return None. Let's do a quick check if audit exists.
+            cur.execute("SELECT id FROM active_audits WHERE id = ?", (audit_id,))
+            if not cur.fetchone():
+                raise AuditNotFound(audit_id)
+            return None
+            
+        if len(rows) > 1:
+            raise PersistenceInvariantViolation(
+                f"Multiple source files found for audit_id={audit_id} category={category.value}"
+            )
+            
+        return SourceFile(**rows[0])

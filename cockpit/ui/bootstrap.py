@@ -24,7 +24,9 @@ from cockpit.services.storage_reaper import StorageReaper
 from cockpit.services.completion import CompletionService
 from cockpit.services.startup_reconciler import StartupReconciler
 from cockpit.services.audit_metadata import AuditMetadataService
+from cockpit.services.layout_query import LayoutQueryService
 from cockpit.services.views import ReconciliationReport
+from cockpit.layout.renderer import PdfRenderer
 from cockpit.ingestion.hashing import sha256_hex
 
 from .config import AppConfig
@@ -40,6 +42,8 @@ class BootstrappedApp:
     split_svc: AuditSplitService
     completion_svc: CompletionService
     audit_metadata_svc: AuditMetadataService
+    layout_query_svc: LayoutQueryService
+    pdf_renderer: PdfRenderer
     reconciliation_report: ReconciliationReport
 
 
@@ -84,6 +88,8 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
             
     coord_map = load_map(config.coord_map_path)
             
+    pdf_renderer = PdfRenderer()
+            
     parser_registry = ParserRegistry(
         bom_parser=_BomParserWrapper(),
         eco_parser=eco_build_notes,
@@ -98,6 +104,11 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     source_file_repo = SourceFileRepository(conn)
     tht_repo = ThtChecklistRepository(conn)
     notes_repo = BuildNotesChecklistRepository(conn)
+    
+    layout_query_svc = LayoutQueryService(
+        source_file_repo=source_file_repo,
+        pdf_renderer=pdf_renderer
+    )
     
     coord_map = load_map(config.coord_map_path)
     
@@ -145,5 +156,7 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
         split_svc=split_svc,
         completion_svc=completion_svc,
         audit_metadata_svc=audit_metadata_svc,
+        layout_query_svc=layout_query_svc,
+        pdf_renderer=pdf_renderer,
         reconciliation_report=report
     )

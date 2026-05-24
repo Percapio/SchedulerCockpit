@@ -1,9 +1,10 @@
 """View-layer dataclasses for the UI."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, field
 from datetime import datetime, date
 from enum import StrEnum
 from typing import Any
+import pathlib
 
 from cockpit.persistence.types import AuditStatus
 
@@ -17,6 +18,32 @@ class ChecklistRowKind(StrEnum):
 class ChecklistRowKey:
     kind: ChecklistRowKind
     item_id: int
+
+
+@dataclass(frozen=True)
+class LayoutContext:
+    """The canvas's view of one audit's PDF state."""
+    audit_id: int
+    pdf_source_file_id: int | None
+    pdf_path: pathlib.Path | None
+    page_count: int
+    page_dimensions: tuple[tuple[float, float], ...]
+
+    def __post_init__(self) -> None:
+        if self.pdf_path is None:
+            if self.pdf_source_file_id is not None:
+                raise ValueError("pdf_source_file_id must be None when pdf_path is None")
+            if self.page_count != 0:
+                raise ValueError("page_count must be 0 when pdf_path is None")
+            if self.page_dimensions != ():
+                raise ValueError("page_dimensions must be empty when pdf_path is None")
+        else:
+            if self.pdf_source_file_id is None:
+                raise ValueError("pdf_source_file_id must not be None when pdf_path is not None")
+            if self.page_count not in {1, 2}:
+                raise ValueError("page_count must be 1 or 2 when pdf_path is not None")
+            if len(self.page_dimensions) != self.page_count:
+                raise ValueError("len(page_dimensions) must equal page_count")
 
 
 @dataclass(frozen=True)

@@ -4,11 +4,12 @@ import pathlib
 
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent, QDragLeaveEvent
-from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QPushButton
 
 
 class DropArea(QWidget):
     drop_received = pyqtSignal(list)
+    back_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -26,8 +27,16 @@ class DropArea(QWidget):
         self.sub_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.sub_label.setObjectName("DropAreaSubLabel")
         
+        self.back_btn = QPushButton("Back")
+        self.back_btn.setObjectName("DropAreaBackButton")
+        self.back_btn.clicked.connect(self.back_requested.emit)
+        
         layout.addWidget(self.main_label)
         layout.addWidget(self.sub_label)
+        layout.addWidget(self.back_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+    def set_back_visible(self, visible: bool) -> None:
+        self.back_btn.setVisible(visible)
 
     def _has_local_files(self, event: QDragEnterEvent | QDropEvent) -> bool:
         if not event.mimeData().hasUrls():

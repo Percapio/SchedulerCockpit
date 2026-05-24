@@ -54,7 +54,9 @@ def main() -> None:
         bootstrapped.checklist_svc,
         bootstrapped.split_svc,
         bootstrapped.completion_svc,
-        bootstrapped.audit_metadata_svc
+        bootstrapped.audit_metadata_svc,
+        bootstrapped.layout_query_svc,
+        bootstrapped.pdf_renderer
     )
     window.show()
     

@@ -81,6 +81,27 @@ class Toast(QWidget):
         
         self._show_toast()
 
+    def show_toast(self, title: str, subtitle: str) -> None:
+        """Show a generic informational toast."""
+        self.title_label.setText(title)
+        if subtitle:
+            self.subtitle_label.setText(subtitle)
+            self.subtitle_label.show()
+        else:
+            self.subtitle_label.hide()
+
+        self.setStyleSheet("""
+            Toast {
+                background-color: #e3f2fd;
+                border: 1px solid #1976d2;
+                border-radius: 8px;
+            }
+            QLabel#ToastTitle { color: #0d47a1; font-weight: bold; }
+            QLabel#ToastSubtitle { color: #1565c0; }
+        """)
+
+        self._show_toast()
+
     def _show_toast(self) -> None:
         self._position_bottom_right()
         self.show()

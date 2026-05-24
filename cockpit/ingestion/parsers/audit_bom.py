@@ -1,11 +1,16 @@
 """Audit BOM parser."""
 
 import pathlib
+import re
 import openpyxl
 
 from ..errors import MalformedBomError
 from .results import BomItem, BomResult
 
+
+# Matches *...*  annotation markers (e.g. "*PLEASE X-RAY*") that annotate a
+# ref-des cell but are not themselves designators.
+_ANNOTATION_RE = re.compile(r'\*[^*]*\*')
 
 CANONICAL_HEADER = [
     "Find#", "PartNum", "Count", "MSL level", "Date code", "Baked date", 
@@ -17,9 +22,14 @@ CANONICAL_HEADER = [
 def _split_ref_des(raw: str | None) -> tuple[str, ...]:
     if not raw:
         return ()
-    if "-" in raw or ";" in raw:
+    # Strip annotation markers before delimiter inspection so that hyphens
+    # inside markers (e.g. "*PLEASE X-RAY*") do not trigger the guard.
+    cleaned = _ANNOTATION_RE.sub("", raw).strip()
+    if not cleaned:
+        return ()
+    if "-" in cleaned or ";" in cleaned:
         raise ValueError("DELIMITER_NOT_SUPPORTED")
-    return tuple(tok.strip() for tok in raw.split(",") if tok.strip())
+    return tuple(tok.strip() for tok in cleaned.split(",") if tok.strip())
 
 
 def parse(path: pathlib.Path) -> BomResult:

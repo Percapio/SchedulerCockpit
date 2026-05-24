@@ -72,6 +72,11 @@ class ChecklistItemNotFound(PersistenceError, LookupError):
 
 # ---------- invariant violations ----------
 
+class PersistenceInvariantViolation(PersistenceError):
+    """A database state invariant was broken (e.g. multiple rows for a unique relation)."""
+    pass
+
+
 class DuplicateIdentityError(PersistenceError):
     """UNIQUE(part_number, work_order_ref, split_suffix) violated on create/clone."""
     def __init__(self, part_number: str, work_order_ref: str, split_suffix: str):

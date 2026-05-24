@@ -10,7 +10,7 @@ from cockpit.ui.bootstrap import BootstrappedApp
 from cockpit.ui.error_messages import FailurePayload
 from cockpit.ui.widgets import (
     DropArea, ProgressView, Toast, ErrorDialog,
-    OpenAuditPicker, Dashboard
+    OpenAuditPicker, AuditView
 )
 from cockpit.ui.workers import IngestionWorker, AuditSummary
 
@@ -19,6 +19,8 @@ from cockpit.services.checklist import ChecklistService
 from cockpit.services.split import AuditSplitService
 from cockpit.services.completion import CompletionService
 from cockpit.services.audit_metadata import AuditMetadataService
+from cockpit.services.layout_query import LayoutQueryService
+from cockpit.layout.renderer import PdfRenderer
 
 
 class MainWindow(QMainWindow):
@@ -30,7 +32,9 @@ class MainWindow(QMainWindow):
         checklist_svc: ChecklistService,
         split_svc: AuditSplitService,
         completion_svc: CompletionService,
-        audit_metadata_svc: AuditMetadataService
+        audit_metadata_svc: AuditMetadataService,
+        layout_query_svc: LayoutQueryService,
+        pdf_renderer: PdfRenderer
     ) -> None:
         super().__init__()
         self._app = app
@@ -50,6 +54,7 @@ class MainWindow(QMainWindow):
         
         self.drop_area = DropArea()
         self.drop_area.drop_received.connect(self._on_drop_received)
+        self.drop_area.back_requested.connect(self._resolve_initial_page)
         self.stacked.addWidget(self.drop_area)
         
         stages = list(ProgressStage)
@@ -62,32 +67,44 @@ class MainWindow(QMainWindow):
         self.picker.new_audit_requested.connect(self._on_picker_new_audit_requested)
         self.stacked.addWidget(self.picker)
         
-        self.dashboard = Dashboard(checklist_svc, split_svc, completion_svc, audit_metadata_svc)
-        self.dashboard.exit_requested.connect(self._on_dashboard_exit)
-        self.dashboard.error_occurred.connect(self._on_failed)
-        self.stacked.addWidget(self.dashboard)
+        self._audit_view = AuditView(
+            checklist_service=checklist_svc,
+            split_service=split_svc,
+            completion_service=completion_svc,
+            audit_metadata_service=audit_metadata_svc,
+            layout_query_service=layout_query_svc,
+            pdf_renderer=pdf_renderer
+        )
+        self._audit_view.exit_requested.connect(self._on_dashboard_exit)
+        self._audit_view.error_occurred.connect(self._on_failed)
+        self.stacked.addWidget(self._audit_view)
         
         self.toast = Toast(self)
         
         self._resolve_initial_page()
         
+    def _show_drop_area(self) -> None:
+        open_audits = self._audit_read_svc.list_open()
+        self.drop_area.set_back_visible(len(open_audits) > 0)
+        self.stacked.setCurrentWidget(self.drop_area)
+
     def _resolve_initial_page(self) -> None:
         open_audits = self._audit_read_svc.list_open()
         if not open_audits:
-            self.stacked.setCurrentWidget(self.drop_area)
+            self._show_drop_area()
         elif len(open_audits) == 1:
-            self.dashboard.load(open_audits[0].audit_id)
-            self.stacked.setCurrentWidget(self.dashboard)
+            self._audit_view.load(open_audits[0].audit_id)
+            self.stacked.setCurrentWidget(self._audit_view)
         else:
             self.picker.populate(open_audits)
             self.stacked.setCurrentWidget(self.picker)
             
     def _on_picker_audit_selected(self, audit_id: int) -> None:
-        self.dashboard.load(audit_id)
-        self.stacked.setCurrentWidget(self.dashboard)
+        self._audit_view.load(audit_id)
+        self.stacked.setCurrentWidget(self._audit_view)
         
     def _on_picker_new_audit_requested(self) -> None:
-        self.stacked.setCurrentWidget(self.drop_area)
+        self._show_drop_area()
 
     def _on_drop_received(self, paths: list[pathlib.Path]) -> None:
         if self._worker_in_flight:
@@ -132,8 +149,8 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_ingest_succeeded(self, summary: AuditSummary) -> None:
-        self.dashboard.load(summary.audit_id)
-        self.stacked.setCurrentWidget(self.dashboard)
+        self._audit_view.load(summary.audit_id)
+        self.stacked.setCurrentWidget(self._audit_view)
         self.toast.show_success(summary)
 
     def _on_dashboard_exit(self) -> None:
@@ -142,12 +159,12 @@ class MainWindow(QMainWindow):
     def _on_failed(self, payload: FailurePayload) -> None:
         # We only go to drop area if we were doing ingest
         if self.stacked.currentWidget() == self.progress_view:
-            self.stacked.setCurrentWidget(self.drop_area)
+            self._show_drop_area()
         dialog = ErrorDialog(payload, self)
         dialog.exec()
 
     def _on_cancelled(self) -> None:
-        self.stacked.setCurrentWidget(self.drop_area)
+        self._show_drop_area()
         self.toast.show_cancel()
 
     def _on_worker_finished(self) -> None:

@@ -26,7 +26,7 @@ def parse(path: pathlib.Path) -> EcoResult:
     row_sequence = 1
     raw_table_count = len(doc.tables)
 
-    build_table = None
+    build_tables = []
     xray_table = None
 
     # Identify tables by inspecting headers
@@ -46,19 +46,11 @@ def parse(path: pathlib.Path) -> EcoResult:
             xray_table = (idx, tbl)
             continue
             
-        # Check for Build Instructions
-        if len(header_cells) > 0 and header_cells[0] == '#':
-            build_table = (idx, tbl)
-        elif len(non_empty_cells) > 0 and non_empty_cells[0] in {"Find#", "Ref des", "Ref des (P/N)"}:
-            build_table = (idx, tbl)
-        elif build_table is None:
-            # If it doesn't have a recognized header but we haven't found a build table yet,
-            # we might treat it as build table if it has rows, but let's stick to the heuristic.
-            pass
+        # All other tables are treated as build tables
+        build_tables.append((idx, tbl))
 
-    # --- Table 0 (Build Instructions) ---
-    if build_table is not None:
-        tbl_idx, tbl = build_table
+    # --- Build Instructions Tables ---
+    for tbl_idx, tbl in build_tables:
         if len(tbl.rows) > 0:
             # Header sniff on row 0
             row0_cells = [cell.text.strip() for cell in tbl.rows[0].cells]

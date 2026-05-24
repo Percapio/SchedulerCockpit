@@ -12,6 +12,7 @@ class ChecklistView(QScrollArea):
     notes_commit_requested = pyqtSignal(object, object)
     empty_space_clicked = pyqtSignal()
     body_clicked = pyqtSignal(object)
+    mpn_clicked = pyqtSignal(object)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -46,8 +47,7 @@ class ChecklistView(QScrollArea):
                 return widget
         return None
 
-    def populate(self, view: ActiveAuditView) -> None:
-        # Clear existing
+    def populate_section(self, views: list[ChecklistRowView], header_text: str) -> None:
         while self._layout.count():
             item = self._layout.takeAt(0)
             if item.widget():
@@ -55,29 +55,16 @@ class ChecklistView(QScrollArea):
                 
         self._index.clear()
         
-        # THT Section
-        tht_header = QLabel(f"THT Verification ({len(view.tht_rows)} items)")
-        tht_header.setProperty("class", "h2")
-        self._layout.addWidget(tht_header)
+        header = QLabel(header_text)
+        header.setProperty("class", "h2")
+        self._layout.addWidget(header)
         
-        for row_view in view.tht_rows:
+        for row_view in views:
             row_widget = ChecklistRow(row_view)
             row_widget.toggle_requested.connect(self.toggle_requested.emit)
             row_widget.notes_commit_requested.connect(self.notes_commit_requested.emit)
             row_widget.body_clicked.connect(self.body_clicked.emit)
-            self._layout.addWidget(row_widget)
-            self._index[row_view.key] = row_widget
-            
-        # Notes Section
-        notes_header = QLabel(f"Build Notes ({len(view.notes_rows)} items)")
-        notes_header.setProperty("class", "h2")
-        self._layout.addWidget(notes_header)
-        
-        for row_view in view.notes_rows:
-            row_widget = ChecklistRow(row_view)
-            row_widget.toggle_requested.connect(self.toggle_requested.emit)
-            row_widget.notes_commit_requested.connect(self.notes_commit_requested.emit)
-            row_widget.body_clicked.connect(self.body_clicked.emit)
+            row_widget.mpn_clicked.connect(self.mpn_clicked.emit)
             self._layout.addWidget(row_widget)
             self._index[row_view.key] = row_widget
             

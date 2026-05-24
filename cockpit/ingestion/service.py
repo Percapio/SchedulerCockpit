@@ -147,7 +147,7 @@ class IngestionService:
                 # Log missing RefDes
                 missing = target_ref_des - pdf_result.found_ref_des
                 if missing:
-                    logger.warning(f"PDF missing {len(missing)} RefDes components: {sorted(list(missing))}")
+                    logger.debug(f"PDF missing {len(missing)} RefDes components: {sorted(list(missing))}")
         except Exception:
             for cp in copied_paths:
                 try:

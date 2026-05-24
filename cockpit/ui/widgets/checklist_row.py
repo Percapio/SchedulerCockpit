@@ -1,7 +1,7 @@
 """Checklist row widget."""
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtGui import QMouseEvent
+from PyQt6.QtCore import pyqtSignal, Qt, QEvent, QObject
+from PyQt6.QtGui import QMouseEvent, QCursor
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QCheckBox, QLabel, QLineEdit
 
 from cockpit.services.views import ChecklistRowView, ChecklistRowKey, ChecklistRowKind
@@ -11,6 +11,7 @@ class ChecklistRow(QWidget):
     toggle_requested = pyqtSignal(object, bool)
     notes_commit_requested = pyqtSignal(object, object)
     body_clicked = pyqtSignal(object)
+    mpn_clicked = pyqtSignal(object)
 
     def __init__(self, row: ChecklistRowView, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -46,11 +47,24 @@ class ChecklistRow(QWidget):
             self.primary_lbl.setText(view.primary_label)
             self.secondary_lbl.setText(view.secondary_label or "")
             self.notes_input.setText(view.notes or "")
+            
+            if view.key.kind == ChecklistRowKind.THT:
+                self.primary_lbl.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+                self.primary_lbl.setProperty("role", "mpn")
+                self.primary_lbl.installEventFilter(self)
         finally:
             self._ignore_signals = False
             
         self.checkbox.setEnabled(True)
         self.notes_input.setEnabled(True)
+
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
+        if (obj is self.primary_lbl
+                and event.type() == QEvent.Type.MouseButtonPress
+                and event.button() == Qt.MouseButton.LeftButton):
+            self.mpn_clicked.emit(self._row.key)
+            return True
+        return super().eventFilter(obj, event)
 
     def set_view(self, new_view: ChecklistRowView) -> None:
         if new_view.key != self._row.key:

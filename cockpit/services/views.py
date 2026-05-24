@@ -22,6 +22,9 @@ class ChecklistRowKey:
 
 class SelectionKind(StrEnum):
     THT_MPN = "tht_mpn"
+    MPN_CELL = "mpn_cell"
+    BOM_REFDES = "bom_refdes"
+    BOM_MPN_SET = "bom_mpn_set"
     CLEAR = "clear"
 
 
@@ -31,20 +34,38 @@ class ResolutionKind(StrEnum):
     ABSENT_FROM_PDF = "absent_from_pdf"
     NO_PDF = "no_pdf"
     UNKNOWN_MPN = "unknown_mpn"
+    GROUP_REFDES = "group_refdes"
+    GROUP_ABSENT = "group_absent"
+    MULTI_MPN_GROUP = "multi_mpn_group"
+    MULTI_MPN_GROUP_ABSENT = "multi_mpn_group_absent"
 
 
 @dataclass(frozen=True)
 class SelectionIntent:
     kind: SelectionKind
-    mpn: str | None
+    mpn: str | None = None
+    ref_des: str | None = None
+    mpn_set: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
-        if self.kind == SelectionKind.THT_MPN:
-            if self.mpn is None or not self.mpn.strip():
-                raise ValueError("mpn must not be empty when kind is THT_MPN")
+        if self.kind in (SelectionKind.THT_MPN, SelectionKind.MPN_CELL):
+            if not self.mpn:
+                raise ValueError("mpn must be populated")
+            if self.ref_des is not None or self.mpn_set is not None:
+                raise ValueError("Only mpn allowed for THT_MPN/MPN_CELL")
+        elif self.kind == SelectionKind.BOM_REFDES:
+            if not self.ref_des:
+                raise ValueError("ref_des must be populated")
+            if self.mpn is not None or self.mpn_set is not None:
+                raise ValueError("Only ref_des allowed for BOM_REFDES")
+        elif self.kind == SelectionKind.BOM_MPN_SET:
+            if not self.mpn_set:
+                raise ValueError("mpn_set must be populated and non-empty")
+            if self.mpn is not None or self.ref_des is not None:
+                raise ValueError("Only mpn_set allowed for BOM_MPN_SET")
         elif self.kind == SelectionKind.CLEAR:
-            if self.mpn is not None:
-                raise ValueError("mpn must be None when kind is CLEAR")
+            if self.mpn is not None or self.ref_des is not None or self.mpn_set is not None:
+                raise ValueError("All fields must be None for CLEAR")
 
 
 @dataclass(frozen=True)
@@ -60,9 +81,23 @@ class HighlightCoord:
 @dataclass(frozen=True)
 class ResolvedSelection:
     kind: ResolutionKind
-    mpn: str
+    mpn: str | None
+    mpn_set: frozenset[str] | None
     ref_des_list: tuple[str, ...]
     coords: tuple[HighlightCoord, ...]
+
+    def __post_init__(self) -> None:
+        is_multi = self.kind in (ResolutionKind.MULTI_MPN_GROUP, ResolutionKind.MULTI_MPN_GROUP_ABSENT)
+        if is_multi:
+            if self.mpn is not None:
+                raise ValueError("mpn must be None for MULTI_MPN_GROUP kinds")
+            if not self.mpn_set:
+                raise ValueError("mpn_set must be populated for MULTI_MPN_GROUP kinds")
+        else:
+            if not self.mpn:
+                raise ValueError("mpn must be populated for non-multi kinds")
+            if self.mpn_set is not None:
+                raise ValueError("mpn_set must be None for non-multi kinds")
 
 
 @dataclass(frozen=True)

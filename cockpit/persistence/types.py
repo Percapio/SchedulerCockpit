@@ -106,6 +106,9 @@ class BuildNoteItemDraft:
     audit_id: int
     row_sequence: int
     original_text: str
+    source_file_id: int | None = None
+    is_verified: bool = False
+    notes: str | None = None
 
 
 @dataclass(frozen=True)

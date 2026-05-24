@@ -154,7 +154,12 @@ class MainWindow(QMainWindow):
         self.toast.show_success(summary)
 
     def _on_dashboard_exit(self) -> None:
-        self._resolve_initial_page()
+        open_audits = self._audit_read_svc.list_open()
+        if not open_audits:
+            self._show_drop_area()
+        else:
+            self.picker.populate(open_audits)
+            self.stacked.setCurrentWidget(self.picker)
 
     def _on_failed(self, payload: FailurePayload) -> None:
         # We only go to drop area if we were doing ingest

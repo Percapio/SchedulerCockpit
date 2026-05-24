@@ -74,8 +74,6 @@ ChecklistRow[selected="true"] {
 }
 
 QPushButton[indicator="true"] {
-    /* Using background to simulate a dot in the top right corner */
-    background-image: url(data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><circle cx="4" cy="4" r="3" fill="blue"/></svg>);
-    background-repeat: no-repeat;
-    background-position: top right;
+    /* Indicator dot expressed via border-image is not supported in Qt QSS;
+       callers set a dynamic property and style via border/color instead. */
 }

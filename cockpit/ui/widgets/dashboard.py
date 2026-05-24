@@ -3,7 +3,7 @@
 from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QSplitter
 )
 
 from cockpit.services.checklist import ChecklistService
@@ -31,7 +31,11 @@ _METADATA_DISPLAY_FIELDS: tuple[str, ...] = (
 class Dashboard(QWidget):
     exit_requested = pyqtSignal()
     error_occurred = pyqtSignal(object)
-    selection_changed = pyqtSignal(object)
+    
+    tht_body_clicked = pyqtSignal(object)
+    tht_mpn_clicked = pyqtSignal(object)
+    empty_clicked = pyqtSignal()
+    esc_pressed = pyqtSignal()
 
     def __init__(
         self,
@@ -48,11 +52,10 @@ class Dashboard(QWidget):
         self._audit_metadata_service = audit_metadata_service
         self._view: ActiveAuditView | None = None
         self._current_audit_id: int | None = None
-        self._current_selection: SelectionIntent | None = None
         
         self._esc_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
         self._esc_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        self._esc_shortcut.activated.connect(self._clear_selection)
+        self._esc_shortcut.activated.connect(self.esc_pressed.emit)
         
         layout = QVBoxLayout(self)
         
@@ -66,12 +69,27 @@ class Dashboard(QWidget):
         self.metadata_layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.metadata_band)
         
-        self.checklist = ChecklistView()
-        self.checklist.toggle_requested.connect(self._on_row_toggle)
-        self.checklist.notes_commit_requested.connect(self._on_row_notes_commit)
-        self.checklist.body_clicked.connect(self._on_row_body_clicked)
-        self.checklist.empty_space_clicked.connect(self._on_empty_space_clicked)
-        layout.addWidget(self.checklist, stretch=1)
+        self._checklist_splitter = QSplitter(Qt.Orientation.Vertical)
+        self._checklist_splitter.setChildrenCollapsible(False)
+        layout.addWidget(self._checklist_splitter, stretch=1)
+        
+        self.checklist_tht = ChecklistView()
+        self.checklist_tht.toggle_requested.connect(self._on_row_toggle)
+        self.checklist_tht.notes_commit_requested.connect(self._on_row_notes_commit)
+        self.checklist_tht.body_clicked.connect(self.tht_body_clicked.emit)
+        self.checklist_tht.mpn_clicked.connect(self.tht_mpn_clicked.emit)
+        self.checklist_tht.empty_space_clicked.connect(self.empty_clicked.emit)
+        self.checklist_tht.setMinimumHeight(80)
+        self._checklist_splitter.addWidget(self.checklist_tht)
+        
+        self.checklist_notes = ChecklistView()
+        self.checklist_notes.toggle_requested.connect(self._on_row_toggle)
+        self.checklist_notes.notes_commit_requested.connect(self._on_row_notes_commit)
+        self.checklist_notes.empty_space_clicked.connect(self.empty_clicked.emit)
+        self.checklist_notes.setMinimumHeight(80)
+        self._checklist_splitter.addWidget(self.checklist_notes)
+        
+        self._checklist_splitter.setSizes([650, 350]) # default ratio
         
         footer = QHBoxLayout()
         self.split_btn = QPushButton("Split")
@@ -91,7 +109,6 @@ class Dashboard(QWidget):
         layout.addLayout(footer)
 
     def load(self, audit_id: int) -> None:
-        self._clear_selection()
         self._current_audit_id = audit_id
         try:
             self._view = self._checklist_service.load_active_audit(audit_id)
@@ -100,7 +117,6 @@ class Dashboard(QWidget):
             self.error_occurred.emit(render(e))
 
     def reload(self) -> None:
-        self._clear_selection()
         if self._current_audit_id is not None:
             self.load(self._current_audit_id)
 
@@ -121,7 +137,8 @@ class Dashboard(QWidget):
             val = metadata.get(key, "—")
             self.metadata_layout.addWidget(QLabel(f"{key}: {val}"))
             
-        self.checklist.populate(self._view)
+        self.checklist_tht.populate_section(self._view.tht_rows, f"THT Verification ({len(self._view.tht_rows)} items)")
+        self.checklist_notes.populate_section(self._view.notes_rows, f"Build Notes ({len(self._view.notes_rows)} items)")
         self._update_enablement()
 
     def _update_enablement(self) -> None:
@@ -129,13 +146,15 @@ class Dashboard(QWidget):
             return
             
         if self._view.status == AuditStatus.COMPLETED:
-            self.checklist.setEnabled(False)
+            self.checklist_tht.setEnabled(False)
+            self.checklist_notes.setEnabled(False)
             self.split_btn.setEnabled(False)
             self.verify_all_btn.setEnabled(False)
             self.complete_btn.setEnabled(False)
             self.header.ship_date_fld.setEnabled(False)
         else:
-            self.checklist.setEnabled(True)
+            self.checklist_tht.setEnabled(True)
+            self.checklist_notes.setEnabled(True)
             self.split_btn.setEnabled(True)
             self.verify_all_btn.setEnabled(not self._view.is_fully_verified)
             self.complete_btn.setEnabled(self._view.is_fully_verified)
@@ -156,10 +175,16 @@ class Dashboard(QWidget):
                 row_key, new_state, self._current_notes_for(row_key)
             )
             self._view = self._view.with_row_replaced(updated)
-            self.checklist.update_row(updated)
+            if row_key.kind == "tht":
+                self.checklist_tht.update_row(updated)
+            else:
+                self.checklist_notes.update_row(updated)
             self._update_enablement()
         except PersistenceError as exc:
-            self.checklist.revert_row(row_key)
+            if row_key.kind == "tht":
+                self.checklist_tht.revert_row(row_key)
+            else:
+                self.checklist_notes.revert_row(row_key)
             self.reload()
             self.error_occurred.emit(render(exc))
 
@@ -179,9 +204,15 @@ class Dashboard(QWidget):
                 row_key, is_verified, new_notes
             )
             self._view = self._view.with_row_replaced(updated)
-            self.checklist.update_row(updated)
+            if row_key.kind == "tht":
+                self.checklist_tht.update_row(updated)
+            else:
+                self.checklist_notes.update_row(updated)
         except PersistenceError as exc:
-            self.checklist.revert_row(row_key)
+            if row_key.kind == "tht":
+                self.checklist_tht.revert_row(row_key)
+            else:
+                self.checklist_notes.revert_row(row_key)
             self.reload()
             self.error_occurred.emit(render(exc))
 
@@ -235,7 +266,8 @@ class Dashboard(QWidget):
         try:
             reloaded = self._checklist_service.verify_all(self._view.audit_id)
             self._view = reloaded
-            self.checklist.populate(reloaded)
+            self.checklist_tht.populate_section(reloaded.tht_rows, f"THT Verification ({len(reloaded.tht_rows)} items)")
+            self.checklist_notes.populate_section(reloaded.notes_rows, f"Build Notes ({len(reloaded.notes_rows)} items)")
             self._update_enablement()
         except PersistenceError as exc:
             self.reload()
@@ -256,37 +288,4 @@ class Dashboard(QWidget):
             payload = render(exc)
             self.error_occurred.emit(payload)
 
-    def _on_row_body_clicked(self, row_key: ChecklistRowKey) -> None:
-        if self._view is None:
-            return
-        
-        if row_key.kind == ChecklistRowKind.NOTES:
-            return
 
-        try:
-            mpn = next(
-                row.primary_label
-                for row in self._view.tht_rows
-                if row.key == row_key
-            )
-        except StopIteration:
-            return
-
-        if (self._current_selection is not None
-                and self._current_selection.kind == SelectionKind.THT_MPN
-                and self._current_selection.mpn == mpn):
-            self._clear_selection()
-            return
-
-        intent = SelectionIntent(kind=SelectionKind.THT_MPN, mpn=mpn)
-        self._current_selection = intent
-        self.checklist.set_selected_row(row_key)
-        self.selection_changed.emit(intent)
-
-    def _on_empty_space_clicked(self) -> None:
-        self._clear_selection()
-
-    def _clear_selection(self) -> None:
-        self._current_selection = None
-        self.checklist.clear_selected_row()
-        self.selection_changed.emit(SelectionIntent(kind=SelectionKind.CLEAR, mpn=None))

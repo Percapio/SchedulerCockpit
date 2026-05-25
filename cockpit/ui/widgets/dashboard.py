@@ -11,12 +11,15 @@ from cockpit.services.completion import CompletionService, CleanupFailedError
 from cockpit.services.split import AuditSplitService
 from cockpit.services.audit_metadata import AuditMetadataService
 from cockpit.services.views import ActiveAuditView, ChecklistRowKey, SelectionIntent, SelectionKind, ChecklistRowKind
+from cockpit.ingestion.service import IngestionService
 from cockpit.persistence.types import AuditStatus
 from cockpit.persistence.errors import PersistenceError, IncompleteChecklistError, IllegalStateTransition
 from cockpit.ui.error_messages import render
+from cockpit.ui.widgets.add_drawing_dialog import AddDrawingDialog
 
 from .identity_header import IdentityHeader
 from .checklist_view import ChecklistView
+from .audit_notes_view import AuditNotesView
 from .split_dialog import SplitDialog
 
 
@@ -31,6 +34,7 @@ _METADATA_DISPLAY_FIELDS: tuple[str, ...] = (
 class Dashboard(QWidget):
     exit_requested = pyqtSignal()
     error_occurred = pyqtSignal(object)
+    reload_requested = pyqtSignal(int)
     
     tht_body_clicked = pyqtSignal(object)
     tht_mpn_clicked = pyqtSignal(object)
@@ -43,6 +47,7 @@ class Dashboard(QWidget):
         split_service: AuditSplitService,
         completion_service: CompletionService,
         audit_metadata_service: AuditMetadataService,
+        ingestion_service: IngestionService,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -50,6 +55,7 @@ class Dashboard(QWidget):
         self._split_service = split_service
         self._completion_service = completion_service
         self._audit_metadata_service = audit_metadata_service
+        self._ingestion_service = ingestion_service
         self._view: ActiveAuditView | None = None
         self._current_audit_id: int | None = None
         
@@ -75,7 +81,6 @@ class Dashboard(QWidget):
         
         self.checklist_tht = ChecklistView()
         self.checklist_tht.toggle_requested.connect(self._on_row_toggle)
-        self.checklist_tht.notes_commit_requested.connect(self._on_row_notes_commit)
         self.checklist_tht.body_clicked.connect(self.tht_body_clicked.emit)
         self.checklist_tht.mpn_clicked.connect(self.tht_mpn_clicked.emit)
         self.checklist_tht.empty_space_clicked.connect(self.empty_clicked.emit)
@@ -84,17 +89,25 @@ class Dashboard(QWidget):
         
         self.checklist_notes = ChecklistView()
         self.checklist_notes.toggle_requested.connect(self._on_row_toggle)
-        self.checklist_notes.notes_commit_requested.connect(self._on_row_notes_commit)
         self.checklist_notes.empty_space_clicked.connect(self.empty_clicked.emit)
         self.checklist_notes.setMinimumHeight(80)
         self._checklist_splitter.addWidget(self.checklist_notes)
         
-        self._checklist_splitter.setSizes([650, 350]) # default ratio
+        self.audit_notes = AuditNotesView()
+        self.audit_notes.notes_commit_requested.connect(self._on_general_notes_commit)
+        self.audit_notes.setMinimumHeight(80)
+        self._checklist_splitter.addWidget(self.audit_notes)
+        
+        self._checklist_splitter.setSizes([450, 250, 200]) # default ratio
         
         footer = QHBoxLayout()
         self.split_btn = QPushButton("Split")
         self.split_btn.clicked.connect(self._on_split_clicked)
         footer.addWidget(self.split_btn)
+        
+        self.add_drawing_btn = QPushButton("Add Drawing")
+        self.add_drawing_btn.clicked.connect(self._on_add_drawing_clicked)
+        footer.addWidget(self.add_drawing_btn)
         
         footer.addStretch()
         
@@ -139,7 +152,15 @@ class Dashboard(QWidget):
             
         self.checklist_tht.populate_section(self._view.tht_rows, f"THT Verification ({len(self._view.tht_rows)} items)")
         self.checklist_notes.populate_section(self._view.notes_rows, f"Build Notes ({len(self._view.notes_rows)} items)")
+        self.audit_notes.populate(self._view.general_notes)
+        self._refresh_add_drawing_btn_label(self._view)
         self._update_enablement()
+
+    def _refresh_add_drawing_btn_label(self, view: ActiveAuditView) -> None:
+        if view.has_pdf:
+            self.add_drawing_btn.setText("Replace Drawing")
+        else:
+            self.add_drawing_btn.setText("Add Drawing")
 
     def _update_enablement(self) -> None:
         if self._view is None:
@@ -148,6 +169,7 @@ class Dashboard(QWidget):
         if self._view.status == AuditStatus.COMPLETED:
             self.checklist_tht.setEnabled(False)
             self.checklist_notes.setEnabled(False)
+            self.audit_notes.setEnabled(False)
             self.split_btn.setEnabled(False)
             self.verify_all_btn.setEnabled(False)
             self.complete_btn.setEnabled(False)
@@ -155,24 +177,18 @@ class Dashboard(QWidget):
         else:
             self.checklist_tht.setEnabled(True)
             self.checklist_notes.setEnabled(True)
+            self.audit_notes.setEnabled(True)
             self.split_btn.setEnabled(True)
             self.verify_all_btn.setEnabled(not self._view.is_fully_verified)
             self.complete_btn.setEnabled(self._view.is_fully_verified)
             self.header.ship_date_fld.setEnabled(True)
 
-    def _current_notes_for(self, row_key: ChecklistRowKey) -> str | None:
-        if self._view is None:
-            raise KeyError()
-        target = self._view.tht_rows if row_key.kind == "tht" else self._view.notes_rows
-        for r in target:
-            if r.key == row_key:
-                return r.notes
-        raise KeyError()
+
 
     def _on_row_toggle(self, row_key: ChecklistRowKey, new_state: bool) -> None:
         try:
             updated = self._checklist_service.set_verification(
-                row_key, new_state, self._current_notes_for(row_key)
+                row_key, new_state
             )
             self._view = self._view.with_row_replaced(updated)
             if row_key.kind == "tht":
@@ -188,33 +204,15 @@ class Dashboard(QWidget):
             self.reload()
             self.error_occurred.emit(render(exc))
 
-    def _on_row_notes_commit(self, row_key: ChecklistRowKey, new_notes: str | None) -> None:
+    def _on_general_notes_commit(self, notes: str | None) -> None:
         if self._view is None:
             return
             
-        target = self._view.tht_rows if row_key.kind == "tht" else self._view.notes_rows
-        is_verified = False
-        for r in target:
-            if r.key == row_key:
-                is_verified = r.is_verified
-                break
-                
         try:
-            updated = self._checklist_service.set_verification(
-                row_key, is_verified, new_notes
-            )
-            self._view = self._view.with_row_replaced(updated)
-            if row_key.kind == "tht":
-                self.checklist_tht.update_row(updated)
-            else:
-                self.checklist_notes.update_row(updated)
+            self._audit_metadata_service.set_general_notes(self._view.audit_id, notes)
         except PersistenceError as exc:
-            if row_key.kind == "tht":
-                self.checklist_tht.revert_row(row_key)
-            else:
-                self.checklist_notes.revert_row(row_key)
-            self.reload()
             self.error_occurred.emit(render(exc))
+            self.reload()
 
     def _on_split_clicked(self) -> None:
         if self._view is None:
@@ -234,6 +232,14 @@ class Dashboard(QWidget):
                         win.toast.show_toast(f"Split into {dialog.outcome.sibling_suffix} (qty {dialog.outcome.sibling_quantity})", "")
         except Exception as e:
             self.error_occurred.emit(render(e))
+
+    def _on_add_drawing_clicked(self) -> None:
+        if self._view is None:
+            return
+        from PyQt6.QtWidgets import QDialog
+        dialog = AddDrawingDialog(self._ingestion_service, self._view.audit_id, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.reload_requested.emit(self._view.audit_id)
 
     def _on_complete_clicked(self) -> None:
         if self._current_audit_id is None:

@@ -49,16 +49,15 @@ class ThtChecklistRepository:
                 cur.execute(
                     """
                     INSERT INTO tht_verification_checklist (
-                        audit_id, source_file_id, component_mpn, description, is_verified, notes
-                    ) VALUES (?, ?, ?, ?, ?, ?)
+                        audit_id, source_file_id, component_mpn, description, is_verified
+                    ) VALUES (?, ?, ?, ?, ?)
                     """,
                     (
                         item.audit_id,
                         item.source_file_id,
                         item.component_mpn,
                         item.description,
-                        item.is_verified,
-                        item.notes
+                        item.is_verified
                     )
                 )
                 item_id = cur.lastrowid
@@ -81,11 +80,11 @@ class ThtChecklistRepository:
         cur.execute("SELECT * FROM tht_verification_checklist WHERE audit_id = ? ORDER BY id ASC", (audit_id,))
         return [ThtChecklistItem(**row) for row in cur.fetchall()]
 
-    def set_verification(self, item_id: int, is_verified: bool, notes: str | None) -> ThtChecklistItem:
+    def set_verification(self, item_id: int, is_verified: bool) -> ThtChecklistItem:
         cur = self.conn.cursor()
         cur.execute(
-            "UPDATE tht_verification_checklist SET is_verified = ?, notes = ? WHERE id = ?",
-            (is_verified, notes, item_id)
+            "UPDATE tht_verification_checklist SET is_verified = ? WHERE id = ?",
+            (is_verified, item_id)
         )
         if cur.rowcount == 0:
             raise ChecklistItemNotFound(item_id, "tht")

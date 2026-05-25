@@ -37,8 +37,15 @@
     "left_panel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["section_header", "row", "ship_date_field", "progress_view"],
+      "required": ["section_header", "row", "ship_date_field", "progress_view", "layout"],
       "properties": {
+        "layout": {
+          "type": "object",
+          "properties": {
+            "min_width_px": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["min_width_px"]
+        },
         "section_header": {
           "type": "object",
           "properties": {
@@ -83,14 +90,13 @@
     "canvas": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["colour", "pen_width", "z_order", "scalar", "hint_label"],
+      "required": ["colour", "pen_width", "z_order", "zoom", "scalar", "hint_label"],
       "properties": {
         "colour": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["crosshair", "highlight_pen", "dim_overlay", "hint_label_background", "hint_label_text", "hint_label_border"],
+          "required": ["highlight_pen", "dim_overlay", "hint_label_background", "hint_label_text", "hint_label_border"],
           "properties": {
-            "crosshair": { "$ref": "#/$defs/color_with_alpha" },
             "highlight_pen": { "$ref": "#/$defs/color_with_alpha" },
             "dim_overlay": { "$ref": "#/$defs/color_with_alpha" },
             "hint_label_background": { "$ref": "#/$defs/color_with_alpha" },
@@ -101,21 +107,29 @@
         "pen_width": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["crosshair", "highlight_pen"],
+          "required": ["highlight"],
           "properties": {
-            "crosshair": { "type": "integer", "minimum": 1 },
-            "highlight_pen": { "type": "integer", "minimum": 1 }
+            "highlight": { "type": "integer", "minimum": 1 }
           }
         },
         "z_order": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["base_pixmap", "dim", "highlight", "crosshair"],
+          "required": ["base_pixmap", "dim", "highlight"],
           "properties": {
-            "base_pixmap": { "type": "number" },
-            "dim": { "type": "number" },
-            "highlight": { "type": "number" },
-            "crosshair": { "type": "number" }
+            "base_pixmap": { "type": "integer" },
+            "dim": { "type": "integer" },
+            "highlight": { "type": "integer" }
+          }
+        },
+        "zoom": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min_scale", "max_scale", "step"],
+          "properties": {
+            "min_scale": { "type": "number", "minimum": 0.01, "maximum": 1.0 },
+            "max_scale": { "type": "number", "exclusiveMinimum": 1.0, "maximum": 16.0 },
+            "step": { "type": "number", "exclusiveMinimum": 1.0, "maximum": 2.0 }
           }
         },
         "scalar": {
@@ -140,8 +154,16 @@
     "bom_panel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["grouping", "cell", "chip"],
+      "required": ["grouping", "cell", "chip", "layout"],
       "properties": {
+        "layout": {
+          "type": "object",
+          "properties": {
+            "min_width_percent": { "type": "number", "minimum": 0, "maximum": 1 },
+            "min_width_absolute_px": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["min_width_percent", "min_width_absolute_px"]
+        },
         "grouping": {
           "type": "object",
           "additionalProperties": false,
@@ -188,9 +210,9 @@
             "corner_radius_px": { "type": "integer", "minimum": 0 },
             "vertical_padding_px": { "type": "integer", "minimum": 0 },
             "horizontal_padding_px": { "type": "integer", "minimum": 0 },
-            "gutter_px": { "type": "integer", "minimum": 0 }
+            "flow_spacing_px": { "type": "integer", "minimum": 0 }
           },
-          "required": ["fill_rgb", "fill_hover_rgb", "text_rgb", "text_selected_rgb", "corner_radius_px", "vertical_padding_px", "horizontal_padding_px", "gutter_px"]
+          "required": ["fill_rgb", "fill_hover_rgb", "text_rgb", "text_selected_rgb", "corner_radius_px", "vertical_padding_px", "horizontal_padding_px", "flow_spacing_px"]
         }
       }
     }

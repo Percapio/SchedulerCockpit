@@ -19,6 +19,9 @@ def valid_theme_data():
             }
         },
         "left_panel": {
+            "layout": {
+                "min_width_px": 280
+            },
             "section_header": { "fill_rgb": "#FAFAFA", "text_rgb": "#555555", "padding_px": 4 },
             "row": {
                 "fill_rgb": "#2A2A2A", "fill_selected_rgb": "#FFFACD", "text_selected_rgb": "#000000",
@@ -30,19 +33,23 @@ def valid_theme_data():
         },
         "canvas": {
             "colour": {
-                "crosshair": { "rgb": "#FFFF00" },
                 "highlight_pen": { "rgb": "#FF00FF" },
                 "dim_overlay": { "rgb": "#000000", "alpha": 128 },
                 "hint_label_background": { "rgb": "#FFFFFF" },
                 "hint_label_text": { "rgb": "#000000" },
                 "hint_label_border": { "rgb": "#000000" }
             },
-            "pen_width": { "crosshair": 2, "highlight_pen": 3 },
-            "z_order": { "base_pixmap": 0.0, "dim": 1.0, "highlight": 2.0, "crosshair": 3.0 },
+            "pen_width": { "highlight": 3 },
+            "z_order": { "base_pixmap": 0.0, "dim": 1.0, "highlight": 2.0 },
+            "zoom": { "min_scale": 1.0, "max_scale": 8.0, "step": 1.25 },
             "scalar": { "highlight_scale": 2.0 },
             "hint_label": { "padding_px": 4, "border_width_px": 1 }
         },
         "bom_panel": {
+            "layout": {
+                "min_width_percent": 0.15,
+                "min_width_absolute_px": 200
+            },
             "grouping": {
                 "border_rgb": "#3F3F3F", "border_width_px": 1, "fill_rgb": "#252525", "fill_selected_rgb": "#FFFACD",
                 "corner_radius_px": 4, "inner_padding_px": 6, "gutter_px": 3
@@ -54,7 +61,7 @@ def valid_theme_data():
             },
             "chip": {
                 "fill_rgb": "#3A3A3A", "fill_hover_rgb": "#4A4A4A", "text_rgb": "#E8E8E8", "text_selected_rgb": "#FFFF00",
-                "corner_radius_px": 3, "vertical_padding_px": 3, "horizontal_padding_px": 6, "gutter_px": 2
+                "corner_radius_px": 3, "vertical_padding_px": 3, "horizontal_padding_px": 6, "flow_spacing_px": 4
             }
         }
     }
@@ -148,14 +155,6 @@ def test_ThemeLoader_DimZOrderAboveHighlightZOrder_RaisesConfigurationErrorInvZ2
         ThemeLoader.validate_structural_invariants(valid_theme_data)
     assert exc.value.rule == "INV-Z2"
 
-def test_ThemeLoader_HighlightZOrderAboveCrosshairZOrder_RaisesConfigurationErrorInvZ3(valid_theme_data):
-    valid_theme_data["canvas"]["z_order"]["highlight"] = 4.0
-    valid_theme_data["canvas"]["z_order"]["crosshair"] = 3.0
-    
-    with pytest.raises(ConfigurationError) as exc:
-        ThemeLoader.validate_structural_invariants(valid_theme_data)
-    assert exc.value.rule == "INV-Z3"
-
 def test_ThemeLoader_BasePixmapZOrderAboveDimZOrder_RaisesConfigurationErrorInvZ1(valid_theme_data):
     valid_theme_data["canvas"]["z_order"]["base_pixmap"] = 2.0
     valid_theme_data["canvas"]["z_order"]["dim"] = 1.0
@@ -177,6 +176,86 @@ def test_ThemeLoader_HighlightScaleAboveFour_RaisesConfigurationErrorInvS1(valid
     with pytest.raises(ConfigurationError) as exc:
         ThemeLoader.validate_structural_invariants(valid_theme_data)
     assert exc.value.rule == "INV-S1"
+
+def test_ThemeLoader_ZoomMinScaleAboveOne_RaisesConfigurationErrorInvZ4(valid_theme_data):
+    valid_theme_data["canvas"]["zoom"]["min_scale"] = 1.1
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.validate_structural_invariants(valid_theme_data)
+    assert exc.value.rule == "INV-Z4"
+
+def test_ThemeLoader_ZoomMinScaleZero_RaisesConfigurationErrorInvZ4(valid_theme_data):
+    valid_theme_data["canvas"]["zoom"]["min_scale"] = 0.0
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.validate_structural_invariants(valid_theme_data)
+    assert exc.value.rule == "INV-Z4"
+
+def test_ThemeLoader_ZoomMaxScaleAtOne_RaisesConfigurationErrorInvZ5(valid_theme_data):
+    valid_theme_data["canvas"]["zoom"]["max_scale"] = 1.0
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.validate_structural_invariants(valid_theme_data)
+    assert exc.value.rule == "INV-Z5"
+
+def test_ThemeLoader_ZoomMaxScaleAbove16_RaisesConfigurationErrorInvZ5(valid_theme_data):
+    valid_theme_data["canvas"]["zoom"]["max_scale"] = 16.1
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.validate_structural_invariants(valid_theme_data)
+    assert exc.value.rule == "INV-Z5"
+
+def test_ThemeLoader_ZoomStepAtOne_RaisesConfigurationErrorInvZ6(valid_theme_data):
+    valid_theme_data["canvas"]["zoom"]["step"] = 1.0
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.validate_structural_invariants(valid_theme_data)
+    assert exc.value.rule == "INV-Z6"
+
+def test_ThemeLoader_ZoomStepAboveTwo_RaisesConfigurationErrorInvZ6(valid_theme_data):
+    valid_theme_data["canvas"]["zoom"]["step"] = 2.1
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.validate_structural_invariants(valid_theme_data)
+    assert exc.value.rule == "INV-Z6"
+
+def test_ThemeLoader_RetainedCrosshairColourKey_RaisesConfigurationError(tmp_path, valid_theme_data):
+    schema_path = pathlib.Path(__file__).parent.parent.parent / "cockpit" / "ui" / "theme.schema.json"
+    valid_theme_data["canvas"]["colour"]["crosshair"] = { "rgb": "#FFFF00" }
+    theme_path = tmp_path / "theme.json"
+    with open(theme_path, "w") as f:
+        json.dump(valid_theme_data, f)
+        
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.load(theme_path, schema_path)
+    assert exc.value.rule == "json_schema_validation"
+
+def test_ThemeLoader_RetainedChipGutterPxKey_RaisesConfigurationError(tmp_path, valid_theme_data):
+    schema_path = pathlib.Path(__file__).parent.parent.parent / "cockpit" / "ui" / "theme.schema.json"
+    valid_theme_data["bom_panel"]["chip"]["gutter_px"] = 4
+    theme_path = tmp_path / "theme.json"
+    with open(theme_path, "w") as f:
+        json.dump(valid_theme_data, f)
+        
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.load(theme_path, schema_path)
+    assert exc.value.rule == "json_schema_validation"
+
+def test_ThemeLoader_MissingChipFlowSpacingPx_RaisesConfigurationError(tmp_path, valid_theme_data):
+    schema_path = pathlib.Path(__file__).parent.parent.parent / "cockpit" / "ui" / "theme.schema.json"
+    del valid_theme_data["bom_panel"]["chip"]["flow_spacing_px"]
+    theme_path = tmp_path / "theme.json"
+    with open(theme_path, "w") as f:
+        json.dump(valid_theme_data, f)
+        
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.load(theme_path, schema_path)
+    assert exc.value.rule == "json_schema_validation"
+
+def test_ThemeLoader_MissingCanvasZoomSubtree_RaisesConfigurationError(tmp_path, valid_theme_data):
+    schema_path = pathlib.Path(__file__).parent.parent.parent / "cockpit" / "ui" / "theme.schema.json"
+    del valid_theme_data["canvas"]["zoom"]
+    theme_path = tmp_path / "theme.json"
+    with open(theme_path, "w") as f:
+        json.dump(valid_theme_data, f)
+        
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.load(theme_path, schema_path)
+    assert exc.value.rule == "json_schema_validation"
 
 def test_ThemeLoader_DimOverlayAlphaNegative_RaisesConfigurationErrorInvA1(valid_theme_data):
     valid_theme_data["canvas"]["colour"]["dim_overlay"]["alpha"] = -1
@@ -212,11 +291,10 @@ def test_ThemeLoader_ValidJson_ThemeSectionMapsAreFrozen(tmp_path, valid_theme_d
         theme._base = {}
 
 
-def test_Theme_CanvasColourCrosshair_ReturnsQColorWithSaturatedYellowAndFullAlpha():
-    theme = Theme.for_testing(canvas={"colour": {"crosshair": {"rgb": "#FFFF00"}}})
-    color = theme.canvas_colour("crosshair")
-    assert color.name() == "#ffff00"
-    assert color.alpha() == 255
+def test_Theme_CanvasColourCrosshair_RaisesKeyError():
+    theme = Theme.for_testing(canvas={"colour": {"highlight_pen": {"rgb": "#FF00FF"}}})
+    with pytest.raises(KeyError):
+        theme.canvas_colour("crosshair")
 
 def test_Theme_CanvasColourDimOverlay_ReturnsQColorWithDeclaredAlpha():
     theme = Theme.for_testing(canvas={"colour": {"dim_overlay": {"rgb": "#000000", "alpha": 128}}})
@@ -235,13 +313,18 @@ def test_Theme_CanvasColourUnknownRole_RaisesKeyError():
     with pytest.raises(KeyError):
         theme.canvas_colour("unknown")
 
+def test_Theme_CanvasPenCrosshair_RaisesKeyError():
+    theme = Theme.for_testing(canvas={"colour": {"highlight_pen": {"rgb": "#FF00FF"}}, "pen_width": {"highlight_pen": 5}})
+    with pytest.raises(KeyError):
+        theme.canvas_pen("crosshair")
+
 def test_Theme_CanvasPenRole_ReturnsCosmeticPenWithValueFromJson():
     theme = Theme.for_testing(canvas={
-        "colour": {"crosshair": {"rgb": "#FFFF00"}},
-        "pen_width": {"crosshair": 5}
+        "colour": {"highlight_pen": {"rgb": "#FF00FF"}},
+        "pen_width": {"highlight_pen": 5}
     })
-    pen = theme.canvas_pen("crosshair")
-    assert pen.color().name() == "#ffff00"
+    pen = theme.canvas_pen("highlight_pen")
+    assert pen.color().name() == "#ff00ff"
     assert pen.width() == 5
     assert pen.isCosmetic()
 
@@ -250,11 +333,10 @@ def test_Theme_CanvasPenUnknownRole_RaisesKeyError():
     with pytest.raises(KeyError):
         theme.canvas_pen("unknown")
 
-def test_Theme_CanvasBrushCrosshair_ReturnsSolidBrushWithCrosshairColour():
-    theme = Theme.for_testing(canvas={"colour": {"crosshair": {"rgb": "#FFFF00"}}})
-    brush = theme.canvas_brush("crosshair")
-    assert brush.color().name() == "#ffff00"
-    assert brush.style() == Qt.BrushStyle.SolidPattern
+def test_Theme_CanvasZCrosshair_RaisesKeyError():
+    theme = Theme.for_testing(canvas={"z_order": {"dim": 1.5}})
+    with pytest.raises(KeyError):
+        theme.canvas_z("crosshair")
 
 def test_Theme_CanvasZRole_ReturnsValueFromJson():
     theme = Theme.for_testing(canvas={"z_order": {"dim": 1.5}})
@@ -273,6 +355,33 @@ def test_Theme_CanvasScalarUnknownRole_RaisesKeyError():
     theme = Theme.for_testing()
     with pytest.raises(KeyError):
         theme.canvas_scalar("unknown")
+
+def test_Theme_CanvasZoomMinScale_ReturnsConfiguredValue():
+    theme = Theme.for_testing(canvas={"zoom": {"min_scale": 0.5, "max_scale": 4.0, "step": 1.5}})
+    assert theme.canvas_zoom_min_scale() == 0.5
+
+def test_Theme_CanvasZoomMaxScale_ReturnsConfiguredValue():
+    theme = Theme.for_testing(canvas={"zoom": {"min_scale": 0.5, "max_scale": 4.0, "step": 1.5}})
+    assert theme.canvas_zoom_max_scale() == 4.0
+
+def test_Theme_CanvasZoomStep_ReturnsConfiguredValue():
+    theme = Theme.for_testing(canvas={"zoom": {"min_scale": 0.5, "max_scale": 4.0, "step": 1.5}})
+    assert theme.canvas_zoom_step() == 1.5
+
+def test_Theme_BomChipFlowSpacing_ReturnsConfiguredValue():
+    theme = Theme.for_testing(bom_panel={"chip": {"flow_spacing_px": 8}})
+    assert theme.bom_chip_flow_spacing() == 8
+
+def test_Theme_Qss_RefdesChipNoLongerEmitsMarginRight(valid_theme_data):
+    theme = Theme(
+        _base=valid_theme_data["base"],
+        _left_panel=valid_theme_data["left_panel"],
+        _canvas=valid_theme_data["canvas"],
+        _bom_panel=valid_theme_data["bom_panel"],
+    )
+    qss = theme.qss()
+    assert "QLabel[class=\"refdes-chip\"]" in qss
+    assert "margin-right:" not in qss.split("QLabel[class=\"refdes-chip\"] {")[1].split("}")[0]
 
 def test_Theme_Qss_ReturnsNonEmptyString(valid_theme_data):
     theme = Theme(

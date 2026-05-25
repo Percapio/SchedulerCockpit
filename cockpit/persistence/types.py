@@ -33,6 +33,7 @@ class ActiveAudit:
     split_reason: str | None
     traveler_metadata: dict[str, Any] | None
     ship_date: date | None       # NEW (Phase 6)
+    general_notes: str | None
     created_at: datetime         # UTC, tz-aware
     updated_at: datetime         # UTC, tz-aware
 
@@ -56,7 +57,6 @@ class ThtChecklistItem:
     component_mpn: str
     description: str | None
     is_verified: bool
-    notes: str | None
 
 
 @dataclass(frozen=True)
@@ -67,7 +67,6 @@ class BuildNoteItem:
     row_sequence: int
     original_text: str
     is_verified: bool
-    notes: str | None
 
 
 # ---------- draft types (consumed by repositories on insert) ----------
@@ -98,7 +97,6 @@ class ThtChecklistItemDraft:
     source_file_id: int | None = None
     description: str | None = None
     is_verified: bool = False
-    notes: str | None = None
 
 
 @dataclass(frozen=True)
@@ -108,7 +106,6 @@ class BuildNoteItemDraft:
     original_text: str
     source_file_id: int | None = None
     is_verified: bool = False
-    notes: str | None = None
 
 
 @dataclass(frozen=True)

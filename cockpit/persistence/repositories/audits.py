@@ -51,8 +51,8 @@ class AuditRepository:
                 """
                 INSERT INTO active_audits (
                     part_number, schedule_job_id, work_order_ref, split_suffix,
-                    quantity, status, traveler_metadata, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    quantity, status, traveler_metadata, general_notes, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft.part_number,
@@ -62,6 +62,7 @@ class AuditRepository:
                     draft.quantity,
                     AuditStatus.PENDING,
                     traveler_json,
+                    None,
                     now_iso,
                     now_iso
                 )
@@ -199,6 +200,12 @@ class AuditRepository:
         if cur.rowcount == 0:
             raise AuditNotFound(audit_id)
 
+    def set_general_notes(self, audit_id: int, text: str | None) -> None:
+        cur = self.conn.cursor()
+        cur.execute("UPDATE active_audits SET general_notes = ? WHERE id = ?", (text, audit_id))
+        if cur.rowcount == 0:
+            raise AuditNotFound(audit_id)
+
     def hard_delete(self, audit_id: int) -> None:
         cur = self.conn.cursor()
         cur.execute("DELETE FROM active_audits WHERE id = ?", (audit_id,))
@@ -308,8 +315,8 @@ class AuditRepository:
                 """
                 INSERT INTO active_audits (
                     part_number, schedule_job_id, work_order_ref, split_suffix,
-                    quantity, status, traveler_metadata, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    quantity, status, traveler_metadata, general_notes, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     source["part_number"],
@@ -319,6 +326,7 @@ class AuditRepository:
                     new_quantity,
                     AuditStatus.PENDING.value,
                     json.dumps(source["traveler_metadata"]) if source["traveler_metadata"] is not None else None,
+                    source.get("general_notes"),
                     now_iso,
                     now_iso
                 )
@@ -369,16 +377,15 @@ class AuditRepository:
                 """
                 INSERT INTO tht_verification_checklist (
                     audit_id, source_file_id, component_mpn, description,
-                    is_verified, notes
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    is_verified
+                ) VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     sibling_id,
                     file_id_map[tr["source_file_id"]],
                     tr["component_mpn"],
                     tr["description"],
-                    0,
-                    None
+                    0
                 )
             )
             
@@ -390,16 +397,15 @@ class AuditRepository:
                 """
                 INSERT INTO build_notes_checklist (
                     audit_id, source_file_id, row_sequence, original_text,
-                    is_verified, notes
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    is_verified
+                ) VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     sibling_id,
                     file_id_map[nr["source_file_id"]],
                     nr["row_sequence"],
                     nr["original_text"],
-                    0,
-                    None
+                    0
                 )
             )
             

@@ -79,7 +79,7 @@ class Theme:
         qss_lines.append("QLabel#ErrorFooter { font-family: monospace; font-size: 11px; color: #666666; }")
         
         # ChecklistRow
-        qss_lines.append(f"QWidget[class~=\"checklist-row\"] {{ background-color: {lp['row']['fill_rgb']}; border-radius: {lp['row']['corner_radius_px']}px; padding: {lp['row']['vertical_padding_px']}px {lp['row']['horizontal_padding_px']}px; }}")
+        qss_lines.append(f"QWidget[class~=\"checklist-row\"] {{ background-color: {lp['row']['fill_rgb']}; border-radius: {lp['row']['corner_radius_px']}px; padding: {lp['row']['vertical_padding_px']}px {lp['row']['horizontal_padding_px']}px; border: {bp['grouping']['border_width_px']}px solid {bp['grouping']['border_rgb']}; }}")
         qss_lines.append(f"QWidget[class~=\"checklist-row\"][selected=\"true\"] {{ background-color: {lp['row']['fill_selected_rgb']}; }}")
         qss_lines.append(f"QWidget[class~=\"checklist-row\"][selected=\"true\"] > QLabel {{ color: {lp['row']['text_selected_rgb']}; }}")
         qss_lines.append("QPushButton[indicator=\"true\"] { }")
@@ -150,6 +150,27 @@ class Theme:
             raise KeyError(role)
         return float(self._canvas['scalar'][role])
 
+    def canvas_zoom_min_scale(self) -> float:
+        return float(self._canvas['zoom']['min_scale'])
+
+    def canvas_zoom_max_scale(self) -> float:
+        return float(self._canvas['zoom']['max_scale'])
+
+    def canvas_zoom_step(self) -> float:
+        return float(self._canvas['zoom']['step'])
+
+    def bom_chip_flow_spacing(self) -> int:
+        return int(self._bom_panel['chip']['flow_spacing_px'])
+
+    def left_panel_min_width(self) -> int:
+        return int(self._left_panel['layout']['min_width_px'])
+
+    def bom_panel_min_width_percent(self) -> float:
+        return float(self._bom_panel['layout']['min_width_percent'])
+
+    def bom_panel_min_width_absolute(self) -> int:
+        return int(self._bom_panel['layout']['min_width_absolute_px'])
+
     def _compose_bom_grouping(self, grouping_tokens: Mapping[str, Any]) -> str:
         lines = [
             "QFrame[class=\"bom-grouping\"] {",
@@ -195,7 +216,6 @@ class Theme:
             f"    color: {chip_tokens['text_rgb']};",
             f"    border-radius: {chip_tokens['corner_radius_px']}px;",
             f"    padding: {chip_tokens['vertical_padding_px']}px {chip_tokens['horizontal_padding_px']}px;",
-            f"    margin-right: {chip_tokens['gutter_px']}px;",
             "}",
             "QLabel[class=\"refdes-chip\"]:hover {",
             f"    background-color: {chip_tokens['fill_hover_rgb']};",
@@ -285,12 +305,18 @@ class ThemeLoader:
             raise ConfigurationError("/canvas/z_order", "INV-Z1", "base_pixmap must be < dim")
         if not (z["dim"] < z["highlight"]):
             raise ConfigurationError("/canvas/z_order", "INV-Z2", "dim must be < highlight")
-        if not (z["highlight"] < z["crosshair"]):
-            raise ConfigurationError("/canvas/z_order", "INV-Z3", "highlight must be < crosshair")
             
         s = cv["scalar"]["highlight_scale"]
         if not (1.0 <= s <= 4.0):
             raise ConfigurationError("/canvas/scalar/highlight_scale", "INV-S1", "must be between 1.0 and 4.0")
+            
+        zm = cv["zoom"]
+        if not (0 < zm["min_scale"] <= 1.0):
+            raise ConfigurationError("/canvas/zoom/min_scale", "INV-Z4", "must be > 0 and <= 1.0")
+        if not (1.0 < zm["max_scale"] <= 16.0):
+            raise ConfigurationError("/canvas/zoom/max_scale", "INV-Z5", "must be > 1.0 and <= 16.0")
+        if not (1.0 < zm["step"] <= 2.0):
+            raise ConfigurationError("/canvas/zoom/step", "INV-Z6", "must be > 1.0 and <= 2.0")
             
         for role, entry in cv["colour"].items():
             if "alpha" in entry:

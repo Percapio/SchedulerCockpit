@@ -12,6 +12,8 @@ from .results import BomItem, BomResult
 # ref-des cell but are not themselves designators.
 _ANNOTATION_RE = re.compile(r'\*[^*]*\*')
 
+REFDES_TOKEN_REGEX = re.compile(r"^[A-Z0-9]+(-[A-Z0-9]+)*$")
+
 CANONICAL_HEADER = [
     "Find#", "PartNum", "Count", "MSL level", "Date code", "Baked date", 
     "Ref_Des", "Package", "Description", "SMT/THT", "Qty Need", "Qty On hand", 
@@ -27,9 +29,12 @@ def _split_ref_des(raw: str | None) -> tuple[str, ...]:
     cleaned = _ANNOTATION_RE.sub("", raw).strip()
     if not cleaned:
         return ()
-    if "-" in cleaned or ";" in cleaned:
-        raise ValueError("DELIMITER_NOT_SUPPORTED")
-    return tuple(tok.strip() for tok in cleaned.split(",") if tok.strip())
+
+    tokens = [tok.strip() for tok in cleaned.split(",") if tok.strip()]
+    for tok in tokens:
+        if not REFDES_TOKEN_REGEX.match(tok):
+            raise ValueError("INVALID_REFDES_TOKEN")
+    return tuple(tokens)
 
 
 def parse(path: pathlib.Path) -> BomResult:

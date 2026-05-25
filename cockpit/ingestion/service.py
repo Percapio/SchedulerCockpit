@@ -247,3 +247,83 @@ class IngestionService:
                         logger.info(f"Skipping deletion of {cp} during rollback; referenced by sibling.")
             
             raise
+            
+    def add_pdf_to_audit(
+        self,
+        audit_id: int,
+        pdf_path: pathlib.Path,
+    ) -> None:
+        """Add or replace the PDF attached to an existing audit."""
+        from .errors import IngestionError
+        
+        audit = self.audit_repo.find_by_id(audit_id)
+        if not audit:
+            from ..persistence.errors import AuditNotFound
+            raise AuditNotFound(audit_id)
+
+        pdf_hash = hashing.sha256_hex(pdf_path)
+        
+        audit_dir = self.file_storage_root / audit.part_number / "unsplit"
+        try:
+            audit_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            raise FileStorageError(audit_dir, audit_dir, e)
+
+        stored_pdf = audit_dir / pdf_path.name
+        copied = False
+        try:
+            if not stored_pdf.exists():
+                shutil.copy2(pdf_path, stored_pdf)
+                copied = True
+        except Exception as e:
+            raise FileStorageError(pdf_path, stored_pdf, e)
+
+        target_ref_des = set()
+        bom_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.BOM)
+        if bom_sf:
+            bom_components = self.bom_component_repo.list_for_source_file(bom_sf.id)
+            for c in bom_components:
+                target_ref_des.add(c.ref_des)
+
+        try:
+            pdf_result = self.layout_parser.parse(stored_pdf, target_ref_des)
+        except Exception:
+            if copied:
+                try:
+                    stored_pdf.unlink()
+                except Exception:
+                    pass
+            raise
+
+        self.conn.execute("SAVEPOINT add_pdf")
+        try:
+            prior_pdf_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
+            if prior_pdf_sf:
+                self.conn.execute("DELETE FROM source_files WHERE id = ?", (prior_pdf_sf.id,))
+                
+            pdf_file = self.source_file_repo.register(SourceFileDraft(
+                audit_id=audit.id, file_category=SourceFileCategory.PDF,
+                original_filename=stored_pdf.name, local_storage_path=stored_pdf, file_hash=pdf_hash
+            ))
+            
+            if pdf_result and pdf_file:
+                pdf_drafts = [
+                    PdfComponentCoordDraft(
+                        source_file_id=pdf_file.id, ref_des=c.ref_des, page_index=c.page_index,
+                        x1=c.x1, y1=c.y1, x2=c.x2, y2=c.y2
+                    ) for c in pdf_result.coordinates
+                ]
+                if pdf_drafts:
+                    self.pdf_coord_repo.bulk_insert(pdf_drafts)
+
+            self.conn.execute("RELEASE SAVEPOINT add_pdf")
+        except Exception:
+            self.conn.execute("ROLLBACK TO SAVEPOINT add_pdf")
+            self.conn.execute("RELEASE SAVEPOINT add_pdf")
+            if copied:
+                if self.source_file_repo.reference_count(pdf_hash) == 0:
+                    try:
+                        stored_pdf.unlink()
+                    except Exception:
+                        pass
+            raise

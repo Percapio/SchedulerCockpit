@@ -3,7 +3,7 @@
 from dataclasses import dataclass, replace, field
 from datetime import datetime, date
 from enum import StrEnum
-from typing import Any
+from typing import Any, Sequence
 import pathlib
 
 from cockpit.persistence.types import AuditStatus
@@ -130,9 +130,8 @@ class LayoutContext:
 class ChecklistRowView:
     key: ChecklistRowKey
     primary_label: str
-    secondary_label: str | None
-    is_verified: bool
-    notes: str | None
+    secondary_label: str | None = None
+    is_verified: bool = False
 
 
 @dataclass(frozen=True)
@@ -146,8 +145,10 @@ class ActiveAuditView:
     split_reason: str | None
     traveler_metadata: dict[str, Any] | None
     ship_date: date | None
-    tht_rows: list[ChecklistRowView]
-    notes_rows: list[ChecklistRowView]
+    has_pdf: bool
+    tht_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
+    notes_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
+    general_notes: str | None = None
 
     @property
     def total_rows(self) -> int:

@@ -7,6 +7,7 @@ from cockpit.services.checklist import ChecklistService
 from cockpit.services.split import AuditSplitService
 from cockpit.services.completion import CompletionService
 from cockpit.services.audit_metadata import AuditMetadataService
+from cockpit.ingestion.service import IngestionService
 from cockpit.services.layout_query import LayoutQueryService
 from cockpit.layout.renderer import PdfRenderer
 from cockpit.ui.widgets.dashboard import Dashboard
@@ -27,6 +28,7 @@ class AuditView(QWidget):
         split_service: AuditSplitService,
         completion_service: CompletionService,
         audit_metadata_service: AuditMetadataService,
+        ingestion_service: IngestionService,
         layout_query_service: LayoutQueryService,
         pdf_renderer: PdfRenderer,
         parent: QWidget | None = None,
@@ -47,6 +49,7 @@ class AuditView(QWidget):
             split_service=split_service,
             completion_service=completion_service,
             audit_metadata_service=audit_metadata_service,
+            ingestion_service=ingestion_service,
             parent=self._splitter
         )
         
@@ -59,12 +62,15 @@ class AuditView(QWidget):
         
         self._bom_panel = AuditBomPanel(
             layout_query_service=layout_query_service,
-            parent=self._splitter
+            parent=self._splitter,
+            theme=self._theme
         )
         
         self._splitter.addWidget(self._dashboard)
         self._splitter.addWidget(self._layout_canvas)
         self._splitter.addWidget(self._bom_panel)
+        
+        self._dashboard.setMinimumWidth(self._theme.left_panel_min_width())
         
         layout.addWidget(self._splitter)
         
@@ -76,6 +82,7 @@ class AuditView(QWidget):
         # Signal wiring
         self._dashboard.exit_requested.connect(self.exit_requested.emit)
         self._dashboard.error_occurred.connect(self.error_occurred.emit)
+        self._dashboard.reload_requested.connect(self.load)
         self._layout_canvas.error_occurred.connect(self.error_occurred.emit)
         self._bom_panel.error_occurred.connect(self.error_occurred.emit)
         
@@ -94,6 +101,7 @@ class AuditView(QWidget):
         self._coordinator.selection_changed.connect(self._layout_canvas.set_selection)
         
         self._first_show = True
+        self._bom_min_width = 200
 
     def load(self, audit_id: int) -> None:
         """Load the audit identified by audit_id into all panes."""
@@ -115,9 +123,47 @@ class AuditView(QWidget):
         super().showEvent(event)
         if self._first_show:
             self._first_show = False
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(0, self._apply_initial_layout)
+            
+    def _apply_initial_layout(self) -> None:
+        screen_w = self.window().screen().size().width()
+        pct = self._theme.bom_panel_min_width_percent()
+        abs_min = self._theme.bom_panel_min_width_absolute()
+        self._bom_min_width = max(int(screen_w * pct), abs_min)
+        
+        if self._has_pdf():
+            self._splitter.setStretchFactor(0, 0)
+            self._splitter.setStretchFactor(1, 1)
+            self._splitter.setStretchFactor(2, 0)
+            
+            dash_w = self._dashboard.minimumWidth()
+            bom_target_w = self._bom_min_width
+            pcb_w = max(0, self.width() - dash_w - bom_target_w)
+            self._splitter.setSizes([dash_w, pcb_w, bom_target_w])
+        else:
+            self._splitter.setStretchFactor(0, 2)
+            self._splitter.setStretchFactor(1, 2)
+            self._splitter.setStretchFactor(2, 1)
+            
             # Initial split ratio: 40% dashboard / 40% canvas / 20% BOM
             total_width = self.width()
             dash_w = int(total_width * 0.40)
             bom_w = int(total_width * 0.20)
-            canvas_w = total_width - dash_w - bom_w
+            canvas_w = max(0, total_width - dash_w - bom_w)
             self._splitter.setSizes([dash_w, canvas_w, bom_w])
+            
+        self._splitter.splitterMoved.connect(self._on_splitter_moved)
+
+    def _has_pdf(self) -> bool:
+        if self._dashboard._view is not None:
+            return self._dashboard._view.has_pdf
+        return False
+
+    def _on_splitter_moved(self, pos: int, index: int) -> None:
+        if index == 2:
+            sizes = self._splitter.sizes()
+            if sizes[2] < self._bom_min_width:
+                self._splitter.splitterMoved.disconnect(self._on_splitter_moved)
+                self._splitter.setSizes([sizes[0], sizes[1] + sizes[2] - self._bom_min_width, self._bom_min_width])
+                self._splitter.splitterMoved.connect(self._on_splitter_moved)

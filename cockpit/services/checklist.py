@@ -4,7 +4,8 @@ from cockpit.persistence.errors import AuditNotFound, ChecklistItemNotFound
 from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
 from cockpit.persistence.repositories.notes_checklist import BuildNotesChecklistRepository
-from cockpit.persistence.types import AuditStatus
+from cockpit.persistence.repositories.source_files import SourceFileRepository
+from cockpit.persistence.types import AuditStatus, SourceFileCategory
 
 from cockpit.services.views import (
     ActiveAuditView,
@@ -23,11 +24,13 @@ class ChecklistService:
         audit_repo: AuditRepository,
         tht_repo: ThtChecklistRepository,
         notes_repo: BuildNotesChecklistRepository,
+        source_file_repo: SourceFileRepository,
     ) -> None:
         self._conn = conn
         self._audit_repo = audit_repo
         self._tht_repo = tht_repo
         self._notes_repo = notes_repo
+        self._source_file_repo = source_file_repo
 
     def load_active_audit(self, audit_id: int) -> ActiveAuditView:
         audit = self._audit_repo.find_by_id(audit_id)
@@ -42,8 +45,7 @@ class ChecklistService:
                 key=ChecklistRowKey(ChecklistRowKind.THT, r.id),
                 primary_label=r.component_mpn,
                 secondary_label=r.description,
-                is_verified=r.is_verified,
-                notes=r.notes
+                is_verified=r.is_verified
             ) for r in tht_rows_db
         ]
 
@@ -52,10 +54,11 @@ class ChecklistService:
                 key=ChecklistRowKey(ChecklistRowKind.NOTES, r.id),
                 primary_label=f"{r.row_sequence}.",
                 secondary_label=r.original_text,
-                is_verified=r.is_verified,
-                notes=r.notes
+                is_verified=r.is_verified
             ) for r in notes_rows_db
         ]
+
+        has_pdf = self._source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF) is not None
 
         return ActiveAuditView(
             audit_id=audit.id,
@@ -67,6 +70,7 @@ class ChecklistService:
             split_reason=audit.split_reason,
             traveler_metadata=audit.traveler_metadata,
             ship_date=audit.ship_date,
+            has_pdf=has_pdf,
             tht_rows=tht_views,
             notes_rows=notes_views,
         )
@@ -75,25 +79,22 @@ class ChecklistService:
         self,
         row_key: ChecklistRowKey,
         is_verified: bool,
-        notes: str | None,
     ) -> ChecklistRowView:
         if row_key.kind == ChecklistRowKind.THT:
-            r = self._tht_repo.set_verification(row_key.item_id, is_verified, notes)
+            r = self._tht_repo.set_verification(row_key.item_id, is_verified)
             return ChecklistRowView(
                 key=row_key,
                 primary_label=r.component_mpn,
                 secondary_label=r.description,
-                is_verified=r.is_verified,
-                notes=r.notes
+                is_verified=r.is_verified
             )
         else:
-            r = self._notes_repo.set_verification(row_key.item_id, is_verified, notes)
+            r = self._notes_repo.set_verification(row_key.item_id, is_verified)
             return ChecklistRowView(
                 key=row_key,
                 primary_label=f"{r.row_sequence}.",
                 secondary_label=r.original_text,
-                is_verified=r.is_verified,
-                notes=r.notes
+                is_verified=r.is_verified
             )
 
     def complete(self, audit_id: int) -> ActiveAuditView:

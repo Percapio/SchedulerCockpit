@@ -9,7 +9,6 @@ from .checklist_row import ChecklistRow
 
 class ChecklistView(QScrollArea):
     toggle_requested = pyqtSignal(object, bool)
-    notes_commit_requested = pyqtSignal(object, object)
     empty_space_clicked = pyqtSignal()
     body_clicked = pyqtSignal(object)
     mpn_clicked = pyqtSignal(object)
@@ -63,7 +62,6 @@ class ChecklistView(QScrollArea):
         for row_view in views:
             row_widget = ChecklistRow(row_view)
             row_widget.toggle_requested.connect(self.toggle_requested.emit)
-            row_widget.notes_commit_requested.connect(self.notes_commit_requested.emit)
             row_widget.body_clicked.connect(self.body_clicked.emit)
             row_widget.mpn_clicked.connect(self.mpn_clicked.emit)
             self._layout.addWidget(row_widget)

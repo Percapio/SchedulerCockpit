@@ -75,6 +75,7 @@ class MainWindow(QMainWindow):
             split_service=split_svc,
             completion_service=completion_svc,
             audit_metadata_service=audit_metadata_svc,
+            ingestion_service=self._bootstrapped.ingestion_service,
             layout_query_service=layout_query_svc,
             pdf_renderer=pdf_renderer,
             theme=self._theme

@@ -20,3 +20,11 @@ class AuditMetadataService:
         except Exception as e:
             self._conn.rollback()
             raise PersistenceError(f"Failed to set ship date for audit {audit_id}", e) from e
+
+    def set_general_notes(self, audit_id: int, notes: str | None) -> None:
+        try:
+            self._repo.set_general_notes(audit_id, notes)
+            self._conn.commit()
+        except Exception as e:
+            self._conn.rollback()
+            raise PersistenceError(f"Failed to set general notes for audit {audit_id}", e) from e

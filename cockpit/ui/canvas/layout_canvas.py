@@ -5,7 +5,7 @@ from PyQt6.QtGui import QPixmap, QResizeEvent, QShowEvent
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QStackedWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QLabel, QGraphicsLineItem, QGraphicsItem, QGraphicsRectItem
 )
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QWheelEvent, QMouseEvent
 from PyQt6.QtCore import QRectF, QPointF
 
 from cockpit.ui.theme import Theme
@@ -83,6 +83,17 @@ from cockpit.services.views import SelectionIntent, ResolvedSelection, Selection
 from cockpit.persistence.errors import PersistenceError
 from cockpit.ui.canvas.page_switcher import PageSwitcher
 
+class _InnerGraphicsView(QGraphicsView):
+    def __init__(self, canvas: 'LayoutCanvas', scene: QGraphicsScene):
+        super().__init__(scene)
+        self._canvas = canvas
+        
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        self._canvas.wheelEvent(event)
+        
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        self._canvas.mouseDoubleClickEvent(event)
+
 
 class LayoutCanvas(QWidget):
     error_occurred = pyqtSignal(object)
@@ -105,6 +116,7 @@ class LayoutCanvas(QWidget):
         self._pending_render: bool = False
         self._last_intent: SelectionIntent | None = None
         self._last_resolved: ResolvedSelection | None = None
+        self._current_scale = 1.0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -119,11 +131,13 @@ class LayoutCanvas(QWidget):
         canvas_layout = QVBoxLayout(self._canvas_container)
         canvas_layout.setContentsMargins(0, 0, 0, 0)
         self._scene = QGraphicsScene()
-        self._graphics_view = QGraphicsView(self._scene)
+        self._graphics_view = _InnerGraphicsView(self, self._scene)
         self._graphics_view.setFrameShape(QGraphicsView.Shape.NoFrame)
         # Avoid scrollbars if possible when fitting to view
         self._graphics_view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._graphics_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._graphics_view.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
+        self._graphics_view.setDragMode(QGraphicsView.DragMode.NoDrag)
         
         self._base_pixmap_item = QGraphicsPixmapItem()
         self._base_pixmap_item.setZValue(self._theme.canvas_z("base_pixmap"))
@@ -135,18 +149,6 @@ class LayoutCanvas(QWidget):
         self._dim_item.setZValue(self._theme.canvas_z("dim"))
         self._dim_item.setVisible(False)
         self._scene.addItem(self._dim_item)
-        
-        self._crosshair_v = QGraphicsLineItem()
-        self._crosshair_h = QGraphicsLineItem()
-        ch_pen = self._theme.canvas_pen("crosshair")
-        self._crosshair_v.setPen(ch_pen)
-        self._crosshair_h.setPen(ch_pen)
-        self._crosshair_v.setZValue(self._theme.canvas_z("crosshair"))
-        self._crosshair_h.setZValue(self._theme.canvas_z("crosshair"))
-        self._crosshair_v.setVisible(False)
-        self._crosshair_h.setVisible(False)
-        self._scene.addItem(self._crosshair_v)
-        self._scene.addItem(self._crosshair_h)
         
         self._highlight_items: list[HighlightItem] = []
         
@@ -265,6 +267,8 @@ class LayoutCanvas(QWidget):
         self._scene.setSceneRect(0, 0, rendered.pixel_width, rendered.pixel_height)
         self._dim_item.setRect(self._scene.sceneRect())
         self._graphics_view.fitInView(self._base_pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
+        self._current_scale = 1.0
+        self._update_pan_cursor()
         
         self._apply_selection()
 
@@ -310,6 +314,43 @@ class LayoutCanvas(QWidget):
         except Exception:
             raise
 
+    def wheelEvent(self, event: QWheelEvent) -> None:
+        delta = event.angleDelta().y()
+        if delta == 0:
+            super().wheelEvent(event)
+            return
+
+        step = self._theme.canvas_zoom_step()
+        factor = step if delta > 0 else 1.0 / step
+        new_scale = self._current_scale * factor
+
+        if new_scale < self._theme.canvas_zoom_min_scale():
+            event.accept()
+            return
+
+        if new_scale > self._theme.canvas_zoom_max_scale():
+            event.accept()
+            return
+
+        self._graphics_view.scale(factor, factor)
+        self._current_scale = new_scale
+        self._update_pan_cursor()
+        event.accept()
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        self._graphics_view.resetTransform()
+        if self._base_pixmap_item.pixmap() and not self._base_pixmap_item.pixmap().isNull():
+            self._graphics_view.fitInView(self._base_pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
+        self._current_scale = 1.0
+        self._update_pan_cursor()
+        super().mouseDoubleClickEvent(event)
+
+    def _update_pan_cursor(self) -> None:
+        if self._current_scale > 1.0:
+            self._graphics_view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        else:
+            self._graphics_view.setDragMode(QGraphicsView.DragMode.NoDrag)
+
     def set_selection(self, intent: SelectionIntent) -> None:
         if intent.kind == SelectionKind.CLEAR:
             self._last_intent = None
@@ -343,8 +384,6 @@ class LayoutCanvas(QWidget):
     def _hide_all_highlights(self) -> None:
         for item in self._highlight_items:
             item.setVisible(False)
-        self._crosshair_v.setVisible(False)
-        self._crosshair_h.setVisible(False)
 
     def _paint_highlight_rect(self, item: HighlightItem, coord: HighlightCoord, mode: str) -> None:
         if self._current_context is None:
@@ -378,35 +417,6 @@ class LayoutCanvas(QWidget):
         item.set_rect(QRectF(cx - new_w / 2.0, cy - new_h / 2.0, new_w, new_h), mode)
         item.setVisible(True)
 
-    def _set_crosshair_for_coord(self, coord: HighlightCoord) -> None:
-        if self._current_context is None:
-            return
-            
-        scene_rect = self._scene.sceneRect()
-        pw = scene_rect.width()
-        ph = scene_rect.height()
-        
-        page_dim = self._current_context.page_dimensions[coord.page_index]
-        pdf_w, pdf_h = page_dim[0], page_dim[1]
-        
-        scale_x = pw / pdf_w
-        scale_y = ph / pdf_h
-        
-        nx1 = coord.x1 * scale_x
-        ny1 = coord.y1 * scale_y
-        nx2 = coord.x2 * scale_x
-        ny2 = coord.y2 * scale_y
-        
-        cx = (nx1 + nx2) / 2.0
-        cy = (ny1 + ny2) / 2.0
-        
-        # Crosshair lines extend to the edges of the viewable scene
-        self._crosshair_v.setLine(cx, 0, cx, ph)
-        self._crosshair_h.setLine(0, cy, pw, cy)
-        
-        self._crosshair_v.setVisible(True)
-        self._crosshair_h.setVisible(True)
-
     def _format_group_hint(self, resolved: ResolvedSelection) -> str:
         n = len(resolved.ref_des_list)
         k = len(resolved.coords)
@@ -432,7 +442,6 @@ class LayoutCanvas(QWidget):
             self._hide_all_highlights()
             if coord.page_index == self._current_page_index:
                 self._paint_highlight_rect(self._highlight_items[0], coord, mode="single")
-                self._set_crosshair_for_coord(coord)
             self._hint_label.setVisible(False)
             self._page_switcher.set_other_page_indicator(coord.page_index != self._current_page_index)
 

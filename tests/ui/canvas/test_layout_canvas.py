@@ -14,15 +14,15 @@ import pathlib
 def theme():
     return Theme.for_testing(canvas={
         "colour": {
-            "crosshair": {"rgb": "#FFFF00"},
             "highlight_pen": {"rgb": "#FF00FF"},
             "dim_overlay": {"rgb": "#000000", "alpha": 128},
             "hint_label_background": {"rgb": "#FFFFFF"},
             "hint_label_text": {"rgb": "#000000"},
             "hint_label_border": {"rgb": "#000000"}
         },
-        "pen_width": {"crosshair": 2, "highlight_pen": 3},
-        "z_order": {"base_pixmap": 0.0, "dim": 1.0, "highlight": 2.0, "crosshair": 3.0},
+        "zoom": {"min_scale": 1.0, "max_scale": 8.0, "step": 1.25},
+        "pen_width": {"highlight_pen": 3},
+        "z_order": {"base_pixmap": 0.0, "dim": 1.0, "highlight": 2.0},
         "scalar": {"highlight_scale": 2.0},
         "hint_label": {"padding_px": 4, "border_width_px": 1}
     })
@@ -197,4 +197,51 @@ def test_apply_selection_group_absent(canvas):
     assert all(not item.isVisible() for item in canvas._highlight_items)
     assert not canvas._hint_label.isHidden()
     assert "0 of 2 footprints found" in canvas._hint_label.text()
+
+
+def test_zoom_forward_increases_scale(canvas, qtbot):
+    from PyQt6.QtGui import QWheelEvent, QMouseEvent
+    from PyQt6.QtCore import QPointF, QPoint, Qt
+    
+    assert canvas._current_scale == 1.0
+    
+    event = QWheelEvent(QPointF(100, 100), QPointF(100, 100), QPoint(0, 120), QPoint(0, 120),
+                        Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+                        Qt.ScrollPhase.ScrollBegin, False)
+    canvas.wheelEvent(event)
+    
+    assert canvas._current_scale == 1.25
+    assert canvas._graphics_view.dragMode() == canvas._graphics_view.DragMode.ScrollHandDrag
+
+def test_zoom_backward_at_min_scale_ignored(canvas, qtbot):
+    from PyQt6.QtGui import QWheelEvent
+    from PyQt6.QtCore import QPointF, QPoint, Qt
+    
+    assert canvas._current_scale == 1.0
+    
+    event = QWheelEvent(QPointF(100, 100), QPointF(100, 100), QPoint(0, -120), QPoint(0, -120),
+                        Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+                        Qt.ScrollPhase.ScrollBegin, False)
+    canvas.wheelEvent(event)
+    
+    assert canvas._current_scale == 1.0
+    assert canvas._graphics_view.dragMode() == canvas._graphics_view.DragMode.NoDrag
+
+def test_double_click_resets_zoom(canvas, qtbot):
+    from PyQt6.QtGui import QWheelEvent, QMouseEvent
+    from PyQt6.QtCore import QPointF, QPoint, Qt
+    
+    # Zoom in
+    event = QWheelEvent(QPointF(100, 100), QPointF(100, 100), QPoint(0, 120), QPoint(0, 120),
+                        Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+                        Qt.ScrollPhase.ScrollBegin, False)
+    canvas.wheelEvent(event)
+    assert canvas._current_scale == 1.25
+    
+    # Double click
+    dc_event = QMouseEvent(QMouseEvent.Type.MouseButtonDblClick, QPointF(100, 100), QPointF(100, 100), Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+    canvas.mouseDoubleClickEvent(dc_event)
+    
+    assert canvas._current_scale == 1.0
+    assert canvas._graphics_view.dragMode() == canvas._graphics_view.DragMode.NoDrag
 

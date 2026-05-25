@@ -11,6 +11,8 @@ import logging
 
 from cockpit.services.layout_query import LayoutQueryService, AuditBomRowView
 from cockpit.persistence.errors import PersistenceError
+from cockpit.ui.theme import Theme
+from cockpit.ui.widgets.flow_layout import FlowLayout
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +52,7 @@ class AuditBomRow(QFrame):
     mpn_label_clicked = pyqtSignal(str)
     refdes_chip_clicked = pyqtSignal(str)
     
-    def __init__(self, view: AuditBomRowView) -> None:
+    def __init__(self, view: AuditBomRowView, theme: Theme) -> None:
         super().__init__()
         self.setProperty("class", "bom-grouping")
         self.setProperty("selected", False)
@@ -95,9 +97,13 @@ class AuditBomRow(QFrame):
         
         # Chips container
         self.chip_strip = QWidget()
-        chip_layout = QHBoxLayout(self.chip_strip)
-        chip_layout.setContentsMargins(0, 0, 0, 0)
-        chip_layout.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        flow_spacing = theme.bom_chip_flow_spacing()
+        chip_layout = FlowLayout(
+            self.chip_strip,
+            margin=0,
+            h_spacing=flow_spacing,
+            v_spacing=flow_spacing,
+        )
         
         self.chips: dict[str, RefDesChip] = {}
         for rd in view.ref_des_list:
@@ -152,9 +158,10 @@ class AuditBomPanel(QScrollArea):
     empty_space_clicked = pyqtSignal()
     error_occurred = pyqtSignal(object)  # FailurePayload
 
-    def __init__(self, layout_query_service: LayoutQueryService, parent: QWidget | None = None) -> None:
+    def __init__(self, layout_query_service: LayoutQueryService, theme: Theme, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._layout_query_service = layout_query_service
+        self._theme = theme
         self._selected_mpns: set[str] = set()
         self._selected_ref_des: str | None = None
         self._row_index: dict[str, AuditBomRow] = {}
@@ -189,7 +196,7 @@ class AuditBomPanel(QScrollArea):
             return
 
         for view in views:
-            row = AuditBomRow(view)
+            row = AuditBomRow(view, self._theme)
             row.mpn_label_clicked.connect(self._on_mpn_label_clicked)
             row.refdes_chip_clicked.connect(self._on_refdes_chip_clicked)
             self.layout.addWidget(row)

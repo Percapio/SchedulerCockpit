@@ -217,12 +217,10 @@ def migrate_to_v3(
         raise SchemaMismatch(found_version=0, expected_version=2)
         
     version = row["version"]
-    if version == 3:
+    if version >= 3:
         return
     if version < 2:
         raise SchemaMismatch(found_version=version, expected_version=2)
-    if version > 3:
-        raise SchemaMismatch(found_version=version, expected_version=3)
         
     cur.execute("PRAGMA foreign_keys = OFF")
     cur.execute("BEGIN IMMEDIATE")
@@ -285,7 +283,52 @@ def migrate_to_v3(
         cur.execute("PRAGMA foreign_keys = ON")
 
 
+SCHEMA_V4_DDL_ACTIVE_AUDITS: str = """
+ALTER TABLE active_audits ADD COLUMN general_notes TEXT NULL
+"""
+
+SCHEMA_V4_DDL_DROP_THT_NOTES: str = """
+ALTER TABLE tht_verification_checklist DROP COLUMN notes
+"""
+
+SCHEMA_V4_DDL_DROP_BUILD_NOTES: str = """
+ALTER TABLE build_notes_checklist DROP COLUMN notes
+"""
+
+def migrate_to_v4(conn: sqlite3.Connection) -> None:
+    cur = conn.cursor()
+    cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=3)
+        
+    version = row["version"]
+    if version >= 4:
+        return
+    if version < 3:
+        raise SchemaMismatch(found_version=version, expected_version=3)
+        
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        try:
+            cur.execute(SCHEMA_V4_DDL_ACTIVE_AUDITS)
+            cur.execute(SCHEMA_V4_DDL_DROP_THT_NOTES)
+            cur.execute(SCHEMA_V4_DDL_DROP_BUILD_NOTES)
+        except sqlite3.Error as e:
+            raise SchemaInitializationError(statement="v4 DDL", cause=e)
+            
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 4, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+    except Exception:
+        cur.execute("ROLLBACK")
+        raise
+
 def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> None:
     migrate_to_v1(conn)
     migrate_to_v2(conn)
     migrate_to_v3(conn, parser_registry)
+    migrate_to_v4(conn)

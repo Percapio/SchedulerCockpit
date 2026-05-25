@@ -12,8 +12,7 @@ def dummy_view():
         key=ChecklistRowKey(kind=ChecklistRowKind.THT, item_id=1),
         is_verified=False,
         primary_label="R123",
-        secondary_label="10k Resistor",
-        notes=None
+        secondary_label="10k Resistor"
     )
 
 

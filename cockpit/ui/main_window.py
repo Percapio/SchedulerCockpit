@@ -21,7 +21,7 @@ from cockpit.services.completion import CompletionService
 from cockpit.services.audit_metadata import AuditMetadataService
 from cockpit.services.layout_query import LayoutQueryService
 from cockpit.layout.renderer import PdfRenderer
-
+from cockpit.ui.theme import Theme
 
 class MainWindow(QMainWindow):
     def __init__(
@@ -34,9 +34,12 @@ class MainWindow(QMainWindow):
         completion_svc: CompletionService,
         audit_metadata_svc: AuditMetadataService,
         layout_query_svc: LayoutQueryService,
-        pdf_renderer: PdfRenderer
+        pdf_renderer: PdfRenderer,
+        *,
+        theme: Theme
     ) -> None:
         super().__init__()
+        self._theme = theme
         self._app = app
         self._bootstrapped = bootstrapped_app
         self._audit_read_svc = audit_read_svc
@@ -73,7 +76,8 @@ class MainWindow(QMainWindow):
             completion_service=completion_svc,
             audit_metadata_service=audit_metadata_svc,
             layout_query_service=layout_query_svc,
-            pdf_renderer=pdf_renderer
+            pdf_renderer=pdf_renderer,
+            theme=self._theme
         )
         self._audit_view.exit_requested.connect(self._on_dashboard_exit)
         self._audit_view.error_occurred.connect(self._on_failed)

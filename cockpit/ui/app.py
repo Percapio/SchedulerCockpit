@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QApplication
 from .config import resolve_config
 from .bootstrap import bootstrap
 from .main_window import MainWindow
+from .theme import ThemeLoader, Theme, ConfigurationError
 
 
 def main() -> None:
@@ -37,26 +38,27 @@ def main() -> None:
 
     app = QApplication(sys.argv)
     
-    # Load stylesheet
+    # Load new theme infrastructure
     try:
-        qss_path = pathlib.Path(__file__).parent / "resources" / "styles.qss"
-        if qss_path.exists():
-            with open(qss_path, "r", encoding="utf-8") as f:
-                app.setStyleSheet(f.read())
-    except Exception as e:
-        import logging
-        logging.getLogger("cockpit.ui").warning(f"Could not load stylesheet: {e}")
+        ui_dir = pathlib.Path(__file__).parent
+        theme = ThemeLoader.load(ui_dir / "theme.json", ui_dir / "theme.schema.json")
+        app.setStyleSheet(theme.qss())
+    except ConfigurationError as e:
+        sys.stderr.write(f"ConfigurationError: {e}\n")
+        # Exit or show error dialog (for now just print to stderr)
+        sys.exit(2)
 
     window = MainWindow(
-        app, 
-        bootstrapped,
-        bootstrapped.audit_read_svc,
-        bootstrapped.checklist_svc,
-        bootstrapped.split_svc,
-        bootstrapped.completion_svc,
-        bootstrapped.audit_metadata_svc,
-        bootstrapped.layout_query_svc,
-        bootstrapped.pdf_renderer
+        theme=theme,
+        app=app, 
+        bootstrapped_app=bootstrapped,
+        audit_read_svc=bootstrapped.audit_read_svc,
+        checklist_svc=bootstrapped.checklist_svc,
+        split_svc=bootstrapped.split_svc,
+        completion_svc=bootstrapped.completion_svc,
+        audit_metadata_svc=bootstrapped.audit_metadata_svc,
+        layout_query_svc=bootstrapped.layout_query_svc,
+        pdf_renderer=bootstrapped.pdf_renderer
     )
     window.show()
     

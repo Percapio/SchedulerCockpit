@@ -10,6 +10,8 @@ from PyQt6.QtWidgets import QApplication
 from cockpit.ui.config import AppConfig
 from cockpit.ui.bootstrap import bootstrap
 from cockpit.ui.main_window import MainWindow
+from cockpit.ui.theme import ThemeLoader
+import pathlib
 
 
 @pytest.fixture
@@ -29,8 +31,11 @@ def bootstrapped_app(app_config):
 
 @pytest.fixture
 def main_window(qtbot, bootstrapped_app):
+    ui_dir = pathlib.Path(__file__).parent.parent.parent / "cockpit" / "ui"
+    theme = ThemeLoader.load(ui_dir / "theme.json", ui_dir / "theme.schema.json")
+    
     window = MainWindow(
-        QApplication.instance(), 
+        QApplication.instance(),
         bootstrapped_app,
         bootstrapped_app.audit_read_svc,
         bootstrapped_app.checklist_svc,
@@ -38,7 +43,8 @@ def main_window(qtbot, bootstrapped_app):
         bootstrapped_app.completion_svc,
         bootstrapped_app.audit_metadata_svc,
         bootstrapped_app.layout_query_svc,
-        bootstrapped_app.pdf_renderer
+        bootstrapped_app.pdf_renderer,
+        theme=theme
     )
     qtbot.addWidget(window)
     window.show()

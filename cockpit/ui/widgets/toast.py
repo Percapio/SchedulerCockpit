@@ -53,15 +53,9 @@ class Toast(QWidget):
         self.subtitle_label.setText(f"{summary.tht_item_count} THT items, {summary.eco_item_count} ECO items")
         self.subtitle_label.show()
         
-        self.setStyleSheet("""
-            Toast {
-                background-color: #e8f5e9;
-                border: 1px solid #4caf50;
-                border-radius: 8px;
-            }
-            QLabel#ToastTitle { color: #2e7d32; font-weight: bold; }
-            QLabel#ToastSubtitle { color: #388e3c; }
-        """)
+        self.setProperty("severity", "error")
+        self.style().unpolish(self)
+        self.style().polish(self)
         
         self._show_toast()
 
@@ -70,14 +64,9 @@ class Toast(QWidget):
         self.title_label.setText("Ingest cancelled")
         self.subtitle_label.hide()
         
-        self.setStyleSheet("""
-            Toast {
-                background-color: #fff3e0;
-                border: 1px solid #ff9800;
-                border-radius: 8px;
-            }
-            QLabel#ToastTitle { color: #e65100; font-weight: bold; }
-        """)
+        self.setProperty("severity", "warn")
+        self.style().unpolish(self)
+        self.style().polish(self)
         
         self._show_toast()
 
@@ -90,15 +79,9 @@ class Toast(QWidget):
         else:
             self.subtitle_label.hide()
 
-        self.setStyleSheet("""
-            Toast {
-                background-color: #e3f2fd;
-                border: 1px solid #1976d2;
-                border-radius: 8px;
-            }
-            QLabel#ToastTitle { color: #0d47a1; font-weight: bold; }
-            QLabel#ToastSubtitle { color: #1565c0; }
-        """)
+        self.setProperty("severity", "info")
+        self.style().unpolish(self)
+        self.style().polish(self)
 
         self._show_toast()
 

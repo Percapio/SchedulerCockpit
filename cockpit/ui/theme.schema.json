@@ -1,0 +1,221 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["base", "left_panel", "canvas", "bom_panel"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["window", "font", "toast"],
+      "properties": {
+        "window": {
+          "type": "object",
+          "properties": { "rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" } },
+          "required": ["rgb"]
+        },
+        "font": {
+          "type": "object",
+          "properties": {
+            "family": { "type": "string" },
+            "size_px": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["family", "size_px"]
+        },
+        "toast": {
+          "type": "object",
+          "properties": {
+            "info": { "$ref": "#/$defs/toast_severity" },
+            "warn": { "$ref": "#/$defs/toast_severity" },
+            "error": { "$ref": "#/$defs/toast_severity" }
+          },
+          "required": ["info", "warn", "error"]
+        }
+      }
+    },
+    "left_panel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["section_header", "row", "ship_date_field", "progress_view"],
+      "properties": {
+        "section_header": {
+          "type": "object",
+          "properties": {
+            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "padding_px": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["fill_rgb", "text_rgb", "padding_px"]
+        },
+        "row": {
+          "type": "object",
+          "properties": {
+            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "fill_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "text_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "corner_radius_px": { "type": "integer", "minimum": 0 },
+            "vertical_padding_px": { "type": "integer", "minimum": 0 },
+            "horizontal_padding_px": { "type": "integer", "minimum": 0 },
+            "delimiter_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "delimiter_height_px": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["fill_rgb", "fill_selected_rgb", "text_selected_rgb", "corner_radius_px", "vertical_padding_px", "horizontal_padding_px", "delimiter_rgb", "delimiter_height_px"]
+        },
+        "ship_date_field": {
+          "type": "object",
+          "properties": {
+            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "border_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+          },
+          "required": ["fill_rgb", "text_rgb", "border_rgb"]
+        },
+        "progress_view": {
+          "type": "object",
+          "properties": {
+            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+          },
+          "required": ["fill_rgb", "text_rgb"]
+        }
+      }
+    },
+    "canvas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["colour", "pen_width", "z_order", "scalar", "hint_label"],
+      "properties": {
+        "colour": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["crosshair", "highlight_pen", "dim_overlay", "hint_label_background", "hint_label_text", "hint_label_border"],
+          "properties": {
+            "crosshair": { "$ref": "#/$defs/color_with_alpha" },
+            "highlight_pen": { "$ref": "#/$defs/color_with_alpha" },
+            "dim_overlay": { "$ref": "#/$defs/color_with_alpha" },
+            "hint_label_background": { "$ref": "#/$defs/color_with_alpha" },
+            "hint_label_text": { "$ref": "#/$defs/color_with_alpha" },
+            "hint_label_border": { "$ref": "#/$defs/color_with_alpha" }
+          }
+        },
+        "pen_width": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["crosshair", "highlight_pen"],
+          "properties": {
+            "crosshair": { "type": "integer", "minimum": 1 },
+            "highlight_pen": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "z_order": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base_pixmap", "dim", "highlight", "crosshair"],
+          "properties": {
+            "base_pixmap": { "type": "number" },
+            "dim": { "type": "number" },
+            "highlight": { "type": "number" },
+            "crosshair": { "type": "number" }
+          }
+        },
+        "scalar": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["highlight_scale"],
+          "properties": {
+            "highlight_scale": { "type": "number", "minimum": 1.0, "maximum": 4.0 }
+          }
+        },
+        "hint_label": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["padding_px", "border_width_px"],
+          "properties": {
+            "padding_px": { "type": "integer", "minimum": 0 },
+            "border_width_px": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "bom_panel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grouping", "cell", "chip"],
+      "properties": {
+        "grouping": {
+          "type": "object",
+          "properties": {
+            "border_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "border_width_px": { "type": "integer", "minimum": 0 },
+            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "corner_radius_px": { "type": "integer", "minimum": 0 },
+            "inner_padding_px": { "type": "integer", "minimum": 0 },
+            "gutter_px": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["border_rgb", "border_width_px", "fill_rgb", "corner_radius_px", "inner_padding_px", "gutter_px"]
+        },
+        "cell": {
+          "type": "object",
+          "properties": {
+            "mpn": { "$ref": "#/$defs/cell_style" },
+            "refdes": { "$ref": "#/$defs/cell_style" },
+            "description": {
+              "type": "object",
+              "properties": {
+                "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                "corner_radius_px": { "type": "integer", "minimum": 0 },
+                "padding_px": { "type": "integer", "minimum": 0 },
+                "font_size_px": { "type": "integer", "minimum": 1 }
+              },
+              "required": ["fill_rgb", "text_rgb", "corner_radius_px", "padding_px", "font_size_px"]
+            }
+          },
+          "required": ["mpn", "refdes", "description"]
+        },
+        "chip": {
+          "type": "object",
+          "properties": {
+            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "fill_hover_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "corner_radius_px": { "type": "integer", "minimum": 0 },
+            "padding_px": { "type": "integer", "minimum": 0 },
+            "gutter_px": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["fill_rgb", "fill_hover_rgb", "text_rgb", "corner_radius_px", "padding_px", "gutter_px"]
+        }
+      }
+    }
+  },
+  "$defs": {
+    "toast_severity": {
+      "type": "object",
+      "properties": {
+        "background_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "border_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+      },
+      "required": ["background_rgb", "text_rgb", "border_rgb"]
+    },
+    "color_with_alpha": {
+      "type": "object",
+      "properties": {
+        "rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "alpha": { "type": "integer", "minimum": 0, "maximum": 255 }
+      },
+      "required": ["rgb"]
+    },
+    "cell_style": {
+      "type": "object",
+      "properties": {
+        "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "corner_radius_px": { "type": "integer", "minimum": 0 },
+        "padding_px": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["fill_rgb", "text_rgb", "corner_radius_px", "padding_px"]
+    }
+  }
+}

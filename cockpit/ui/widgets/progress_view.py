@@ -56,14 +56,22 @@ class ProgressView(QWidget):
         if stage in self.stage_labels:
             icon_label, text_label = self.stage_labels[stage]
             icon_label.setText("✓")
-            icon_label.setStyleSheet("color: green;")
-            text_label.setStyleSheet("font-weight: bold;")
+            icon_label.setProperty("status", "completed")
+            text_label.setProperty("status", "completed")
+            icon_label.style().unpolish(icon_label)
+            icon_label.style().polish(icon_label)
+            text_label.style().unpolish(text_label)
+            text_label.style().polish(text_label)
 
     def reset(self) -> None:
         """Reset all stages to pending."""
         for icon_label, text_label in self.stage_labels.values():
             icon_label.setText("○")
-            icon_label.setStyleSheet("color: gray;")
-            text_label.setStyleSheet("font-weight: normal; color: gray;")
+            icon_label.setProperty("status", "pending")
+            text_label.setProperty("status", "pending")
+            icon_label.style().unpolish(icon_label)
+            icon_label.style().polish(icon_label)
+            text_label.style().unpolish(text_label)
+            text_label.style().polish(text_label)
             
         self.cancel_button.setEnabled(True)

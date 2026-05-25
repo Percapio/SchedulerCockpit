@@ -33,20 +33,6 @@ class RefDesChip(QLabel):
         super().__init__(ref_des)
         self._ref_des = ref_des
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.setStyleSheet("""
-            QLabel {
-                background-color: #2D2D2D;
-                color: #CCCCCC;
-                border-radius: 3px;
-                padding: 2px 4px;
-                margin: 2px;
-            }
-            QLabel[selected="true"] {
-                background-color: #007ACC;
-                color: white;
-                font-weight: bold;
-            }
-        """)
         self.setProperty("selected", False)
 
     def mousePressEvent(self, ev: QMouseEvent) -> None:
@@ -76,13 +62,6 @@ class AuditBomRow(QWidget):
         self.mpn_label.setProperty("class", "mpn-cell")
         self.mpn_label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mpn_label.customContextMenuRequested.connect(self._show_context_menu)
-        self.mpn_label.setStyleSheet("""
-            QLabel[class="mpn-cell"] {
-                font-weight: bold;
-                min-width: 80px;
-            }
-        """)
-        
         self._mpn_filter = MPNLabelFilter(self.mpn_label, self)
         self.mpn_label.installEventFilter(self._mpn_filter)
         
@@ -92,7 +71,7 @@ class AuditBomRow(QWidget):
             desc = f"[{view.mount_type}] {desc}"
         self.desc_label = QLabel(desc)
         self.desc_label.setWordWrap(True)
-        self.desc_label.setStyleSheet("color: #AAAAAA; font-size: 11px;")
+        self.desc_label.setProperty("class", "desc-cell")
         
         # Chips container
         self.chip_strip = QWidget()
@@ -111,15 +90,6 @@ class AuditBomRow(QWidget):
         self.layout.addWidget(self.desc_label, stretch=3)
         self.layout.addWidget(self.chip_strip, stretch=4)
         
-        self.setStyleSheet("""
-            AuditBomRow {
-                background-color: transparent;
-                border-bottom: 1px solid #333333;
-            }
-            AuditBomRow[selected="true"] {
-                background-color: #2A3642;
-            }
-        """)
         self.setProperty("selected", False)
 
     def _show_context_menu(self, pos: Any) -> None:
@@ -186,7 +156,7 @@ class AuditBomPanel(QScrollArea):
         if not views:
             lbl = QLabel("No BOM ingested for this audit")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet("color: #888888; padding: 20px;")
+            lbl.setProperty("class", "empty-bom-label")
             self.layout.addWidget(lbl)
             return
 

@@ -8,12 +8,17 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush
 from PyQt6.QtCore import QRectF, QPointF
 
+from cockpit.ui.theme import Theme
+
+HIGHLIGHT_PEN_WIDTH = 2
+
 class HighlightItem(QGraphicsItem):
-    def __init__(self):
+    def __init__(self, theme: Theme):
         super().__init__()
+        self._theme = theme
         self.mode = "single"
         self.rect = QRectF()
-        self.setZValue(HIGHLIGHT_Z)
+        self.setZValue(self._theme.canvas_z("highlight"))
         self.setVisible(False)
         
     def boundingRect(self) -> QRectF:
@@ -25,9 +30,7 @@ class HighlightItem(QGraphicsItem):
             
     def paint(self, painter: QPainter, option, widget: QWidget | None = None):
         if self.mode == "single":
-            pen = QPen(QColor(HIGHLIGHT_PEN_COLOUR))
-            pen.setWidth(HIGHLIGHT_PEN_WIDTH)
-            pen.setCosmetic(True)
+            pen = self._theme.canvas_pen("highlight_pen")
             painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawRect(self.rect)
@@ -70,20 +73,6 @@ class HighlightItem(QGraphicsItem):
         self.rect = rect
         self.mode = mode
 
-# --- Visual Constants ---
-HIGHLIGHT_SCALE = 2.0
-HIGHLIGHT_PEN_COLOUR = "#FF00FF"
-HIGHLIGHT_PEN_WIDTH = 3
-CROSSHAIR_COLOUR = "#FFFF00"
-CROSSHAIR_PEN_WIDTH = 2
-DIM_OPACITY_ALPHA = 128
-
-# --- Scene Z-Values ---
-BASE_PIXMAP_Z = 0
-DIM_Z = 1
-HIGHLIGHT_Z = 2
-CROSSHAIR_Z = 3
-
 from cockpit.persistence.errors import AuditNotFound
 from cockpit.ingestion.errors import MalformedPdfError
 from cockpit.services.layout_query import LayoutQueryService
@@ -92,8 +81,7 @@ from cockpit.ui.error_messages import FailurePayload
 from cockpit.ui.error_messages import render as render_error
 from cockpit.services.views import SelectionIntent, ResolvedSelection, SelectionKind, ResolutionKind, HighlightCoord
 from cockpit.persistence.errors import PersistenceError
-from cockpit.ui.widgets.page_switcher import PageSwitcher
-from cockpit.ui.widgets.empty_canvas import EmptyCanvasPlaceholder
+from cockpit.ui.canvas.page_switcher import PageSwitcher
 
 
 class LayoutCanvas(QWidget):
@@ -104,8 +92,11 @@ class LayoutCanvas(QWidget):
         layout_query_service: LayoutQueryService,
         pdf_renderer: PdfRenderer,
         parent: QWidget | None = None,
+        *,
+        theme: Theme
     ) -> None:
         super().__init__(parent)
+        self._theme = theme
         self._layout_query_service = layout_query_service
         self._pdf_renderer = pdf_renderer
         
@@ -135,25 +126,23 @@ class LayoutCanvas(QWidget):
         self._graphics_view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         
         self._base_pixmap_item = QGraphicsPixmapItem()
-        self._base_pixmap_item.setZValue(BASE_PIXMAP_Z)
+        self._base_pixmap_item.setZValue(self._theme.canvas_z("base_pixmap"))
         self._scene.addItem(self._base_pixmap_item)
         
         self._dim_item = QGraphicsRectItem()
-        self._dim_item.setBrush(QBrush(QColor(0, 0, 0, DIM_OPACITY_ALPHA)))
+        self._dim_item.setBrush(self._theme.canvas_brush("dim_overlay"))
         self._dim_item.setPen(QPen(Qt.PenStyle.NoPen))
-        self._dim_item.setZValue(DIM_Z)
+        self._dim_item.setZValue(self._theme.canvas_z("dim"))
         self._dim_item.setVisible(False)
         self._scene.addItem(self._dim_item)
         
         self._crosshair_v = QGraphicsLineItem()
         self._crosshair_h = QGraphicsLineItem()
-        ch_pen = QPen(QColor(CROSSHAIR_COLOUR))
-        ch_pen.setWidth(CROSSHAIR_PEN_WIDTH)
-        ch_pen.setCosmetic(True)
+        ch_pen = self._theme.canvas_pen("crosshair")
         self._crosshair_v.setPen(ch_pen)
         self._crosshair_h.setPen(ch_pen)
-        self._crosshair_v.setZValue(CROSSHAIR_Z)
-        self._crosshair_h.setZValue(CROSSHAIR_Z)
+        self._crosshair_v.setZValue(self._theme.canvas_z("crosshair"))
+        self._crosshair_h.setZValue(self._theme.canvas_z("crosshair"))
         self._crosshair_v.setVisible(False)
         self._crosshair_h.setVisible(False)
         self._scene.addItem(self._crosshair_v)
@@ -165,9 +154,9 @@ class LayoutCanvas(QWidget):
         
         self._hint_label = QLabel(self)
         self._hint_label.setProperty("class", "hint-label bold")
-        self._hint_label.setStyleSheet("background-color: white; color: black; padding: 4px; border: 1px solid black;")
         self._hint_label.setVisible(False)
         
+        from cockpit.ui.widgets.empty_canvas import EmptyCanvasPlaceholder
         self._empty_placeholder = EmptyCanvasPlaceholder("No assembly drawing attached")
         self._error_placeholder = EmptyCanvasPlaceholder("")
         
@@ -346,7 +335,7 @@ class LayoutCanvas(QWidget):
 
     def _ensure_highlight_pool(self, target_n: int) -> None:
         while len(self._highlight_items) < target_n:
-            item = HighlightItem()
+            item = HighlightItem(self._theme)
             item.setVisible(False)
             self._scene.addItem(item)
             self._highlight_items.append(item)
@@ -382,8 +371,9 @@ class LayoutCanvas(QWidget):
         orig_w = nx2 - nx1
         orig_h = ny2 - ny1
         
-        new_w = orig_w * HIGHLIGHT_SCALE
-        new_h = orig_h * HIGHLIGHT_SCALE
+        scale = self._theme.canvas_scalar("highlight_scale")
+        new_w = orig_w * scale
+        new_h = orig_h * scale
         
         item.set_rect(QRectF(cx - new_w / 2.0, cy - new_h / 2.0, new_w, new_h), mode)
         item.setVisible(True)

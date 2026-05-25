@@ -10,10 +10,10 @@ from cockpit.services.audit_metadata import AuditMetadataService
 from cockpit.services.layout_query import LayoutQueryService
 from cockpit.layout.renderer import PdfRenderer
 from cockpit.ui.widgets.dashboard import Dashboard
-from cockpit.ui.widgets.layout_canvas import LayoutCanvas
+from cockpit.ui.canvas.layout_canvas import LayoutCanvas
 from cockpit.ui.widgets.audit_bom_panel import AuditBomPanel
 from cockpit.ui.widgets.selection_coordinator import SelectionCoordinator
-
+from cockpit.ui.theme import Theme
 
 class AuditView(QWidget):
     """QSplitter container for the Dashboard and LayoutCanvas."""
@@ -30,8 +30,11 @@ class AuditView(QWidget):
         layout_query_service: LayoutQueryService,
         pdf_renderer: PdfRenderer,
         parent: QWidget | None = None,
+        *,
+        theme: Theme
     ) -> None:
         super().__init__(parent)
+        self._theme = theme
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -50,7 +53,8 @@ class AuditView(QWidget):
         self._layout_canvas = LayoutCanvas(
             layout_query_service=layout_query_service,
             pdf_renderer=pdf_renderer,
-            parent=self._splitter
+            parent=self._splitter,
+            theme=self._theme
         )
         
         self._bom_panel = AuditBomPanel(

@@ -2,7 +2,8 @@ from unittest.mock import Mock, MagicMock
 import pytest
 from PyQt6.QtWidgets import QApplication
 
-from cockpit.ui.widgets.layout_canvas import LayoutCanvas
+from cockpit.ui.canvas.layout_canvas import LayoutCanvas, HighlightItem
+from cockpit.ui.theme import Theme
 from cockpit.services.views import ResolvedSelection, ResolutionKind, HighlightCoord, LayoutContext
 from cockpit.services.layout_query import LayoutQueryService
 from cockpit.layout.renderer import PdfRenderer
@@ -10,10 +11,28 @@ import pathlib
 
 
 @pytest.fixture
-def canvas(qtbot):
+def theme():
+    return Theme.for_testing(canvas={
+        "colour": {
+            "crosshair": {"rgb": "#FFFF00"},
+            "highlight_pen": {"rgb": "#FF00FF"},
+            "dim_overlay": {"rgb": "#000000", "alpha": 128},
+            "hint_label_background": {"rgb": "#FFFFFF"},
+            "hint_label_text": {"rgb": "#000000"},
+            "hint_label_border": {"rgb": "#000000"}
+        },
+        "pen_width": {"crosshair": 2, "highlight_pen": 3},
+        "z_order": {"base_pixmap": 0.0, "dim": 1.0, "highlight": 2.0, "crosshair": 3.0},
+        "scalar": {"highlight_scale": 2.0},
+        "hint_label": {"padding_px": 4, "border_width_px": 1}
+    })
+
+
+@pytest.fixture
+def canvas(qtbot, theme):
     layout_query_service = Mock(spec=LayoutQueryService)
     pdf_renderer = Mock(spec=PdfRenderer)
-    widget = LayoutCanvas(layout_query_service, pdf_renderer)
+    widget = LayoutCanvas(layout_query_service, pdf_renderer, theme=theme)
     qtbot.addWidget(widget)
     
     # Mock some internal state so _apply_selection works without full load

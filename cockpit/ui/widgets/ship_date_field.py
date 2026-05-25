@@ -16,14 +16,12 @@ class ShipDateField(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         
         self._label = QLabel("Ship Date:")
-        self._label.setStyleSheet("color: #666666; font-size: 11px; font-weight: bold;")
         layout.addWidget(self._label)
         
         self._editor = QDateEdit()
         self._editor.setCalendarPopup(True)
         self._editor.setSpecialValueText("Not Set")
         self._editor.setMinimumDate(QDate(2000, 1, 1))
-        self._editor.setStyleSheet("font-size: 14px;")
         
         layout.addWidget(self._editor)
         

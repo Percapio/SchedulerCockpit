@@ -16,19 +16,18 @@
   },
   "left_panel": {
     "section_header": {
-      "fill_rgb": "#FAFAFA",
-      "text_rgb": "#555555",
+      "fill_rgb": "#1E1E1E",
+      "text_rgb": "#E0E0E0",
       "padding_px": 4
     },
     "row": {
-      "fill_rgb": "#FAFAFA",
-      "fill_selected_rgb": "#E3F2FD",
+      "fill_rgb": "#2A2A2A",
+      "fill_selected_rgb": "#FFFACD",
       "text_selected_rgb": "#000000",
-      "corner_radius_px": 0,
-      "vertical_padding_px": 2,
-      "horizontal_padding_px": 4,
-      "delimiter_rgb": "#CCCCCC",
-      "delimiter_height_px": 1
+      "corner_radius_px": 4,
+      "vertical_padding_px": 6,
+      "horizontal_padding_px": 8,
+      "gutter_px": 3
     },
     "ship_date_field": {
       "fill_rgb": "#FAFAFA",

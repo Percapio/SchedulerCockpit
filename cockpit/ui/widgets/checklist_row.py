@@ -19,7 +19,8 @@ class ChecklistRow(QWidget):
         self._ignore_signals = False
         
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setProperty("class", "checklist-row")
         
         self.checkbox = QCheckBox()
         self.checkbox.toggled.connect(self._on_toggled)

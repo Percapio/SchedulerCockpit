@@ -21,9 +21,9 @@ def valid_theme_data():
         "left_panel": {
             "section_header": { "fill_rgb": "#FAFAFA", "text_rgb": "#555555", "padding_px": 4 },
             "row": {
-                "fill_rgb": "#FAFAFA", "fill_selected_rgb": "#E3F2FD", "text_selected_rgb": "#000000",
-                "corner_radius_px": 0, "vertical_padding_px": 2, "horizontal_padding_px": 4,
-                "delimiter_rgb": "#CCCCCC", "delimiter_height_px": 1
+                "fill_rgb": "#2A2A2A", "fill_selected_rgb": "#FFFACD", "text_selected_rgb": "#000000",
+                "corner_radius_px": 4, "vertical_padding_px": 6, "horizontal_padding_px": 8,
+                "gutter_px": 3
             },
             "ship_date_field": { "fill_rgb": "#FAFAFA", "text_rgb": "#666666", "border_rgb": "#CCCCCC" },
             "progress_view": { "fill_rgb": "#FAFAFA", "text_rgb": "#000000" }
@@ -305,7 +305,7 @@ def test_Theme_Qss_ContainsExpectedSelectorsFromEverySection(valid_theme_data):
     )
     qss = theme.qss()
     assert "DropArea { background-color: #FAFAFA; }" in qss
-    assert "ChecklistRow { border-bottom:" in qss
+    assert "QWidget[class~=\"checklist-row\"] { background-color:" in qss
     assert "Toast[severity=\"info\"] { background-color: #E3F2FD;" in qss
     assert "AuditBomRow { background-color: transparent;" in qss
     assert "QLabel[class~=\"hint-label\"] { background-color: #FFFFFF;" in qss

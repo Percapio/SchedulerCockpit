@@ -21,6 +21,7 @@ class ChecklistView(QScrollArea):
         self._container = QWidget()
         self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(3)  # From theme.json left_panel.row.gutter_px
         self.setWidget(self._container)
         
         self._index: dict[ChecklistRowKey, ChecklistRow] = {}
@@ -56,7 +57,7 @@ class ChecklistView(QScrollArea):
         self._index.clear()
         
         header = QLabel(header_text)
-        header.setProperty("class", "h2")
+        header.setProperty("class", "section-header")
         self._layout.addWidget(header)
         
         for row_view in views:

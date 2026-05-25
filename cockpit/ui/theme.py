@@ -103,15 +103,10 @@ class Theme:
         qss_lines.append(f"ShipDateField QLabel {{ color: {lp['ship_date_field']['text_rgb']}; font-size: 11px; font-weight: bold; }}")
         qss_lines.append("ShipDateField QDateEdit { font-size: 14px; }")
         
-        # AuditBomRow
-        qss_lines.append(f"AuditBomRow {{ background-color: transparent; border-bottom: {bp['grouping']['border_width_px']}px solid {bp['grouping']['border_rgb']}; }}")
-        qss_lines.append(f"AuditBomRow[selected=\"true\"] {{ background-color: {bp['cell']['mpn']['fill_rgb']}; }}")
-        
-        qss_lines.append(f"QLabel[class=\"mpn-cell\"] {{ font-weight: bold; min-width: 80px; color: {bp['cell']['mpn']['text_rgb']}; }}")
-        qss_lines.append(f"AuditBomRow QLabel[class=\"desc-cell\"] {{ color: {bp['cell']['description']['text_rgb']}; font-size: {bp['cell']['description']['font_size_px']}px; }}")
-        
-        qss_lines.append(f"RefDesChip {{ background-color: {bp['chip']['fill_rgb']}; color: {bp['chip']['text_rgb']}; border-radius: {bp['chip']['corner_radius_px']}px; padding: {bp['chip']['padding_px']}px {bp['chip']['padding_px']*2}px; margin: {bp['chip']['gutter_px']}px; }}")
-        qss_lines.append("RefDesChip[selected=\"true\"] { background-color: #007ACC; color: white; font-weight: bold; }")
+        # BOM Panel
+        qss_lines.append(self._compose_bom_grouping(bp['grouping']))
+        qss_lines.append(self._compose_bom_cells(bp['cell']))
+        qss_lines.append(self._compose_bom_chip(bp['chip']))
         
         qss_lines.append("QLabel[class~=\"empty-bom-label\"] { color: #888888; padding: 20px; }")
         
@@ -154,6 +149,62 @@ class Theme:
         if role not in self._canvas['scalar']:
             raise KeyError(role)
         return float(self._canvas['scalar'][role])
+
+    def _compose_bom_grouping(self, grouping_tokens: Mapping[str, Any]) -> str:
+        lines = [
+            "QFrame[class=\"bom-grouping\"] {",
+            f"    background-color: {grouping_tokens['fill_rgb']};",
+            f"    border: {grouping_tokens['border_width_px']}px solid {grouping_tokens['border_rgb']};",
+            f"    border-radius: {grouping_tokens['corner_radius_px']}px;",
+            f"    padding: {grouping_tokens['inner_padding_px']}px;",
+            f"    margin-bottom: {grouping_tokens['gutter_px']}px;",
+            "}",
+            "QFrame[class=\"bom-grouping\"][selected=\"true\"] {",
+            f"    background-color: {grouping_tokens['fill_selected_rgb']};",
+            "}"
+        ]
+        return "\n".join(lines)
+
+    def _compose_bom_cells(self, cell_tokens: Mapping[str, Mapping[str, Any]]) -> str:
+        lines = []
+        for role, tokens in cell_tokens.items():
+            lines.extend([
+                f"QFrame[class=\"cell-{role}\"] {{",
+                f"    background-color: {tokens['fill_rgb']};",
+                f"    border-radius: {tokens['corner_radius_px']}px;",
+                f"    padding: {tokens['padding_px']}px;",
+                "    border: none;",
+                "}",
+                f"QFrame[class=\"cell-{role}\"] QLabel {{",
+                f"    color: {tokens['text_rgb']};"
+            ])
+            if "font_size_px" in tokens:
+                lines.append(f"    font-size: {tokens['font_size_px']}px;")
+            lines.extend([
+                "}",
+                f"QFrame[class=\"bom-grouping\"][selected=\"true\"] > QFrame[class=\"cell-{role}\"] > QLabel {{",
+                f"    color: {tokens['text_selected_rgb']};",
+                "}"
+            ])
+        return "\n".join(lines)
+
+    def _compose_bom_chip(self, chip_tokens: Mapping[str, Any]) -> str:
+        lines = [
+            "QLabel[class=\"refdes-chip\"] {",
+            f"    background-color: {chip_tokens['fill_rgb']};",
+            f"    color: {chip_tokens['text_rgb']};",
+            f"    border-radius: {chip_tokens['corner_radius_px']}px;",
+            f"    padding: {chip_tokens['vertical_padding_px']}px {chip_tokens['horizontal_padding_px']}px;",
+            f"    margin-right: {chip_tokens['gutter_px']}px;",
+            "}",
+            "QLabel[class=\"refdes-chip\"]:hover {",
+            f"    background-color: {chip_tokens['fill_hover_rgb']};",
+            "}",
+            "QLabel[class=\"refdes-chip\"][selected=\"true\"] {",
+            f"    color: {chip_tokens['text_selected_rgb']};",
+            "}"
+        ]
+        return "\n".join(lines)
 
     @classmethod
     def for_testing(cls, base=None, left_panel=None, canvas=None, bom_panel=None) -> 'Theme':

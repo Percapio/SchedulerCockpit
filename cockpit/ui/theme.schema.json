@@ -144,15 +144,17 @@
       "properties": {
         "grouping": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "border_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "border_width_px": { "type": "integer", "minimum": 0 },
+            "border_width_px": { "type": "integer", "minimum": 1, "maximum": 4 },
             "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "fill_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
             "corner_radius_px": { "type": "integer", "minimum": 0 },
             "inner_padding_px": { "type": "integer", "minimum": 0 },
             "gutter_px": { "type": "integer", "minimum": 0 }
           },
-          "required": ["border_rgb", "border_width_px", "fill_rgb", "corner_radius_px", "inner_padding_px", "gutter_px"]
+          "required": ["border_rgb", "border_width_px", "fill_rgb", "fill_selected_rgb", "corner_radius_px", "inner_padding_px", "gutter_px"]
         },
         "cell": {
           "type": "object",
@@ -161,29 +163,34 @@
             "refdes": { "$ref": "#/$defs/cell_style" },
             "description": {
               "type": "object",
+              "additionalProperties": false,
               "properties": {
                 "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
                 "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+                "text_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
                 "corner_radius_px": { "type": "integer", "minimum": 0 },
                 "padding_px": { "type": "integer", "minimum": 0 },
                 "font_size_px": { "type": "integer", "minimum": 1 }
               },
-              "required": ["fill_rgb", "text_rgb", "corner_radius_px", "padding_px", "font_size_px"]
+              "required": ["fill_rgb", "text_rgb", "text_selected_rgb", "corner_radius_px", "padding_px", "font_size_px"]
             }
           },
           "required": ["mpn", "refdes", "description"]
         },
         "chip": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
             "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
             "fill_hover_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
             "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+            "text_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
             "corner_radius_px": { "type": "integer", "minimum": 0 },
-            "padding_px": { "type": "integer", "minimum": 0 },
+            "vertical_padding_px": { "type": "integer", "minimum": 0 },
+            "horizontal_padding_px": { "type": "integer", "minimum": 0 },
             "gutter_px": { "type": "integer", "minimum": 0 }
           },
-          "required": ["fill_rgb", "fill_hover_rgb", "text_rgb", "corner_radius_px", "padding_px", "gutter_px"]
+          "required": ["fill_rgb", "fill_hover_rgb", "text_rgb", "text_selected_rgb", "corner_radius_px", "vertical_padding_px", "horizontal_padding_px", "gutter_px"]
         }
       }
     }
@@ -208,13 +215,15 @@
     },
     "cell_style": {
       "type": "object",
+      "additionalProperties": false,
       "properties": {
         "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
         "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "text_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
         "corner_radius_px": { "type": "integer", "minimum": 0 },
         "padding_px": { "type": "integer", "minimum": 0 }
       },
-      "required": ["fill_rgb", "text_rgb", "corner_radius_px", "padding_px"]
+      "required": ["fill_rgb", "text_rgb", "text_selected_rgb", "corner_radius_px", "padding_px"]
     }
   }
 }

@@ -44,17 +44,17 @@ def valid_theme_data():
         },
         "bom_panel": {
             "grouping": {
-                "border_rgb": "#333333", "border_width_px": 1, "fill_rgb": "#2D2D2D",
-                "corner_radius_px": 0, "inner_padding_px": 0, "gutter_px": 0
+                "border_rgb": "#3F3F3F", "border_width_px": 1, "fill_rgb": "#252525", "fill_selected_rgb": "#FFFACD",
+                "corner_radius_px": 4, "inner_padding_px": 6, "gutter_px": 3
             },
             "cell": {
-                "mpn": { "fill_rgb": "#2A3642", "text_rgb": "#CCCCCC", "corner_radius_px": 0, "padding_px": 0 },
-                "refdes": { "fill_rgb": "#2D2D2D", "text_rgb": "#CCCCCC", "corner_radius_px": 3, "padding_px": 2 },
-                "description": { "fill_rgb": "#2A3642", "text_rgb": "#AAAAAA", "corner_radius_px": 0, "padding_px": 0, "font_size_px": 11 }
+                "mpn": { "fill_rgb": "#2A2A2A", "text_rgb": "#E8E8E8", "text_selected_rgb": "#000000", "corner_radius_px": 4, "padding_px": 6 },
+                "refdes": { "fill_rgb": "#2A2A2A", "text_rgb": "#E8E8E8", "text_selected_rgb": "#000000", "corner_radius_px": 4, "padding_px": 6 },
+                "description": { "fill_rgb": "#2A2A2A", "text_rgb": "#AAAAAA", "text_selected_rgb": "#000000", "corner_radius_px": 4, "padding_px": 6, "font_size_px": 11 }
             },
             "chip": {
-                "fill_rgb": "#2D2D2D", "fill_hover_rgb": "#2D2D2D", "text_rgb": "#CCCCCC",
-                "corner_radius_px": 3, "padding_px": 2, "gutter_px": 2
+                "fill_rgb": "#3A3A3A", "fill_hover_rgb": "#4A4A4A", "text_rgb": "#E8E8E8", "text_selected_rgb": "#FFFF00",
+                "corner_radius_px": 3, "vertical_padding_px": 3, "horizontal_padding_px": 6, "gutter_px": 2
             }
         }
     }
@@ -307,7 +307,7 @@ def test_Theme_Qss_ContainsExpectedSelectorsFromEverySection(valid_theme_data):
     assert "DropArea { background-color: #FAFAFA; }" in qss
     assert "QWidget[class~=\"checklist-row\"] { background-color:" in qss
     assert "Toast[severity=\"info\"] { background-color: #E3F2FD;" in qss
-    assert "AuditBomRow { background-color: transparent;" in qss
+    assert "QFrame[class=\"bom-grouping\"] {" in qss
     assert "QLabel[class~=\"hint-label\"] { background-color: #FFFFFF;" in qss
 
 def test_Theme_Frozen_AttributeMutationRaisesFrozenInstanceError(valid_theme_data):

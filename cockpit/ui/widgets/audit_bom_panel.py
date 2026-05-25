@@ -3,7 +3,8 @@
 from PyQt6.QtCore import pyqtSignal, Qt, QEvent, QObject
 from PyQt6.QtGui import QMouseEvent, QCursor, QAction
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QMenu, QApplication
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QScrollArea, QMenu, QApplication,
+    QFrame, QGridLayout
 )
 from typing import Any
 import logging
@@ -27,12 +28,16 @@ class MPNLabelFilter(QObject):
         return False
 
 class RefDesChip(QLabel):
+    """
+    A single Reference Designator chip.
+    """
     clicked = pyqtSignal(str)
-
+    
     def __init__(self, ref_des: str) -> None:
         super().__init__(ref_des)
         self._ref_des = ref_des
         self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
+        self.setProperty("class", "refdes-chip")
         self.setProperty("selected", False)
 
     def mousePressEvent(self, ev: QMouseEvent) -> None:
@@ -41,37 +46,52 @@ class RefDesChip(QLabel):
         super().mousePressEvent(ev)
 
 
-class AuditBomRow(QWidget):
+class AuditBomRow(QFrame):
     mpn_label_clicked = pyqtSignal(str)
     refdes_chip_clicked = pyqtSignal(str)
-
+    
     def __init__(self, view: AuditBomRowView) -> None:
         super().__init__()
+        self.setProperty("class", "bom-grouping")
+        self.setProperty("selected", False)
         self._mpn_value = view.component_mpn
         
-        self.layout = QHBoxLayout(self)
-        self.layout.setContentsMargins(4, 4, 4, 4)
+        grid = QGridLayout(self)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(0)
+        grid.setVerticalSpacing(0)
         
         # MPN Label
         self.mpn_label = QLabel(self._mpn_value)
-        self.mpn_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse | 
-            Qt.TextInteractionFlag.TextSelectableByKeyboard
-        )
+        self.mpn_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.mpn_label.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.mpn_label.setProperty("class", "mpn-cell")
+        self.mpn_label.setProperty("class", "mpn-label")
         self.mpn_label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mpn_label.customContextMenuRequested.connect(self._show_context_menu)
         self._mpn_filter = MPNLabelFilter(self.mpn_label, self)
         self.mpn_label.installEventFilter(self._mpn_filter)
         
+        self._mpn_cell = QFrame(self)
+        self._mpn_cell.setFrameShape(QFrame.Shape.NoFrame)
+        self._mpn_cell.setProperty("class", "cell-mpn")
+        mpn_cell_layout = QVBoxLayout(self._mpn_cell)
+        mpn_cell_layout.setContentsMargins(0, 0, 0, 0)
+        mpn_cell_layout.addWidget(self.mpn_label)
+        
         # Description Label
-        desc = view.description or ""
+        desc_text = view.description or ""
         if view.mount_type:
-            desc = f"[{view.mount_type}] {desc}"
-        self.desc_label = QLabel(desc)
+            desc_text = f"[{view.mount_type}] {desc_text}"
+        self.desc_label = QLabel(desc_text)
         self.desc_label.setWordWrap(True)
-        self.desc_label.setProperty("class", "desc-cell")
+        self.desc_label.setProperty("class", "desc-label")
+        
+        self._desc_cell = QFrame(self)
+        self._desc_cell.setFrameShape(QFrame.Shape.NoFrame)
+        self._desc_cell.setProperty("class", "cell-description")
+        desc_cell_layout = QVBoxLayout(self._desc_cell)
+        desc_cell_layout.setContentsMargins(0, 0, 0, 0)
+        desc_cell_layout.addWidget(self.desc_label)
         
         # Chips container
         self.chip_strip = QWidget()
@@ -86,11 +106,19 @@ class AuditBomRow(QWidget):
             chip_layout.addWidget(chip)
             self.chips[rd] = chip
             
-        self.layout.addWidget(self.mpn_label, stretch=2)
-        self.layout.addWidget(self.desc_label, stretch=3)
-        self.layout.addWidget(self.chip_strip, stretch=4)
+        self._refdes_cell = QFrame(self)
+        self._refdes_cell.setFrameShape(QFrame.Shape.NoFrame)
+        self._refdes_cell.setProperty("class", "cell-refdes")
+        refdes_cell_layout = QVBoxLayout(self._refdes_cell)
+        refdes_cell_layout.setContentsMargins(0, 0, 0, 0)
+        refdes_cell_layout.addWidget(self.chip_strip)
         
-        self.setProperty("selected", False)
+        grid.addWidget(self._mpn_cell, 0, 0)
+        grid.addWidget(self._refdes_cell, 0, 1)
+        grid.addWidget(self._desc_cell, 1, 0, 1, 2)
+        
+        grid.setColumnStretch(0, 2)
+        grid.setColumnStretch(1, 3)
 
     def _show_context_menu(self, pos: Any) -> None:
         menu = QMenu(self)

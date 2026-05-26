@@ -1,5 +1,13 @@
 {
   "$schema": "./theme.schema.json",
+  "application": {
+    "font_scale": {
+      "default_pt": 10,
+      "min_pt": 8,
+      "max_pt": 24,
+      "step_pt": 1
+    }
+  },
   "base": {
     "window": {
       "rgb": "#FAFAFA"

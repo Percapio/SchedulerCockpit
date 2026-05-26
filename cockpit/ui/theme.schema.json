@@ -2,9 +2,26 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["base", "left_panel", "canvas", "bom_panel"],
+  "required": ["application", "base", "left_panel", "canvas", "bom_panel"],
   "properties": {
     "$schema": { "type": "string" },
+    "application": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["font_scale"],
+      "properties": {
+        "font_scale": {
+          "type": "object",
+          "properties": {
+            "default_pt": { "type": "integer", "minimum": 1 },
+            "min_pt": { "type": "integer", "minimum": 1 },
+            "max_pt": { "type": "integer", "minimum": 1 },
+            "step_pt": { "type": "integer", "minimum": 1 }
+          },
+          "required": ["default_pt", "min_pt", "max_pt", "step_pt"]
+        }
+      }
+    },
     "base": {
       "type": "object",
       "additionalProperties": false,

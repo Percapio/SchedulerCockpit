@@ -1,5 +1,6 @@
 """Checklist service."""
 
+import logging
 from cockpit.persistence.errors import AuditNotFound, ChecklistItemNotFound
 from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
@@ -16,6 +17,8 @@ from cockpit.services.views import (
 
 
 import sqlite3
+
+logger = logging.getLogger(__name__)
 
 class ChecklistService:
     def __init__(
@@ -73,6 +76,7 @@ class ChecklistService:
             has_pdf=has_pdf,
             tht_rows=tht_views,
             notes_rows=notes_views,
+            general_notes=audit.general_notes,
         )
 
     def set_verification(
@@ -108,6 +112,7 @@ class ChecklistService:
             self._notes_repo.mark_all_verified(audit_id)
             self._conn.execute("RELEASE SAVEPOINT verify_all")
         except Exception:
+            logger.exception("Suppressed Exception in verify_all")
             self._conn.execute("ROLLBACK TO SAVEPOINT verify_all")
             self._conn.execute("RELEASE SAVEPOINT verify_all")
             raise

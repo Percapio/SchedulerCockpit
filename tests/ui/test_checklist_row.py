@@ -29,8 +29,8 @@ def test_ChecklistRow_SetSelectedTrue_SetsPropertyAndRepolishesStyle(qtbot, monk
     row.set_selected(True)
     
     assert row.property("selected") is True
-    style_unpolish_mock.assert_called_with(row)
-    style_polish_mock.assert_called_with(row)
+    style_unpolish_mock.assert_any_call(row)
+    style_polish_mock.assert_any_call(row)
 
 
 def test_ChecklistRow_SetSelectedFalse_ClearsPropertyAndRepolishesStyle(qtbot, monkeypatch, dummy_view):
@@ -49,5 +49,5 @@ def test_ChecklistRow_SetSelectedFalse_ClearsPropertyAndRepolishesStyle(qtbot, m
     row.set_selected(False)
     
     assert row.property("selected") is False
-    style_unpolish_mock.assert_called_with(row)
-    style_polish_mock.assert_called_with(row)
+    style_unpolish_mock.assert_any_call(row)
+    style_polish_mock.assert_any_call(row)

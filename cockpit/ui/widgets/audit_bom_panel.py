@@ -142,8 +142,9 @@ class AuditBomRow(QFrame):
 
     def set_mpn_selected(self, selected: bool) -> None:
         self.setProperty("selected", selected)
-        self.style().unpolish(self)
-        self.style().polish(self)
+        for w in [self, self._mpn_cell, self.mpn_label, self._desc_cell, self.desc_label]:
+            w.style().unpolish(w)
+            w.style().polish(w)
 
     def set_refdes_selected(self, ref_des: str | None) -> None:
         for rd, chip in self.chips.items():
@@ -155,14 +156,18 @@ class AuditBomRow(QFrame):
     def cleanup(self) -> None:
         self.mpn_label.removeEventFilter(self._mpn_filter)
         try: self.mpn_label.customContextMenuRequested.disconnect()
-        except: pass
+        except Exception:
+            logger.exception('Exception caught in audit_bom_panel')
         for chip in self.chips.values():
             try: chip.clicked.disconnect()
-            except: pass
+            except Exception:
+                logger.exception('Exception caught in audit_bom_panel')
         try: self.mpn_label_clicked.disconnect()
-        except: pass
+        except Exception:
+            logger.exception('Exception caught in audit_bom_panel')
         try: self.refdes_chip_clicked.disconnect()
-        except: pass
+        except Exception:
+            logger.exception('Exception caught in audit_bom_panel')
 
 
 class AuditBomPanel(QScrollArea):
@@ -197,6 +202,7 @@ class AuditBomPanel(QScrollArea):
         try:
             views = self._layout_query_service.list_bom_rows_for_audit(audit_id)
         except PersistenceError as e:
+            logger.exception('Exception caught in audit_bom_panel')
             from cockpit.services.exceptions import FailurePayload
             self.error_occurred.emit(FailurePayload("Failed to load BOM", e))
             return

@@ -181,6 +181,9 @@ class ActiveAuditView:
     def with_ship_date(self, new_value: date | None) -> "ActiveAuditView":
         return replace(self, ship_date=new_value)
 
+    def with_general_notes(self, new_value: str | None) -> "ActiveAuditView":
+        return replace(self, general_notes=new_value)
+
 
 @dataclass(frozen=True)
 class SplitSummary:

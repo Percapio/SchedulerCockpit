@@ -6,6 +6,9 @@ from cockpit.persistence.errors import InvalidArgumentError, IllegalStateTransit
 from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.types import AuditStatus
 from cockpit.services.views import SplitSummary
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class AuditSplitService:
@@ -61,6 +64,7 @@ class AuditSplitService:
             
             cur.execute("RELEASE SAVEPOINT split")
         except Exception:
+            logger.exception('Exception caught in split')
             cur.execute("ROLLBACK TO SAVEPOINT split")
             cur.execute("RELEASE SAVEPOINT split")
             raise

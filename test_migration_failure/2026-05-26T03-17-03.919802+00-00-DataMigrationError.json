@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "occurred_at_utc": "2026-05-26T03:17:03.919802+00:00",
+  "app_version": "0.0.0-dev",
+  "build_commit": "source",
+  "runtime_kind": "source",
+  "python_version": "3.12.10",
+  "qt_version": "6.11.0",
+  "exception_class": "DataMigrationError",
+  "exception_message": "Conflict: d:\\Dev\\Scheduler\\Cockpit\\test_migration_failure\\v1 exists without sentinel but legacy files are present in d:\\Dev\\Scheduler\\Cockpit\\test_migration_failure",
+  "traceback_lines": [
+    "Traceback (most recent call last):\n",
+    "  File \"D:\\Dev\\Scheduler\\Cockpit\\cockpit_main.py\", line 22, in <module>\n    main()\n",
+    "  File \"D:\\Dev\\Scheduler\\Cockpit\\cockpit_main.py\", line 19, in main\n    real_main()\n",
+    "  File \"D:\\Dev\\Scheduler\\Cockpit\\cockpit\\ui\\app.py\", line 29, in main\n    outcome = migrate_to_versioned_layout(pre_migration_root)\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n",
+    "  File \"D:\\Dev\\Scheduler\\Cockpit\\cockpit\\ui\\data_migration.py\", line 37, in migrate_to_versioned_layout\n    raise DataMigrationError(\n",
+    "cockpit.ui.data_migration.DataMigrationError: Conflict: d:\\Dev\\Scheduler\\Cockpit\\test_migration_failure\\v1 exists without sentinel but legacy files are present in d:\\Dev\\Scheduler\\Cockpit\\test_migration_failure\n"
+  ],
+  "thread_name": "MainThread",
+  "reason_code": null
+}

@@ -54,9 +54,11 @@ class IngestionWorker(QObject):
             self.succeeded_signal.emit(summary)
             
         except IngestionCancelled:
+            logger.exception('Exception caught in ingestion_worker')
             self.cancelled_signal.emit()
             
         except Exception as exc:
+            logger.exception('Exception caught in ingestion_worker')
             payload = render(exc)
             logger.error("Ingest failed", exc_info=True)
             self.failed_signal.emit(payload)

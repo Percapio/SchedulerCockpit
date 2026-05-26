@@ -9,6 +9,9 @@ from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.services.completion import CompletionService, CleanupFailedError
 from cockpit.services.views import ReconciliationReport
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class StartupReconciler:
@@ -43,8 +46,10 @@ class StartupReconciler:
                 outcome = self._completion_service.cleanup_already_completed(audit.id)
                 cleaned.append(outcome)
             except CleanupFailedError as exc:
+                logger.exception('Exception caught in startup_reconciler')
                 partial.append((audit.id, exc.reap_report))
             except PersistenceError as exc:
+                logger.exception('Exception caught in startup_reconciler')
                 errors.append((audit.id, exc))
 
         # 2. Orphan-file sweep
@@ -61,6 +66,7 @@ class StartupReconciler:
                     try:
                         h = self._hash_for_path(path)
                     except OSError as exc:
+                        logger.exception('Exception caught in startup_reconciler')
                         unreadable.append((path, exc))
                         continue
                         
@@ -69,6 +75,7 @@ class StartupReconciler:
                             path.unlink()
                             orphans_deleted.append(path)
                         except OSError as exc:
+                            logger.exception('Exception caught in startup_reconciler')
                             orphan_delete_failed.append((path, exc))
 
             # Prune empty directories (post order)
@@ -81,6 +88,7 @@ class StartupReconciler:
                     d.rmdir()
                     pruned.append(d)
                 except OSError:
+                    logger.exception('Exception caught in startup_reconciler')
                     pass
 
         return ReconciliationReport(

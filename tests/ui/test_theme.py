@@ -9,6 +9,9 @@ from cockpit.ui.theme import Theme, ThemeLoader, ConfigurationError
 @pytest.fixture
 def valid_theme_data():
     return {
+        "application": {
+            "font_scale": { "default_pt": 10, "min_pt": 8, "max_pt": 24, "step_pt": 1 }
+        },
         "base": {
             "window": { "rgb": "#FAFAFA" },
             "font": { "family": "Segoe UI", "size_px": 13 },
@@ -374,6 +377,7 @@ def test_Theme_BomChipFlowSpacing_ReturnsConfiguredValue():
 
 def test_Theme_Qss_RefdesChipNoLongerEmitsMarginRight(valid_theme_data):
     theme = Theme(
+        _application=valid_theme_data["application"],
         _base=valid_theme_data["base"],
         _left_panel=valid_theme_data["left_panel"],
         _canvas=valid_theme_data["canvas"],
@@ -385,6 +389,7 @@ def test_Theme_Qss_RefdesChipNoLongerEmitsMarginRight(valid_theme_data):
 
 def test_Theme_Qss_ReturnsNonEmptyString(valid_theme_data):
     theme = Theme(
+        _application=valid_theme_data["application"],
         _base=valid_theme_data["base"],
         _left_panel=valid_theme_data["left_panel"],
         _canvas=valid_theme_data["canvas"],
@@ -396,6 +401,7 @@ def test_Theme_Qss_ReturnsNonEmptyString(valid_theme_data):
 
 def test_Theme_Qss_IsIdempotent(valid_theme_data):
     theme = Theme(
+        _application=valid_theme_data["application"],
         _base=valid_theme_data["base"],
         _left_panel=valid_theme_data["left_panel"],
         _canvas=valid_theme_data["canvas"],
@@ -407,6 +413,7 @@ def test_Theme_Qss_IsIdempotent(valid_theme_data):
 
 def test_Theme_Qss_ContainsExpectedSelectorsFromEverySection(valid_theme_data):
     theme = Theme(
+        _application=valid_theme_data["application"],
         _base=valid_theme_data["base"],
         _left_panel=valid_theme_data["left_panel"],
         _canvas=valid_theme_data["canvas"],
@@ -421,6 +428,7 @@ def test_Theme_Qss_ContainsExpectedSelectorsFromEverySection(valid_theme_data):
 
 def test_Theme_Frozen_AttributeMutationRaisesFrozenInstanceError(valid_theme_data):
     theme = Theme(
+        _application=valid_theme_data["application"],
         _base=valid_theme_data["base"],
         _left_panel=valid_theme_data["left_panel"],
         _canvas=valid_theme_data["canvas"],
@@ -437,7 +445,7 @@ def test_Theme_ForTestingWithNoArgs_ReturnsUsableInstance():
 
 def test_Theme_ForTestingPartialSection_FillsOtherSectionsWithDefaults():
     theme = Theme.for_testing(canvas={"colour": {"dim": {"rgb": "#000"}}})
-    assert theme._base == {}
+    assert theme._base == {"font": {"family": "Segoe UI", "size_px": 13}}
     assert theme._left_panel == {}
     assert theme.canvas_colour("dim").name() == "#000000"
 

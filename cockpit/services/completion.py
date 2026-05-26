@@ -8,6 +8,9 @@ from cockpit.persistence.types import AuditStatus
 
 from cockpit.services.storage_reaper import StorageReaper
 from cockpit.services.views import CompletionOutcome, ReapReport
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class CleanupFailedError(Exception):
@@ -41,6 +44,7 @@ class CompletionService:
             self._audit_repo.hard_delete(audit_id)
             cur.execute("RELEASE SAVEPOINT completion")
         except Exception:
+            logger.exception('Exception caught in completion')
             cur.execute("ROLLBACK TO SAVEPOINT completion")
             cur.execute("RELEASE SAVEPOINT completion")
             raise

@@ -5,6 +5,9 @@ from datetime import date
 
 from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.errors import PersistenceError
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class AuditMetadataService:
@@ -18,6 +21,7 @@ class AuditMetadataService:
             self._repo.set_ship_date(audit_id, new_value)
             self._conn.commit()
         except Exception as e:
+            logger.exception('Exception caught in audit_metadata')
             self._conn.rollback()
             raise PersistenceError(f"Failed to set ship date for audit {audit_id}", e) from e
 
@@ -26,5 +30,6 @@ class AuditMetadataService:
             self._repo.set_general_notes(audit_id, notes)
             self._conn.commit()
         except Exception as e:
+            logger.exception('Exception caught in audit_metadata')
             self._conn.rollback()
             raise PersistenceError(f"Failed to set general notes for audit {audit_id}", e) from e

@@ -3,7 +3,7 @@
 import os
 import pathlib
 import pytest
-from PyQt6.QtCore import Qt, QUrl, QMimeData
+from PyQt6.QtCore import Qt, QUrl, QMimeData, QSettings
 from PyQt6.QtGui import QDropEvent
 from PyQt6.QtWidgets import QApplication
 
@@ -30,9 +30,11 @@ def bootstrapped_app(app_config):
 
 
 @pytest.fixture
-def main_window(qtbot, bootstrapped_app):
+def main_window(qtbot, bootstrapped_app, tmp_path):
     ui_dir = pathlib.Path(__file__).parent.parent.parent / "cockpit" / "ui"
     theme = ThemeLoader.load(ui_dir / "theme.json", ui_dir / "theme.schema.json")
+    
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
     
     window = MainWindow(
         QApplication.instance(),
@@ -44,7 +46,8 @@ def main_window(qtbot, bootstrapped_app):
         bootstrapped_app.audit_metadata_svc,
         bootstrapped_app.layout_query_svc,
         bootstrapped_app.pdf_renderer,
-        theme=theme
+        theme=theme,
+        settings=settings
     )
     qtbot.addWidget(window)
     window.show()

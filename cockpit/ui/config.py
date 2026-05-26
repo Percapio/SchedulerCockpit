@@ -4,6 +4,9 @@ import os
 import pathlib
 import sys
 from dataclasses import dataclass
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class AppConfigError(Exception):
@@ -13,6 +16,7 @@ class AppConfigError(Exception):
 
 @dataclass(frozen=True)
 class AppConfig:
+    app_data_root: pathlib.Path
     db_path: pathlib.Path
     file_storage_root: pathlib.Path
     coord_map_path: pathlib.Path | None
@@ -20,7 +24,7 @@ class AppConfig:
     log_level: str
 
 
-def _get_app_data_root() -> pathlib.Path:
+def get_app_data_root() -> pathlib.Path:
     """Resolve the per-OS application-data directory."""
     if "COCKPIT_APP_DATA" in os.environ:
         return pathlib.Path(os.environ["COCKPIT_APP_DATA"])
@@ -40,10 +44,11 @@ def _get_app_data_root() -> pathlib.Path:
     return pathlib.Path.home() / ".local" / "share" / "cockpit"
 
 
-def resolve_config() -> AppConfig:
+def resolve_config(root: pathlib.Path | None = None) -> AppConfig:
     """Resolve paths and produce an AppConfig. Ensures directories exist."""
     
-    root = _get_app_data_root()
+    if root is None:
+        root = get_app_data_root() / "v1"
     
     if root.exists() and not root.is_dir():
         raise AppConfigError(f"Application data root exists but is not a directory: {root}")
@@ -55,6 +60,7 @@ def resolve_config() -> AppConfig:
         log_dir = root / "logs"
         log_dir.mkdir(exist_ok=True)
     except Exception as e:
+        logger.exception('Exception caught in config')
         raise AppConfigError(f"Cannot write to application data root {root}: {e}")
 
     log_level = "DEBUG" if os.environ.get("COCKPIT_DEBUG") == "1" else "INFO"
@@ -64,6 +70,7 @@ def resolve_config() -> AppConfig:
         coord_map_path = pathlib.Path(os.environ["COCKPIT_TRAVELER_MAP_PATH"])
 
     return AppConfig(
+        app_data_root=root,
         db_path=root / "local_audit.db",
         file_storage_root=file_storage_root,
         coord_map_path=coord_map_path,

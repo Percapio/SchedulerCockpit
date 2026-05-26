@@ -1,7 +1,7 @@
 """Main window."""
 
 import pathlib
-from PyQt6.QtCore import Qt, QThread
+from PyQt6.QtCore import Qt, QThread, QSettings
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox, QApplication
 
@@ -22,6 +22,10 @@ from cockpit.services.audit_metadata import AuditMetadataService
 from cockpit.services.layout_query import LayoutQueryService
 from cockpit.layout.renderer import PdfRenderer
 from cockpit.ui.theme import Theme
+from cockpit.ui.font_scale_controller import FontScaleController
+import logging
+logger = logging.getLogger(__name__)
+
 
 class MainWindow(QMainWindow):
     def __init__(
@@ -36,7 +40,8 @@ class MainWindow(QMainWindow):
         layout_query_svc: LayoutQueryService,
         pdf_renderer: PdfRenderer,
         *,
-        theme: Theme
+        theme: Theme,
+        settings: QSettings
     ) -> None:
         super().__init__()
         self._theme = theme
@@ -85,6 +90,16 @@ class MainWindow(QMainWindow):
         self.stacked.addWidget(self._audit_view)
         
         self.toast = Toast(self)
+        
+        self._font_scale = FontScaleController(app, theme, settings)
+        
+        def on_scale_changed(pt: int) -> None:
+            pct = int(round(pt / self._font_scale._bounds.default_pt * 100))
+            self._audit_view.apply_font_scale(pct)
+            
+        self._font_scale.scale_changed.connect(on_scale_changed)
+        self._audit_view.font_scale_change_requested.connect(self._font_scale.request_delta)
+        on_scale_changed(self._font_scale.current_pt())
         
         self._resolve_initial_page()
         
@@ -151,6 +166,7 @@ class MainWindow(QMainWindow):
             stage = ProgressStage(stage_str)
             self.progress_view.advance(stage)
         except ValueError:
+            logger.exception('Exception caught in main_window')
             pass
 
     def _on_ingest_succeeded(self, summary: AuditSummary) -> None:
@@ -200,6 +216,11 @@ class MainWindow(QMainWindow):
                 if self._worker:
                     self._worker.request_cancel()
         else:
+            try:
+                self._audit_view.flush_pending_writes()
+            except Exception:
+                logger.exception('Exception caught in main_window')
+                pass
             self._bootstrapped.conn.close()
             event.accept()
 

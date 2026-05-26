@@ -8,6 +8,9 @@ from typing import Any, Mapping
 
 from PyQt6.QtGui import QColor, QPen, QBrush
 from PyQt6.QtCore import Qt
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class ConfigurationError(Exception):
@@ -32,17 +35,34 @@ class ConfigurationError(Exception):
 
 
 @dataclass(frozen=True)
+class FontScaleBounds:
+    default_pt: int
+    min_pt:     int
+    max_pt:     int
+    step_pt:    int
+
+@dataclass(frozen=True)
 class Theme:
     """
     Intent:   Immutable view over the loaded and validated theme.
     """
 
+    _application: Mapping[str, Any]
     _base:       Mapping[str, Any]
     _left_panel: Mapping[str, Any]
     _canvas:     Mapping[str, Any]
     _bom_panel:  Mapping[str, Any]
 
-    def qss(self) -> str:
+    def font_scale_bounds(self) -> FontScaleBounds:
+        block = self._application["font_scale"]
+        return FontScaleBounds(
+            default_pt=block["default_pt"],
+            min_pt=block["min_pt"],
+            max_pt=block["max_pt"],
+            step_pt=block["step_pt"]
+        )
+
+    def qss(self, font_scale_pt: int | None = None) -> str:
         """
         Intent:   Compose and return the full application stylesheet.
         """
@@ -51,41 +71,46 @@ class Theme:
         bp = self._bom_panel
         cv = self._canvas
         
+        bounds = self.font_scale_bounds()
+        pt = font_scale_pt if font_scale_pt is not None else bounds.default_pt
+        
+        def scale(base_px: int) -> int:
+            return round(base_px * (pt / bounds.default_pt))
+
         # Base window
         qss_lines = []
+        qss_lines.append(f"* {{ font-family: '{base['font']['family']}'; font-size: {scale(base['font']['size_px'])}px; }}")
         
         # DropArea
-        # Pre-Phase-12 had DropArea background-color #fafafa
         qss_lines.append(f"DropArea {{ background-color: {base['window']['rgb']}; }}")
         qss_lines.append("DropArea[state=\"resting\"] { border: 3px dashed #cccccc; border-radius: 12px; }")
         qss_lines.append("DropArea[state=\"active\"] { border: 4px dashed #4caf50; border-radius: 12px; background-color: #e8f5e9; }")
         qss_lines.append("DropArea[state=\"disabled\"] { border: none; background-color: #f0f0f0; }")
         
-        qss_lines.append(f"QLabel#DropAreaMainLabel {{ font-size: 24px; font-weight: bold; color: {lp['section_header']['text_rgb']}; }}")
+        qss_lines.append(f"QLabel#DropAreaMainLabel {{ font-size: {scale(24)}px; font-weight: bold; color: {lp['section_header']['text_rgb']}; }}")
         qss_lines.append("DropArea[state=\"active\"] QLabel#DropAreaMainLabel { color: #2e7d32; }")
-        qss_lines.append("QLabel#DropAreaSubLabel { font-size: 16px; color: #888888; }")
+        qss_lines.append(f"QLabel#DropAreaSubLabel {{ font-size: {scale(16)}px; color: #888888; }}")
         qss_lines.append("DropArea[state=\"active\"] QLabel#DropAreaSubLabel { color: #4caf50; }")
         
         # ProgressView styles
-        qss_lines.append("QLabel#ProgressText { font-size: 16px; }")
-        qss_lines.append("QLabel#ProgressIcon { font-size: 18px; }")
+        qss_lines.append(f"QLabel#ProgressText {{ font-size: {scale(16)}px; }}")
+        qss_lines.append(f"QLabel#ProgressIcon {{ font-size: {scale(18)}px; }}")
         qss_lines.append("QLabel#ProgressText[status=\"completed\"] { font-weight: bold; }")
         qss_lines.append("QLabel#ProgressIcon[status=\"completed\"] { color: green; }")
         qss_lines.append("QLabel#ProgressText[status=\"pending\"] { font-weight: normal; color: gray; }")
         qss_lines.append("QLabel#ProgressIcon[status=\"pending\"] { color: gray; }")
         
         # ErrorDialog styles
-        qss_lines.append("QLabel#ErrorSummary { font-size: 14px; font-weight: bold; }")
-        qss_lines.append("QLabel#ErrorFooter { font-family: monospace; font-size: 11px; color: #666666; }")
+        qss_lines.append(f"QLabel#ErrorSummary {{ font-size: {scale(14)}px; font-weight: bold; }}")
+        qss_lines.append(f"QLabel#ErrorFooter {{ font-family: monospace; font-size: {scale(11)}px; color: #666666; }}")
         
         # ChecklistRow
         qss_lines.append(f"QWidget[class~=\"checklist-row\"] {{ background-color: {lp['row']['fill_rgb']}; border-radius: {lp['row']['corner_radius_px']}px; padding: {lp['row']['vertical_padding_px']}px {lp['row']['horizontal_padding_px']}px; border: {bp['grouping']['border_width_px']}px solid {bp['grouping']['border_rgb']}; }}")
         qss_lines.append(f"QWidget[class~=\"checklist-row\"][selected=\"true\"] {{ background-color: {lp['row']['fill_selected_rgb']}; }}")
-        qss_lines.append(f"QWidget[class~=\"checklist-row\"][selected=\"true\"] > QLabel {{ color: {lp['row']['text_selected_rgb']}; }}")
         qss_lines.append("QPushButton[indicator=\"true\"] { }")
         
         # Section Header
-        qss_lines.append(f"QLabel[class~=\"section-header\"] {{ background-color: {lp['section_header']['fill_rgb']}; color: {lp['section_header']['text_rgb']}; padding: {lp['section_header']['padding_px']}px; font-weight: bold; font-size: 16px; }}")
+        qss_lines.append(f"QLabel[class~=\"section-header\"] {{ background-color: {lp['section_header']['fill_rgb']}; color: {lp['section_header']['text_rgb']}; padding: {lp['section_header']['padding_px']}px; font-weight: bold; font-size: {scale(16)}px; }}")
         
         # Toast
         qss_lines.append(f"Toast[severity=\"info\"] {{ background-color: {base['toast']['info']['background_rgb']}; border: 1px solid {base['toast']['info']['border_rgb']}; border-radius: 8px; }}")
@@ -100,12 +125,12 @@ class Theme:
         qss_lines.append(f"Toast[severity=\"error\"] QLabel#ToastSubtitle {{ color: {base['toast']['error']['text_rgb']}; }}")
         
         # ShipDateField
-        qss_lines.append(f"ShipDateField QLabel {{ color: {lp['ship_date_field']['text_rgb']}; font-size: 11px; font-weight: bold; }}")
-        qss_lines.append("ShipDateField QDateEdit { font-size: 14px; }")
+        qss_lines.append(f"ShipDateField QLabel {{ color: {lp['ship_date_field']['text_rgb']}; font-size: {scale(11)}px; font-weight: bold; }}")
+        qss_lines.append(f"ShipDateField QDateEdit {{ font-size: {scale(14)}px; }}")
         
         # BOM Panel
         qss_lines.append(self._compose_bom_grouping(bp['grouping']))
-        qss_lines.append(self._compose_bom_cells(bp['cell']))
+        qss_lines.append(self._compose_bom_cells(bp['cell'], pt, bounds.default_pt))
         qss_lines.append(self._compose_bom_chip(bp['chip']))
         
         qss_lines.append("QLabel[class~=\"empty-bom-label\"] { color: #888888; padding: 20px; }")
@@ -189,7 +214,7 @@ class Theme:
         ]
         return "\n".join(lines)
 
-    def _compose_bom_cells(self, cell_tokens: Mapping[str, Mapping[str, Any]]) -> str:
+    def _compose_bom_cells(self, cell_tokens: Mapping[str, Mapping[str, Any]], pt: int, default_pt: int) -> str:
         lines = []
         for role, tokens in cell_tokens.items():
             lines.extend([
@@ -203,11 +228,9 @@ class Theme:
                 f"    color: {tokens['text_rgb']};"
             ])
             if "font_size_px" in tokens:
-                lines.append(f"    font-size: {tokens['font_size_px']}px;")
+                sz = round(tokens['font_size_px'] * (pt / default_pt))
+                lines.append(f"    font-size: {sz}px;")
             lines.extend([
-                "}",
-                f"QFrame[class=\"bom-grouping\"][selected=\"true\"] > QFrame[class=\"cell-{role}\"] > QLabel {{",
-                f"    color: {tokens['text_selected_rgb']};",
                 "}"
             ])
         return "\n".join(lines)
@@ -222,22 +245,24 @@ class Theme:
             "}",
             "QLabel[class=\"refdes-chip\"]:hover {",
             f"    background-color: {chip_tokens['fill_hover_rgb']};",
-            "}",
-            "QLabel[class=\"refdes-chip\"][selected=\"true\"] {",
-            f"    color: {chip_tokens['text_selected_rgb']};",
             "}"
         ]
         return "\n".join(lines)
 
     @classmethod
-    def for_testing(cls, base=None, left_panel=None, canvas=None, bom_panel=None) -> 'Theme':
+    def for_testing(cls, application=None, base=None, left_panel=None, canvas=None, bom_panel=None) -> 'Theme':
         """
         Intent:   Construct a Theme for unit tests. Bypasses file I/O and
                   schema validation. Unprovided sections default to empty dicts.
         Raises:   Never. Test fixtures may be structurally under-constrained.
         """
+        b = base or {}
+        if "font" not in b:
+            b["font"] = {"family": "Segoe UI", "size_px": 13}
+            
         return cls(
-            _base=base or {},
+            _application=application or {},
+            _base=b,
             _left_panel=left_panel or {},
             _canvas=canvas or {},
             _bom_panel=bom_panel or {}
@@ -265,6 +290,7 @@ class ThemeLoader:
             with open(theme_path, "r", encoding="utf-8") as f:
                 theme_data = json.load(f)
         except json.JSONDecodeError as e:
+            logger.exception('Exception caught in theme')
             raise ConfigurationError(
                 pointer="/", 
                 rule="json_parse", 
@@ -275,6 +301,7 @@ class ThemeLoader:
             with open(schema_path, "r", encoding="utf-8") as f:
                 schema_data = json.load(f)
         except json.JSONDecodeError as e:
+            logger.exception('Exception caught in theme')
             raise ConfigurationError(
                 pointer="/", 
                 rule="schema_parse", 
@@ -284,6 +311,7 @@ class ThemeLoader:
         try:
             jsonschema.validate(instance=theme_data, schema=schema_data)
         except jsonschema.ValidationError as e:
+            logger.exception('Exception caught in theme')
             path = "/" + "/".join(str(p) for p in e.path)
             raise ConfigurationError(
                 pointer=path, 
@@ -294,6 +322,7 @@ class ThemeLoader:
         cls.validate_structural_invariants(theme_data)
         
         return Theme(
+            _application=theme_data["application"],
             _base=theme_data["base"],
             _left_panel=theme_data["left_panel"],
             _canvas=theme_data["canvas"],
@@ -302,6 +331,10 @@ class ThemeLoader:
 
     @classmethod
     def validate_structural_invariants(cls, data: Mapping[str, Any]) -> None:
+        fs = data["application"]["font_scale"]
+        if not (fs["min_pt"] <= fs["default_pt"] <= fs["max_pt"]):
+            raise ConfigurationError("/application/font_scale/default_pt", "INV-FS1", "must be within min_pt and max_pt")
+        
         cv = data["canvas"]
         z = cv["z_order"]
         if not (z["base_pixmap"] < z["dim"]):

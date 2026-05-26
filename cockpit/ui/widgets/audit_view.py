@@ -21,6 +21,7 @@ class AuditView(QWidget):
     
     exit_requested = pyqtSignal()
     error_occurred = pyqtSignal(object)  # FailurePayload
+    font_scale_change_requested = pyqtSignal(int)
 
     def __init__(
         self,
@@ -84,6 +85,7 @@ class AuditView(QWidget):
         self._dashboard.error_occurred.connect(self.error_occurred.emit)
         self._dashboard.reload_requested.connect(self.load)
         self._layout_canvas.error_occurred.connect(self.error_occurred.emit)
+        self._layout_canvas.font_scale_change_requested.connect(self.font_scale_change_requested.emit)
         self._bom_panel.error_occurred.connect(self.error_occurred.emit)
         
         # Connect Dashboard to Coordinator
@@ -167,3 +169,9 @@ class AuditView(QWidget):
                 self._splitter.splitterMoved.disconnect(self._on_splitter_moved)
                 self._splitter.setSizes([sizes[0], sizes[1] + sizes[2] - self._bom_min_width, self._bom_min_width])
                 self._splitter.splitterMoved.connect(self._on_splitter_moved)
+
+    def apply_font_scale(self, percentage: int) -> None:
+        self._layout_canvas.apply_font_scale(percentage)
+
+    def flush_pending_writes(self) -> None:
+        self._dashboard.flush_audit_notes()

@@ -21,14 +21,17 @@ from .identity_header import IdentityHeader
 from .checklist_view import ChecklistView
 from .audit_notes_view import AuditNotesView
 from .split_dialog import SplitDialog
+import logging
+logger = logging.getLogger(__name__)
 
 
-_METADATA_DISPLAY_FIELDS: tuple[str, ...] = (
-    "customer_name",
-    "sales_order_number",
-    "lead_time_days",
-    "release_date",
-)
+
+_METADATA_DISPLAY_LABELS: dict[str, str] = {
+    "customer_name": "Customer",
+    "sales_order_number": "S/O",
+    "lead_time_days": "LT",
+    "release_date": "Release",
+}
 
 
 class Dashboard(QWidget):
@@ -66,7 +69,7 @@ class Dashboard(QWidget):
         layout = QVBoxLayout(self)
         
         self.header = IdentityHeader()
-        self.header.back_requested.connect(self.exit_requested.emit)
+        self.header.back_requested.connect(self._on_back_requested)
         self.header.ship_date_commit_requested.connect(self._on_ship_date_commit)
         layout.addWidget(self.header)
         
@@ -127,6 +130,7 @@ class Dashboard(QWidget):
             self._view = self._checklist_service.load_active_audit(audit_id)
             self._apply_view()
         except Exception as e:
+            logger.exception('Exception caught in dashboard')
             self.error_occurred.emit(render(e))
 
     def reload(self) -> None:
@@ -146,9 +150,9 @@ class Dashboard(QWidget):
                 item.widget().deleteLater()
                 
         metadata = self._view.traveler_metadata or {}
-        for key in _METADATA_DISPLAY_FIELDS:
+        for key, label in _METADATA_DISPLAY_LABELS.items():
             val = metadata.get(key, "—")
-            self.metadata_layout.addWidget(QLabel(f"{key}: {val}"))
+            self.metadata_layout.addWidget(QLabel(f"{label}: {val}"))
             
         self.checklist_tht.populate_section(self._view.tht_rows, f"THT Verification ({len(self._view.tht_rows)} items)")
         self.checklist_notes.populate_section(self._view.notes_rows, f"Build Notes ({len(self._view.notes_rows)} items)")
@@ -161,6 +165,13 @@ class Dashboard(QWidget):
             self.add_drawing_btn.setText("Replace Drawing")
         else:
             self.add_drawing_btn.setText("Add Drawing")
+
+    def flush_audit_notes(self) -> None:
+        self.audit_notes.flush_pending()
+
+    def _on_back_requested(self) -> None:
+        self.flush_audit_notes()
+        self.exit_requested.emit()
 
     def _update_enablement(self) -> None:
         if self._view is None:
@@ -197,6 +208,7 @@ class Dashboard(QWidget):
                 self.checklist_notes.update_row(updated)
             self._update_enablement()
         except PersistenceError as exc:
+            logger.exception('Exception caught in dashboard')
             if row_key.kind == "tht":
                 self.checklist_tht.revert_row(row_key)
             else:
@@ -210,7 +222,9 @@ class Dashboard(QWidget):
             
         try:
             self._audit_metadata_service.set_general_notes(self._view.audit_id, notes)
+            self._view = self._view.with_general_notes(notes)
         except PersistenceError as exc:
+            logger.exception('Exception caught in dashboard')
             self.error_occurred.emit(render(exc))
             self.reload()
 
@@ -231,6 +245,7 @@ class Dashboard(QWidget):
                     if hasattr(win, "toast"):
                         win.toast.show_toast(f"Split into {dialog.outcome.sibling_suffix} (qty {dialog.outcome.sibling_quantity})", "")
         except Exception as e:
+            logger.exception('Exception caught in dashboard')
             self.error_occurred.emit(render(e))
 
     def _on_add_drawing_clicked(self) -> None:
@@ -251,14 +266,17 @@ class Dashboard(QWidget):
                 win.toast.show_toast(f"Completed and cleaned up", "")
             self.exit_requested.emit()
         except (IncompleteChecklistError, IllegalStateTransition) as exc:
+            logger.exception('Exception caught in dashboard')
             payload = render(exc)
             self.error_occurred.emit(payload)
             self.reload()
         except CleanupFailedError as exc:
+            logger.exception('Exception caught in dashboard')
             payload = render(exc)
             self.error_occurred.emit(payload)
             self.exit_requested.emit()
         except PersistenceError as exc:
+            logger.exception('Exception caught in dashboard')
             payload = render(exc)
             self.error_occurred.emit(payload)
             self.reload()
@@ -276,6 +294,7 @@ class Dashboard(QWidget):
             self.checklist_notes.populate_section(reloaded.notes_rows, f"Build Notes ({len(reloaded.notes_rows)} items)")
             self._update_enablement()
         except PersistenceError as exc:
+            logger.exception('Exception caught in dashboard')
             self.reload()
             payload = render(exc)
             self.error_occurred.emit(payload)
@@ -289,6 +308,7 @@ class Dashboard(QWidget):
             self._view = self._view.with_ship_date(new_value)
             self.header.set_audit(self._view)
         except PersistenceError as exc:
+            logger.exception('Exception caught in dashboard')
             self.header.ship_date_revert()
             self.reload()
             payload = render(exc)

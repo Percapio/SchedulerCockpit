@@ -3,7 +3,7 @@
 from PyQt6.QtCore import pyqtSignal, Qt, QTimer
 from PyQt6.QtGui import QPixmap, QResizeEvent, QShowEvent
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QStackedWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QLabel, QGraphicsLineItem, QGraphicsItem, QGraphicsRectItem
+    QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QLabel, QGraphicsLineItem, QGraphicsItem, QGraphicsRectItem
 )
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QWheelEvent, QMouseEvent
 from PyQt6.QtCore import QRectF, QPointF
@@ -82,6 +82,10 @@ from cockpit.ui.error_messages import render as render_error
 from cockpit.services.views import SelectionIntent, ResolvedSelection, SelectionKind, ResolutionKind, HighlightCoord
 from cockpit.persistence.errors import PersistenceError
 from cockpit.ui.canvas.page_switcher import PageSwitcher
+from cockpit.ui.canvas.font_scale_bar import FontScaleBar
+import logging
+logger = logging.getLogger(__name__)
+
 
 class _InnerGraphicsView(QGraphicsView):
     def __init__(self, canvas: 'LayoutCanvas', scene: QGraphicsScene):
@@ -97,6 +101,7 @@ class _InnerGraphicsView(QGraphicsView):
 
 class LayoutCanvas(QWidget):
     error_occurred = pyqtSignal(object)
+    font_scale_change_requested = pyqtSignal(int)
 
     def __init__(
         self,
@@ -153,7 +158,18 @@ class LayoutCanvas(QWidget):
         
         self._highlight_items: list[HighlightItem] = []
         
-        canvas_layout.addWidget(self._graphics_view)
+        canvas_layout.addWidget(self._graphics_view, stretch=1)
+        
+        self._font_scale_bar = FontScaleBar(self._canvas_container)
+        self._font_scale_bar.scale_decrease_requested.connect(lambda: self.font_scale_change_requested.emit(-1))
+        self._font_scale_bar.scale_increase_requested.connect(lambda: self.font_scale_change_requested.emit(1))
+        
+        footer_layout = QHBoxLayout()
+        footer_layout.setContentsMargins(4, 4, 4, 4)
+        footer_layout.addStretch(1)
+        footer_layout.addWidget(self._font_scale_bar)
+        
+        canvas_layout.addLayout(footer_layout)
         
         self._hint_label = QLabel(self)
         self._hint_label.setProperty("class", "hint-label bold")
@@ -183,8 +199,10 @@ class LayoutCanvas(QWidget):
         try:
             context = self._layout_query_service.load_for_audit(audit_id)
         except AuditNotFound:
+            logger.exception('Exception caught in layout_canvas')
             raise
         except MalformedPdfError as e:
+            logger.exception('Exception caught in layout_canvas')
             # error_messages rendering equivalent (simplified here)
             payload = FailurePayload(
                 exception_class="MalformedPdfError",
@@ -240,6 +258,7 @@ class LayoutCanvas(QWidget):
                     target_pixel_height=render_h,
                 )
             except MalformedPdfError as e:
+                logger.exception('Exception caught in layout_canvas')
                 payload = FailurePayload(
                     exception_class="MalformedPdfError",
                     title="Could not render assembly drawing",
@@ -332,6 +351,7 @@ class LayoutCanvas(QWidget):
                     # Let's just manually trigger
                     pass
         except Exception:
+            logger.exception('Exception caught in layout_canvas')
             raise
 
     def wheelEvent(self, event: QWheelEvent) -> None:
@@ -386,6 +406,7 @@ class LayoutCanvas(QWidget):
                 self._current_context.audit_id, intent
             )
         except PersistenceError as exc:
+            logger.exception('Exception caught in layout_canvas')
             payload = render_error(exc)
             self.error_occurred.emit(payload)
             return
@@ -532,3 +553,6 @@ class LayoutCanvas(QWidget):
         x = view_rect.x() + (view_rect.width() - hint_w) // 2
         y = view_rect.y() + 12
         self._hint_label.move(x, y)
+
+    def apply_font_scale(self, percentage: int) -> None:
+        self._font_scale_bar.update_display(percentage)

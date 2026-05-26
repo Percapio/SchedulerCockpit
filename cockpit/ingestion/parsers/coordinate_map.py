@@ -45,7 +45,8 @@ def load(path: pathlib.Path | None = None) -> TravelerCoordinateMap:
             path = pathlib.Path(env_path)
             source_label = path
         else:
-            path = pathlib.Path(__file__).parent.parent / "config" / "default_traveler_map.json"
+            from cockpit.ui.runtime import bundled_resource
+            path = bundled_resource("ingestion/config/default_traveler_map.json")
             
     try:
         with open(path, "r", encoding="utf-8") as f:

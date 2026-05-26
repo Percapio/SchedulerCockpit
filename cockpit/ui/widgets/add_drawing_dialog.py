@@ -14,6 +14,9 @@ from PyQt6.QtWidgets import (
 from cockpit.ingestion.service import IngestionService
 from cockpit.ingestion.errors import IngestionError
 from cockpit.persistence.errors import PersistenceError
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class AddDrawingDialog(QDialog):
@@ -79,9 +82,11 @@ class AddDrawingDialog(QDialog):
             self._ingestion_service.add_pdf_to_audit(self._audit_id, dropped_path)
             self.accept()
         except IngestionError as exc:
+            logger.exception('Exception caught in add_drawing_dialog')
             self._error_label.setText(str(exc))
             self._error_label.setVisible(True)
         except PersistenceError as exc:
+            logger.exception('Exception caught in add_drawing_dialog')
             self._error_label.setText(f"Database error: {str(exc)}")
             self._error_label.setVisible(True)
 

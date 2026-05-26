@@ -3,6 +3,9 @@
 from PyQt6.QtWidgets import QWidget, QLayout
 from PyQt6.QtCore import QObject, Qt
 from PyQt6 import sip
+import logging
+logger = logging.getLogger(__name__)
+
 
 def _disconnect_and_delete(target: QObject) -> None:
     """
@@ -14,36 +17,21 @@ def _disconnect_and_delete(target: QObject) -> None:
     try:
         target.disconnect()
     except TypeError:
+        logger.exception('Exception caught in qt_lifecycle')
         pass
 
-    print(f"    [purge] sip.delete on {type(target)}")
-    sip.delete(target)
+    print(f"    [purge] deleteLater on {type(target)}")
+    target.deleteLater()
 
 
 def purge_widget_subtree(root: QWidget) -> None:
     """
-    Safely purges a widget and its descendants.
+    Safely purges a widget. Relies on Qt's internal destructor to clean up children.
     """
     if sip.isdeleted(root):
         return
-
-    print(f"[purge] finding descendants of {type(root)}")
-    from PyQt6.QtWidgets import QWidget, QLayout
-    
-    # Intentionally avoid findChildren(QObject) to prevent creating wrappers for internal C++ objects
-    descendants = []
-    descendants.extend(root.findChildren(QWidget, options=Qt.FindChildOption.FindChildrenRecursively))
-    descendants.extend(root.findChildren(QLayout, options=Qt.FindChildOption.FindChildrenRecursively))
-    
-    # We must also include our custom QObjects that are not QWidgets/QLayouts
-    # MPNLabelFilter inherits from QObject
-    from cockpit.ui.widgets.audit_bom_panel import MPNLabelFilter
-    descendants.extend(root.findChildren(MPNLabelFilter, options=Qt.FindChildOption.FindChildrenRecursively))
-
-    for descendant in reversed(descendants):
-        _disconnect_and_delete(descendant)
-
-    _disconnect_and_delete(root)
+    root.hide()
+    root.deleteLater()
 
 
 def _drain_layout_widgets(layout: QLayout) -> list[QWidget]:
@@ -59,7 +47,7 @@ def _drain_layout_widgets(layout: QLayout) -> list[QWidget]:
         if w is not None:
             if hasattr(w, "cleanup"):
                 try: w.cleanup()
-                except: pass
-            w.setParent(None)
+                except Exception:
+                    logger.exception('Exception caught in qt_lifecycle')
             widgets.append(w)
     return widgets

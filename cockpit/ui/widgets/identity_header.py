@@ -42,7 +42,9 @@ class IdentityHeader(QWidget):
     def set_audit(self, view: ActiveAuditView) -> None:
         self._current_view = view
         suffix = view.split_suffix if view.split_suffix else ""
-        self.title_lbl.setText(f"{view.part_number} — {view.work_order_ref}{suffix}")
+        metadata = view.traveler_metadata or {}
+        sales_order = metadata.get("sales_order_number", view.work_order_ref)
+        self.title_lbl.setText(f"{view.part_number}{suffix}")
         self.qty_lbl.setText(f"Qty: {view.quantity}")
         self.status_lbl.setText(f"Status: {view.status}")
         self.ship_date_fld.set_value(view.ship_date)

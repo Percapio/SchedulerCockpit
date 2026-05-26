@@ -5,6 +5,9 @@ from PyQt6.QtGui import QMouseEvent, QCursor
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QCheckBox, QLabel, QLineEdit
 
 from cockpit.services.views import ChecklistRowView, ChecklistRowKey, ChecklistRowKind
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class ChecklistRow(QWidget):
@@ -96,17 +99,22 @@ class ChecklistRow(QWidget):
 
     def set_selected(self, selected: bool) -> None:
         self.setProperty("selected", selected)
-        self.style().unpolish(self)
-        self.style().polish(self)
+        for w in [self, self.primary_lbl, self.secondary_lbl]:
+            w.style().unpolish(w)
+            w.style().polish(w)
 
     def cleanup(self) -> None:
         if self._row.key.kind == ChecklistRowKind.THT:
             self.primary_lbl.removeEventFilter(self)
         try: self.checkbox.toggled.disconnect()
-        except: pass
+        except Exception:
+            logger.exception('Exception caught in checklist_row')
         try: self.toggle_requested.disconnect()
-        except: pass
+        except Exception:
+            logger.exception('Exception caught in checklist_row')
         try: self.body_clicked.disconnect()
-        except: pass
+        except Exception:
+            logger.exception('Exception caught in checklist_row')
         try: self.mpn_clicked.disconnect()
-        except: pass
+        except Exception:
+            logger.exception('Exception caught in checklist_row')

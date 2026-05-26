@@ -15,7 +15,7 @@ class ShipDateField(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
-        self._label = QLabel("Ship Date:")
+        self._label = QLabel("Ship Date")
         layout.addWidget(self._label)
         
         self._editor = QDateEdit()

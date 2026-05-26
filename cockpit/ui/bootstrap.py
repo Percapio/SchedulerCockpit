@@ -4,6 +4,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import sqlite3
 import sys
+import pathlib
 from dataclasses import dataclass
 
 from cockpit.persistence.connection import open_connection
@@ -28,6 +29,18 @@ from cockpit.services.layout_query import LayoutQueryService
 from cockpit.services.views import ReconciliationReport
 from cockpit.layout.renderer import PdfRenderer
 from cockpit.ingestion.hashing import sha256_hex
+
+def _resolve_install_dir() -> pathlib.Path:
+    """
+    Intent: Locate the directory that contains cockpit.exe (frozen) or the
+            project root (development).
+    Post:   Returned path exists. When frozen, equals pathlib.Path(sys.executable).parent.
+            When unfrozen, equals project root (parent of the cockpit/ package).
+    """
+    from cockpit.ui.runtime import runtime_kind, RuntimeKind
+    if runtime_kind() == RuntimeKind.FROZEN_ONEDIR:
+        return pathlib.Path(sys.executable).parent
+    return pathlib.Path(__file__).resolve().parents[2]
 
 from .config import AppConfig
 
@@ -70,6 +83,27 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     stderr_handler.setFormatter(formatter)
     stderr_handler.setLevel(logging.WARNING)
     logger.addHandler(stderr_handler)
+
+    install_dir = _resolve_install_dir()
+    install_log_path = install_dir / "log.txt"
+    try:
+        install_handler = RotatingFileHandler(
+            install_log_path, maxBytes=10 * 1024 * 1024, backupCount=2, encoding="utf-8"
+        )
+        install_handler.setFormatter(formatter)
+        logger.addHandler(install_handler)
+        logger.info("Duplicate log destination: %s", install_log_path)
+    except OSError as e:
+        # Install dir may be read-only (e.g. Program Files without elevation)
+        logger.warning("Could not open install-folder log at %s: %s — primary log at %s", install_log_path, e, config.log_path)
+
+    from cockpit.ui.runtime import runtime_kind
+    from cockpit._build_info import get_build_info
+    build_info = get_build_info()
+    
+    logging.getLogger("cockpit").info("Primary log: %s", config.log_path)
+    logging.getLogger("cockpit").info("Build info: version=%s commit=%s runtime=%s",
+                                       build_info.version, build_info.commit, runtime_kind().value)
 
     logging.getLogger("cockpit").info("Bootstrapping Cockpit application...")
     

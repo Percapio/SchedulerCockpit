@@ -10,6 +10,9 @@ from PyQt6.QtWidgets import (
 from cockpit.services.views import ActiveAuditView, SplitSummary
 from cockpit.services.split import AuditSplitService
 from cockpit.persistence.errors import DuplicateIdentityError
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class SplitDialog(QDialog):
@@ -140,12 +143,14 @@ class SplitDialog(QDialog):
             )
             self.accept()
         except DuplicateIdentityError:
+            logger.exception('Exception caught in split_dialog')
             self.setCursor(Qt.CursorShape.ArrowCursor)
             self._error_label.setText("Suffix already in use")
             self._error_label.show()
             self._sibling_suffix_field.setFocus()
             self.submit_btn.setEnabled(True)
         except Exception as e:
+            logger.exception('Exception caught in split_dialog')
             self.setCursor(Qt.CursorShape.ArrowCursor)
             # Re-raise so the Dashboard can catch it and show ErrorDialog,
             # or rather, wait. The dialog's parent is the Dashboard, if this

@@ -5,6 +5,9 @@ import pathlib
 from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.persistence.types import SourceFile
 from cockpit.services.views import ReapReport
+import logging
+logger = logging.getLogger(__name__)
+
 
 
 class StorageReaper:
@@ -28,9 +31,11 @@ class StorageReaper:
                     path.unlink()
                     deleted_paths.append(path)
                 except FileNotFoundError:
+                    logger.exception('Exception caught in storage_reaper')
                     # Already gone, treat as success
                     deleted_paths.append(path)
                 except OSError as e:
+                    logger.exception('Exception caught in storage_reaper')
                     failed_paths.append((path, str(e)))
             else:
                 retained_files.append((path, sf.file_hash))
@@ -41,6 +46,7 @@ class StorageReaper:
                     d.rmdir()
                     pruned_directories.append(d)
                 except OSError:
+                    logger.exception('Exception caught in storage_reaper')
                     # Fails if not empty, expected behavior
                     pass
 

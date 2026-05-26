@@ -159,6 +159,9 @@ class Theme:
     def canvas_zoom_step(self) -> float:
         return float(self._canvas['zoom']['step'])
 
+    def canvas_zoom_render_multiplier(self) -> float:
+        return float(self._canvas['zoom']['render_multiplier'])
+
     def bom_chip_flow_spacing(self) -> int:
         return int(self._bom_panel['chip']['flow_spacing_px'])
 
@@ -317,6 +320,15 @@ class ThemeLoader:
             raise ConfigurationError("/canvas/zoom/max_scale", "INV-Z5", "must be > 1.0 and <= 16.0")
         if not (1.0 < zm["step"] <= 2.0):
             raise ConfigurationError("/canvas/zoom/step", "INV-Z6", "must be > 1.0 and <= 2.0")
+            
+        rm = zm["render_multiplier"]
+        ms = zm["max_scale"]
+        if rm < 1.0 or rm > ms:
+            raise ConfigurationError(
+                pointer="/canvas/zoom/render_multiplier",
+                rule="INV-Z7",
+                detail=f"render_multiplier={rm} must be in [1.0, {ms}]"
+            )
             
         for role, entry in cv["colour"].items():
             if "alpha" in entry:

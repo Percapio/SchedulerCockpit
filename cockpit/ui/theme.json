@@ -62,7 +62,8 @@
     "zoom": {
       "min_scale": 1.0,
       "max_scale": 8.0,
-      "step": 1.25
+      "step": 1.25,
+      "render_multiplier": 3.0
     },
     "scalar": {
       "highlight_scale": 2.0

@@ -41,7 +41,7 @@ def valid_theme_data():
             },
             "pen_width": { "highlight": 3 },
             "z_order": { "base_pixmap": 0.0, "dim": 1.0, "highlight": 2.0 },
-            "zoom": { "min_scale": 1.0, "max_scale": 8.0, "step": 1.25 },
+            "zoom": { "min_scale": 1.0, "max_scale": 8.0, "step": 1.25, "render_multiplier": 3.0 },
             "scalar": { "highlight_scale": 2.0 },
             "hint_label": { "padding_px": 4, "border_width_px": 1 }
         },
@@ -440,3 +440,57 @@ def test_Theme_ForTestingPartialSection_FillsOtherSectionsWithDefaults():
     assert theme._base == {}
     assert theme._left_panel == {}
     assert theme.canvas_colour("dim").name() == "#000000"
+
+def test_Theme_CanvasZoomRenderMultiplier_ReturnsConfiguredValue():
+    theme = Theme.for_testing(canvas={"zoom": {"render_multiplier": 4.5}})
+    assert theme.canvas_zoom_render_multiplier() == 4.5
+
+def test_ThemeLoader_MissingRenderMultiplier_RaisesConfigurationError(tmp_path, valid_theme_data):
+    schema_path = pathlib.Path(__file__).parent.parent.parent / "cockpit" / "ui" / "theme.schema.json"
+    del valid_theme_data["canvas"]["zoom"]["render_multiplier"]
+    theme_path = tmp_path / "theme.json"
+    with open(theme_path, "w") as f:
+        json.dump(valid_theme_data, f)
+        
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.load(theme_path, schema_path)
+    assert exc.value.rule == "json_schema_validation"
+
+def test_ThemeLoader_RenderMultiplierBelowOne_RaisesConfigurationErrorJsonSchemaValidation(tmp_path, valid_theme_data):
+    schema_path = pathlib.Path(__file__).parent.parent.parent / "cockpit" / "ui" / "theme.schema.json"
+    valid_theme_data["canvas"]["zoom"]["render_multiplier"] = 0.5
+    theme_path = tmp_path / "theme.json"
+    with open(theme_path, "w") as f:
+        json.dump(valid_theme_data, f)
+        
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.load(theme_path, schema_path)
+    assert exc.value.rule == "json_schema_validation"
+
+def test_ThemeLoader_RenderMultiplierAboveSixteen_RaisesConfigurationErrorJsonSchemaValidation(tmp_path, valid_theme_data):
+    schema_path = pathlib.Path(__file__).parent.parent.parent / "cockpit" / "ui" / "theme.schema.json"
+    valid_theme_data["canvas"]["zoom"]["render_multiplier"] = 20.0
+    theme_path = tmp_path / "theme.json"
+    with open(theme_path, "w") as f:
+        json.dump(valid_theme_data, f)
+        
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.load(theme_path, schema_path)
+    assert exc.value.rule == "json_schema_validation"
+
+def test_ThemeLoader_RenderMultiplierExceedsMaxScale_RaisesConfigurationErrorInvZ7(valid_theme_data):
+    valid_theme_data["canvas"]["zoom"]["render_multiplier"] = 10.0
+    valid_theme_data["canvas"]["zoom"]["max_scale"] = 8.0
+    with pytest.raises(ConfigurationError) as exc:
+        ThemeLoader.validate_structural_invariants(valid_theme_data)
+    assert exc.value.rule == "INV-Z7"
+
+def test_ThemeLoader_RenderMultiplierEqualsMaxScale_LoadsSuccessfully(valid_theme_data):
+    valid_theme_data["canvas"]["zoom"]["render_multiplier"] = 8.0
+    valid_theme_data["canvas"]["zoom"]["max_scale"] = 8.0
+    ThemeLoader.validate_structural_invariants(valid_theme_data)
+
+def test_ThemeLoader_RenderMultiplierEqualsOne_LoadsSuccessfully(valid_theme_data):
+    valid_theme_data["canvas"]["zoom"]["render_multiplier"] = 1.0
+    valid_theme_data["canvas"]["zoom"]["max_scale"] = 8.0
+    ThemeLoader.validate_structural_invariants(valid_theme_data)

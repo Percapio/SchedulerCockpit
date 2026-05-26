@@ -125,11 +125,12 @@
         "zoom": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["min_scale", "max_scale", "step"],
+          "required": ["min_scale", "max_scale", "step", "render_multiplier"],
           "properties": {
             "min_scale": { "type": "number", "minimum": 0.01, "maximum": 1.0 },
             "max_scale": { "type": "number", "exclusiveMinimum": 1.0, "maximum": 16.0 },
-            "step": { "type": "number", "exclusiveMinimum": 1.0, "maximum": 2.0 }
+            "step": { "type": "number", "exclusiveMinimum": 1.0, "maximum": 2.0 },
+            "render_multiplier": { "type": "number", "minimum": 1.0, "maximum": 16.0 }
           }
         },
         "scalar": {

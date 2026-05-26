@@ -12,7 +12,7 @@ from .results import BomItem, BomResult
 # ref-des cell but are not themselves designators.
 _ANNOTATION_RE = re.compile(r'\*[^*]*\*')
 
-REFDES_TOKEN_REGEX = re.compile(r"^[A-Z0-9]+(-[A-Z0-9]+)*$")
+REFDES_TOKEN_REGEX = re.compile(r"^[A-Z0-9_]+(-[A-Z0-9_]+)*$")
 
 CANONICAL_HEADER = [
     "Find#", "PartNum", "Count", "MSL level", "Date code", "Baked date", 

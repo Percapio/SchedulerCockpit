@@ -13,6 +13,7 @@ from cockpit.services.layout_query import LayoutQueryService, AuditBomRowView
 from cockpit.persistence.errors import PersistenceError
 from cockpit.ui.theme import Theme
 from cockpit.ui.widgets.flow_layout import FlowLayout
+from .qt_lifecycle import purge_widget_subtree, _drain_layout_widgets
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +152,18 @@ class AuditBomRow(QFrame):
             chip.style().unpolish(chip)
             chip.style().polish(chip)
 
+    def cleanup(self) -> None:
+        self.mpn_label.removeEventFilter(self._mpn_filter)
+        try: self.mpn_label.customContextMenuRequested.disconnect()
+        except: pass
+        for chip in self.chips.values():
+            try: chip.clicked.disconnect()
+            except: pass
+        try: self.mpn_label_clicked.disconnect()
+        except: pass
+        try: self.refdes_chip_clicked.disconnect()
+        except: pass
+
 
 class AuditBomPanel(QScrollArea):
     bom_mpn_toggled = pyqtSignal(str)
@@ -237,10 +250,9 @@ class AuditBomPanel(QScrollArea):
             row.set_refdes_selected(self._selected_ref_des)
 
     def _clear_layout(self) -> None:
-        while self.layout.count():
-            item = self.layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        prior_children = _drain_layout_widgets(self.layout)
+        for child in prior_children:
+            purge_widget_subtree(child)
 
     def mousePressEvent(self, ev: QMouseEvent) -> None:
         if ev.button() == Qt.MouseButton.LeftButton:

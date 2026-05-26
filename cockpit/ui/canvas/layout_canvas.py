@@ -117,6 +117,7 @@ class LayoutCanvas(QWidget):
         self._last_intent: SelectionIntent | None = None
         self._last_resolved: ResolvedSelection | None = None
         self._current_scale = 1.0
+        self._pixmap_cache: dict[int, tuple[int, QPixmap]] = {}
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -169,12 +170,13 @@ class LayoutCanvas(QWidget):
         layout.addWidget(self._page_switcher)
         layout.addWidget(self._stacked)
         
-        self._resize_debouncer = QTimer()
+        self._resize_debouncer = QTimer(self)
         self._resize_debouncer.setSingleShot(True)
         self._resize_debouncer.setInterval(200)
         self._resize_debouncer.timeout.connect(self._render_current_page)
 
     def load(self, audit_id: int) -> None:
+        self._pixmap_cache.clear()
         self._last_intent = None
         self._last_resolved = None
         self._apply_selection(clear=True)
@@ -222,49 +224,67 @@ class LayoutCanvas(QWidget):
             
         self._pending_render = False
 
-        try:
-            rendered = self._pdf_renderer.render_page_png(
-                self._current_context.pdf_path,
-                self._current_page_index,
-                target_pixel_height=target_h,
-            )
-        except MalformedPdfError as e:
-            payload = FailurePayload(
-                exception_class="MalformedPdfError",
-                title="Could not render assembly drawing",
-                summary=str(e),
-                detail=[],
-                reason_code=e.reason
-            )
-            self._stacked.setCurrentWidget(self._error_placeholder)
-            self._error_placeholder.set_text(f"Could not load assembly drawing: {payload.summary}")
-            self.error_occurred.emit(payload)
-            return
-            
-        pixmap = QPixmap()
-        ok = pixmap.loadFromData(rendered.png_bytes, format="PNG")
-        if not ok:
-            payload = FailurePayload(
-                exception_class="QPixmapDecodeFailure",
-                title="Could not display assembly drawing",
-                summary="Rendered page bytes failed to decode as PNG.",
-                detail=[("page_index", str(self._current_page_index)),
-                        ("byte_length", str(len(rendered.png_bytes))),
-                        ("pixel_width",  str(rendered.pixel_width)),
-                        ("pixel_height", str(rendered.pixel_height))],
-                reason_code="PIXMAP_DECODE_FAILED",
-            )
-            self._stacked.setCurrentWidget(self._error_placeholder)
-            self._error_placeholder.set_text(f"Could not display assembly drawing: {payload.summary}")
-            self.error_occurred.emit(payload)
-            return
+        m = self._theme.canvas_zoom_render_multiplier()
+        render_h = int(m * target_h)
+
+        cached = self._pixmap_cache.get(self._current_page_index)
+        if cached is not None and cached[0] == render_h:
+            pixmap = cached[1]
+            rendered_width = pixmap.width()
+            rendered_height = pixmap.height()
+        else:
+            try:
+                rendered = self._pdf_renderer.render_page_png(
+                    self._current_context.pdf_path,
+                    self._current_page_index,
+                    target_pixel_height=render_h,
+                )
+            except MalformedPdfError as e:
+                payload = FailurePayload(
+                    exception_class="MalformedPdfError",
+                    title="Could not render assembly drawing",
+                    summary=str(e),
+                    detail=[],
+                    reason_code=e.reason
+                )
+                self._stacked.setCurrentWidget(self._error_placeholder)
+                self._error_placeholder.set_text(f"Could not load assembly drawing: {payload.summary}")
+                self.error_occurred.emit(payload)
+                return
+                
+            pixmap = QPixmap()
+            ok = pixmap.loadFromData(rendered.png_bytes, format="PNG")
+            if not ok:
+                payload = FailurePayload(
+                    exception_class="QPixmapDecodeFailure",
+                    title="Could not display assembly drawing",
+                    summary="Rendered page bytes failed to decode as PNG.",
+                    detail=[("page_index", str(self._current_page_index)),
+                            ("byte_length", str(len(rendered.png_bytes))),
+                            ("pixel_width",  str(rendered.pixel_width)),
+                            ("pixel_height", str(rendered.pixel_height))],
+                    reason_code="PIXMAP_DECODE_FAILED",
+                )
+                self._stacked.setCurrentWidget(self._error_placeholder)
+                self._error_placeholder.set_text(f"Could not display assembly drawing: {payload.summary}")
+                self.error_occurred.emit(payload)
+                return
+                
+            self._pixmap_cache[self._current_page_index] = (render_h, pixmap)
+            rendered_width = rendered.pixel_width
+            rendered_height = rendered.pixel_height
 
         # Restore to canvas if it was in error state before
         if self._stacked.currentWidget() == self._error_placeholder:
             self._stacked.setCurrentWidget(self._canvas_container)
 
+        # Explicitly release the old pixmap memory before assigning the new one
+        self._base_pixmap_item.setPixmap(QPixmap())
+        
         self._base_pixmap_item.setPixmap(pixmap)
-        self._scene.setSceneRect(0, 0, rendered.pixel_width, rendered.pixel_height)
+        self._base_pixmap_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
+        
+        self._scene.setSceneRect(0, 0, rendered_width, rendered_height)
         self._dim_item.setRect(self._scene.sceneRect())
         self._graphics_view.fitInView(self._base_pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
         self._current_scale = 1.0

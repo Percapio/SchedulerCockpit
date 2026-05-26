@@ -5,6 +5,7 @@ from PyQt6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QLabel
 
 from cockpit.services.views import ActiveAuditView, ChecklistRowView, ChecklistRowKey
 from .checklist_row import ChecklistRow
+from .qt_lifecycle import purge_widget_subtree, _drain_layout_widgets
 
 
 class ChecklistView(QScrollArea):
@@ -48,10 +49,9 @@ class ChecklistView(QScrollArea):
         return None
 
     def populate_section(self, views: list[ChecklistRowView], header_text: str) -> None:
-        while self._layout.count():
-            item = self._layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
+        prior_children = _drain_layout_widgets(self._layout)
+        for child in prior_children:
+            purge_widget_subtree(child)
                 
         self._index.clear()
         

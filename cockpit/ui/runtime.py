@@ -49,3 +49,16 @@ def bundled_resource(relative_path: str) -> pathlib.Path:
     if not path.exists():
         raise ResourceNotFoundError(f"Bundled resource not found: {path}")
     return path
+
+
+def install_dir() -> pathlib.Path:
+    """
+    Intent: Locate the directory containing Cockpit.exe (frozen) or the
+            project root (development).
+    Post:   Returned path exists.
+            Frozen build  -> pathlib.Path(sys.executable).parent
+            Dev (unfrozen) -> pathlib.Path(__file__).resolve().parents[2]
+    """
+    if runtime_kind() == RuntimeKind.FROZEN_ONEDIR:
+        return pathlib.Path(sys.executable).parent
+    return pathlib.Path(__file__).resolve().parents[2]

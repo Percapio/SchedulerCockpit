@@ -30,17 +30,7 @@ from cockpit.services.views import ReconciliationReport
 from cockpit.layout.renderer import PdfRenderer
 from cockpit.ingestion.hashing import sha256_hex
 
-def _resolve_install_dir() -> pathlib.Path:
-    """
-    Intent: Locate the directory that contains cockpit.exe (frozen) or the
-            project root (development).
-    Post:   Returned path exists. When frozen, equals pathlib.Path(sys.executable).parent.
-            When unfrozen, equals project root (parent of the cockpit/ package).
-    """
-    from cockpit.ui.runtime import runtime_kind, RuntimeKind
-    if runtime_kind() == RuntimeKind.FROZEN_ONEDIR:
-        return pathlib.Path(sys.executable).parent
-    return pathlib.Path(__file__).resolve().parents[2]
+from cockpit.ui.runtime import install_dir
 
 from .config import AppConfig
 
@@ -84,8 +74,7 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     stderr_handler.setLevel(logging.WARNING)
     logger.addHandler(stderr_handler)
 
-    install_dir = _resolve_install_dir()
-    install_log_path = install_dir / "log.txt"
+    install_log_path = install_dir() / "log.txt"
     try:
         install_handler = RotatingFileHandler(
             install_log_path, maxBytes=10 * 1024 * 1024, backupCount=2, encoding="utf-8"
@@ -105,6 +94,15 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     logging.getLogger("cockpit").info("Build info: version=%s commit=%s runtime=%s",
                                        build_info.version, build_info.commit, runtime_kind().value)
 
+    # Format the probe history
+    probe_summary = []
+    for p in config.probe_history:
+        if p.success:
+            probe_summary.append(f"{p.candidate_label} -> OK")
+        else:
+            probe_summary.append(f"{p.candidate_label} -> {p.error}")
+    
+    logging.getLogger("cockpit").info("Application data root: %s (Probe history: %s)", config.app_data_root.parent, ", ".join(probe_summary))
     logging.getLogger("cockpit").info("Bootstrapping Cockpit application...")
     
     conn = open_connection(config.db_path)

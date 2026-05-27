@@ -4,6 +4,21 @@ Cockpit is a local desktop app for electronics manufacturing. You drop three fil
 
 ---
 
+Cockpit runs out of the box with zero installation required, but relies on your personal AppData folder to store audits.
+
+### Running on restricted machines
+
+If you are running Cockpit on a heavily restricted work machine where writing to the standard application data folder is denied by policy, Cockpit will automatically fall back to storing your data in a local `data/` folder directly next to the `Cockpit.exe` application file (or in the project root if running from source).
+
+To manually override where Cockpit stores its data (for example, to store audits on a portable drive), you can set the `COCKPIT_APP_DATA` environment variable before launching the application:
+
+```cmd
+set COCKPIT_APP_DATA=D:\MyCustomFolder
+Cockpit.exe
+```
+
+---
+
 ## Table of Contents
 
 1. [What it does](#what-it-does)

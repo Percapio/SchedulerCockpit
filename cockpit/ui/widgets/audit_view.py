@@ -91,6 +91,7 @@ class AuditView(QWidget):
         # Connect Dashboard to Coordinator
         self._dashboard.tht_body_clicked.connect(self._coordinator.on_tht_body_clicked)
         self._dashboard.tht_mpn_clicked.connect(self._coordinator.on_tht_mpn_clicked)
+        self._dashboard.tht_refdes_clicked.connect(self._coordinator.on_tht_refdes_clicked)
         self._dashboard.empty_clicked.connect(self._coordinator.on_empty_clicked)
         self._dashboard.esc_pressed.connect(self._coordinator.on_escape_pressed)
         

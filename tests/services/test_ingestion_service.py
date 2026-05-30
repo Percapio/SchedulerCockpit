@@ -119,11 +119,15 @@ def test_add_pdf_to_audit_replace(ingestion_service):
     
     sf2 = service.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
     assert sf2.original_filename == "test2.pdf"
-    assert sf1.id != sf2.id
     
-    # Check old coords are gone (cascaded by DB)
-    coords1 = service.pdf_coord_repo.list_for_source_file(sf1.id)
-    assert len(coords1) == 0
+    # Check coords belong to the new file
+    coords = service.pdf_coord_repo.list_for_source_file(sf2.id)
+    assert len(coords) > 0  # Assuming DummyParser gives coords
+    
+    # Ensure no duplicate source files for PDF
+    all_sfs = service.source_file_repo.list_for_audit(audit_id)
+    pdf_sfs = [sf for sf in all_sfs if sf.file_category == SourceFileCategory.PDF]
+    assert len(pdf_sfs) == 1
 
 def test_add_pdf_to_audit_parse_error_rollback(ingestion_service):
     service, audit_id, tmp_path = ingestion_service

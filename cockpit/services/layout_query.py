@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class AuditBomRowView:
+    find_number: int
     component_mpn: str
     description: str | None
     mount_type: str
@@ -63,25 +64,29 @@ class LayoutQueryService:
 
         bom_components = self.bom_component_repo.list_for_source_file(bom_sf.id)
         
-        # Group by MPN
+        # Group by MPN, filter SMT
         grouped = {}
         for c in bom_components:
+            if c.mount_type != 'S':
+                continue
             if c.component_mpn not in grouped:
                 grouped[c.component_mpn] = {
                     "description": c.description,
                     "mount_type": c.mount_type,
-                    "ref_des_list": []
+                    "ref_des_list": [],
+                    "find_number": c.find_number
                 }
             grouped[c.component_mpn]["ref_des_list"].append(c.ref_des)
             
-        # Build views, sorting by MPN and then RefDes
+        # Build views, sorting by Find#
         views = []
-        for mpn in sorted(grouped.keys()):
+        for mpn, data in sorted(grouped.items(), key=lambda item: item[1]["find_number"]):
             views.append(AuditBomRowView(
+                find_number=data["find_number"],
                 component_mpn=mpn,
-                description=grouped[mpn]["description"],
-                mount_type=grouped[mpn]["mount_type"],
-                ref_des_list=tuple(sorted(grouped[mpn]["ref_des_list"]))
+                description=data["description"],
+                mount_type=data["mount_type"],
+                ref_des_list=tuple(sorted(data["ref_des_list"]))
             ))
             
         return tuple(views)

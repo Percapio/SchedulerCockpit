@@ -41,6 +41,7 @@ class Dashboard(QWidget):
     
     tht_body_clicked = pyqtSignal(object)
     tht_mpn_clicked = pyqtSignal(object)
+    tht_refdes_clicked = pyqtSignal(str)
     empty_clicked = pyqtSignal()
     esc_pressed = pyqtSignal()
 
@@ -86,6 +87,7 @@ class Dashboard(QWidget):
         self.checklist_tht.toggle_requested.connect(self._on_row_toggle)
         self.checklist_tht.body_clicked.connect(self.tht_body_clicked.emit)
         self.checklist_tht.mpn_clicked.connect(self.tht_mpn_clicked.emit)
+        self.checklist_tht.refdes_chip_clicked.connect(self.tht_refdes_clicked.emit)
         self.checklist_tht.empty_space_clicked.connect(self.empty_clicked.emit)
         self.checklist_tht.setMinimumHeight(80)
         self._checklist_splitter.addWidget(self.checklist_tht)

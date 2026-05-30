@@ -8,6 +8,7 @@ from cockpit.persistence.types import ActiveAuditDraft
 
 @dataclass(frozen=True)
 class BomItem:
+    find_number: int                    # Find# column (row[0]); BOM line ordinal
     component_mpn: str                  # PartNum column, stripped
     description: str | None             # Description column
     ref_des_raw: str | None             # Ref_Des column (original text)

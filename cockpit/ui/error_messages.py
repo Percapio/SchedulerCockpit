@@ -72,10 +72,20 @@ def render(exc: Exception) -> FailurePayload:
         )
 
     if isinstance(exc, MalformedBomError):
+        if exc.reason == "MISSING_FIND_NUMBER":
+            title = "Missing Find#"
+            summary = "Audit BOM row is missing a Find# value. Every BOM line must have a Find# number."
+        elif exc.reason == "INVALID_FIND_NUMBER":
+            title = "Invalid Find#"
+            summary = "Audit BOM Find# value is not a whole number. Find# must be an integer line number."
+        else:
+            title = "Audit BOM is malformed"
+            summary = "The Audit BOM file structure does not match expectations."
+            
         return FailurePayload(
             exception_class=exc_class,
-            title="Audit BOM is malformed",
-            summary="The Audit BOM file structure does not match expectations.",
+            title=title,
+            summary=summary,
             detail=[(k, str(v)) for k, v in exc.detail.items()],
             reason_code=exc.reason
         )

@@ -1,6 +1,7 @@
 import pytest
 from PyQt6.QtWidgets import QWidget, QFrame, QGridLayout
-from cockpit.ui.widgets.audit_bom_panel import AuditBomRow, RefDesChip
+from cockpit.ui.widgets.audit_bom_panel import AuditBomRow
+from cockpit.ui.widgets.refdes_chip import RefDesChip
 from cockpit.services.layout_query import AuditBomRowView
 from cockpit.ui.theme import Theme
 
@@ -11,10 +12,11 @@ def theme():
 @pytest.fixture
 def sample_view(qapp) -> AuditBomRowView:
     return AuditBomRowView(
+        find_number=1,
         component_mpn="CAP-0402-100NF",
-        ref_des_list=["C1", "C2", "C3"],
-        mount_type="SMD",
-        description="Capacitor 100nF 50V 0402"
+        description="Capacitor 100nF 50V 0402",
+        mount_type="S",
+        ref_des_list=("C1", "C2", "C3")
     )
 
 def test_AuditBomRow_Init_BaseClassIsQFrame(sample_view, theme):
@@ -35,36 +37,42 @@ def test_AuditBomRow_Init_LayoutIsQGridLayoutTwoByTwo(sample_view, theme):
     layout = row.layout()
     assert isinstance(layout, QGridLayout)
     assert layout.rowCount() == 2
-    assert layout.columnCount() == 2
+    assert layout.columnCount() == 3
 
-def test_AuditBomRow_Init_MpnCellAtGridPositionZeroZero(sample_view, theme):
+def test_AuditBomRow_Init_FindCellAtGridPositionZeroZero(sample_view, theme):
     row = AuditBomRow(sample_view, theme)
     layout = row.layout()
     item = layout.itemAtPosition(0, 0)
     assert item is not None
-    assert item.widget().property("class") == "cell-mpn"
+    assert item.widget().property("class") == "cell-find"
 
-def test_AuditBomRow_Init_RefdesCellAtGridPositionZeroOne(sample_view, theme):
+def test_AuditBomRow_Init_MpnCellAtGridPositionZeroOne(sample_view, theme):
     row = AuditBomRow(sample_view, theme)
     layout = row.layout()
     item = layout.itemAtPosition(0, 1)
     assert item is not None
+    assert item.widget().property("class") == "cell-mpn"
+
+def test_AuditBomRow_Init_RefdesCellAtGridPositionZeroTwo(sample_view, theme):
+    row = AuditBomRow(sample_view, theme)
+    layout = row.layout()
+    item = layout.itemAtPosition(0, 2)
+    assert item is not None
     assert item.widget().property("class") == "cell-refdes"
 
-def test_AuditBomRow_Init_DescCellAtGridPositionOneZeroSpansTwoColumns(sample_view, theme):
+def test_AuditBomRow_Init_DescCellAtGridPositionOneZeroSpansThreeColumns(sample_view, theme):
     row = AuditBomRow(sample_view, theme)
     layout = row.layout()
     item = layout.itemAtPosition(1, 0)
     assert item is not None
     assert item.widget().property("class") == "cell-description"
     
-    # PyQt6 QGridLayout API allows getting rowSpan and columnSpan by querying the layout layout
     idx = layout.indexOf(item.widget())
     r, c, rs, cs = layout.getItemPosition(idx)
     assert r == 1
     assert c == 0
     assert rs == 1
-    assert cs == 2
+    assert cs == 3
 
 def test_AuditBomRow_Init_MpnCellHasClassCellMpn(sample_view, theme):
     row = AuditBomRow(sample_view, theme)
@@ -100,7 +108,6 @@ def test_AuditBomRow_SetMpnSelectedFalse_SelectedPropertyFalseAndStyleRepolished
 def test_AuditBomRow_SetRefdesSelectedTargetsExactlyOneChip_TargetSelectedOthersDeselected(sample_view, theme):
     row = AuditBomRow(sample_view, theme)
     
-    # Simulate selecting one
     row.chips["C1"].setProperty("selected", True)
     
     assert row.chips["C1"].property("selected") is True
@@ -120,19 +127,15 @@ def test_AuditBomRow_SetRefdesSelectedNone_AllChipsDeselected(sample_view, theme
 def test_AuditBomRow_GridColumnStretchMpnIsTwo(sample_view, theme):
     row = AuditBomRow(sample_view, theme)
     layout = row.layout()
-    assert layout.columnStretch(0) == 2
+    assert layout.columnStretch(1) == 2
 
 def test_AuditBomRow_GridColumnStretchRefdesIsThree(sample_view, theme):
     row = AuditBomRow(sample_view, theme)
     layout = row.layout()
-    assert layout.columnStretch(1) == 3
+    assert layout.columnStretch(2) == 3
 
-def test_AuditBomRow_DescriptionWithMountType_ContainsMountTypePrefix(sample_view, theme):
-    row = AuditBomRow(sample_view, theme)
-    assert "[SMD] Capacitor" in row.desc_label.text()
-
-def test_AuditBomRow_DescriptionEmptyAndMountTypeEmpty_DescLabelIsEmptyString(theme):
-    view = AuditBomRowView("MPN", [], "", "")
+def test_AuditBomRow_DescriptionEmpty_DescLabelIsEmptyString(theme):
+    view = AuditBomRowView(1, "MPN", "", "S", ())
     row = AuditBomRow(view, theme)
     assert row.desc_label.text() == ""
 
@@ -152,6 +155,3 @@ def test_RefDesChip_LeftClick_EmitsClickedSignalWithRefDes(qapp, qtbot):
         ev = QMouseEvent(QEvent.Type.MouseButtonPress, QPointF(0,0), Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
         chip.mousePressEvent(ev)
     assert blocker.args == ["C1"]
-
-# The panel level tests would normally go here, but Phase 14 mentions them reasserting Phase 11 contracts.
-# Since audit_bom_panel.py defines AuditBomPanel which is what's tested here. We will just test the basic row structure.

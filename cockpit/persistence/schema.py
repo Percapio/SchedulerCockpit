@@ -1,10 +1,15 @@
 """Schema definitions and migrations."""
 
+import json
+import pathlib
 import sqlite3
+import logging
 from .clock import utcnow
-from .errors import SchemaInitializationError, SchemaMismatch
+from .errors import SchemaInitializationError, SchemaMismatch, BackfillSourceMissing, PersistenceError
 from ..protocols import ParserRegistry
+from ..ingestion.errors import MalformedBomError
 
+logger = logging.getLogger(__name__)
 
 DDL_STATEMENTS = [
     """
@@ -17,12 +22,12 @@ DDL_STATEMENTS = [
     """
     CREATE TABLE IF NOT EXISTS active_audits (
         id INTEGER PRIMARY KEY,
-        part_number VARCHAR NOT NULL,
+        part_number TEXT NOT NULL,
         schedule_job_id INTEGER,
-        work_order_ref VARCHAR NOT NULL,
-        split_suffix VARCHAR NOT NULL DEFAULT '',
+        work_order_ref TEXT NOT NULL,
+        split_suffix TEXT NOT NULL DEFAULT '',
         quantity INTEGER NOT NULL,
-        status VARCHAR NOT NULL CHECK(status IN ('Pending','InProgress','Completed')),
+        status TEXT NOT NULL CHECK(status IN ('Pending','InProgress','Completed')),
         split_reason TEXT,
         traveler_metadata TEXT,
         created_at DATETIME NOT NULL,
@@ -34,10 +39,10 @@ DDL_STATEMENTS = [
     CREATE TABLE IF NOT EXISTS source_files (
         id INTEGER PRIMARY KEY,
         audit_id INTEGER NOT NULL,
-        file_category VARCHAR NOT NULL CHECK(file_category IN ('BOM','Traveler','Notes')),
-        original_filename VARCHAR NOT NULL,
-        local_storage_path VARCHAR NOT NULL,
-        file_hash VARCHAR NOT NULL,
+        file_category TEXT NOT NULL CHECK(file_category IN ('BOM','Traveler','Notes','PDF')),
+        original_filename TEXT NOT NULL,
+        local_storage_path TEXT NOT NULL,
+        file_hash TEXT NOT NULL,
         ingested_at DATETIME NOT NULL,
         FOREIGN KEY(audit_id) REFERENCES active_audits(id) ON DELETE CASCADE
     );
@@ -47,10 +52,9 @@ DDL_STATEMENTS = [
         id INTEGER PRIMARY KEY,
         audit_id INTEGER NOT NULL,
         source_file_id INTEGER,
-        component_mpn VARCHAR NOT NULL,
+        component_mpn TEXT NOT NULL,
         description TEXT,
         is_verified BOOLEAN NOT NULL DEFAULT 0,
-        notes TEXT,
         FOREIGN KEY(audit_id) REFERENCES active_audits(id) ON DELETE CASCADE,
         FOREIGN KEY(source_file_id) REFERENCES source_files(id) ON DELETE CASCADE
     );
@@ -63,7 +67,6 @@ DDL_STATEMENTS = [
         row_sequence INTEGER NOT NULL,
         original_text TEXT NOT NULL,
         is_verified BOOLEAN NOT NULL DEFAULT 0,
-        notes TEXT,
         FOREIGN KEY(audit_id) REFERENCES active_audits(id) ON DELETE CASCADE,
         FOREIGN KEY(source_file_id) REFERENCES source_files(id) ON DELETE CASCADE
     );
@@ -77,33 +80,32 @@ DDL_STATEMENTS = [
 
 def migrate_to_v1(conn: sqlite3.Connection) -> None:
     """Initialize schema to v1 or verify existing schema is v1."""
-    
-    # First, check if schema_version exists. This query works safely
-    # whether we are in a transaction or not.
     cur = conn.cursor()
     try:
         cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
         row = cur.fetchone()
-        if row:
-            version = row["version"]
-            if version >= 1:
-                return  # v1 already applied; later migrations may have advanced the version
+        if row and row["version"] >= 1:
+            return
     except sqlite3.OperationalError:
-        # Table does not exist -> fresh DB
         pass
 
-    # No version row exists, so we migrate to v1.
-    # Note: Using connection as context manager manages transactions (BEGIN ... COMMIT/ROLLBACK)
-    # However, SQLite's isolation behavior can be finicky. We explicitly BEGIN IMMEDIATE.
     cur.execute("BEGIN IMMEDIATE")
     try:
+        try:
+            cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+            row = cur.fetchone()
+            if row and row["version"] >= 1:
+                cur.execute("COMMIT")
+                return
+        except sqlite3.OperationalError:
+            pass
+
         for stmt in DDL_STATEMENTS:
             try:
                 cur.execute(stmt)
             except sqlite3.Error as e:
                 raise SchemaInitializationError(statement=stmt, cause=e)
 
-        # Insert the version row
         now_iso = utcnow().isoformat()
         try:
             cur.execute(
@@ -119,27 +121,35 @@ def migrate_to_v1(conn: sqlite3.Connection) -> None:
         raise
 
 
-import json
-
 SCHEMA_V2_DDL: str = """
 ALTER TABLE active_audits ADD COLUMN ship_date TEXT NULL
 """
 
 def migrate_to_v2(conn: sqlite3.Connection) -> None:
     cur = conn.cursor()
-    cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=1)
+        
     row = cur.fetchone()
     if not row:
         raise SchemaMismatch(found_version=0, expected_version=1)
         
     version = row["version"]
     if version >= 2:
-        return  # v2 already applied; later migrations may have advanced the version
+        return
     if version < 1:
         raise SchemaMismatch(found_version=version, expected_version=1)
         
     cur.execute("BEGIN IMMEDIATE")
     try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+        row = cur.fetchone()
+        if row["version"] >= 2:
+            cur.execute("COMMIT")
+            return
+
         try:
             cur.execute(SCHEMA_V2_DDL)
         except sqlite3.Error as e:
@@ -148,14 +158,18 @@ def migrate_to_v2(conn: sqlite3.Connection) -> None:
         cur.execute("SELECT id, traveler_metadata FROM active_audits WHERE traveler_metadata IS NOT NULL")
         rows = cur.fetchall()
         for r in rows:
-            # hydrating_row_factory already deserialised traveler_metadata to a dict
-            payload = r["traveler_metadata"]
-            if "lead_time_weeks" in payload:
-                payload["lead_time_days"] = payload.pop("lead_time_weeks")
-                cur.execute(
-                    "UPDATE active_audits SET traveler_metadata = ? WHERE id = ?",
-                    (json.dumps(payload), r["id"])
-                )
+            try:
+                payload = r["traveler_metadata"]
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                if "lead_time_weeks" in payload:
+                    payload["lead_time_days"] = payload.pop("lead_time_weeks")
+                    cur.execute(
+                        "UPDATE active_audits SET traveler_metadata = ? WHERE id = ?",
+                        (json.dumps(payload), r["id"])
+                    )
+            except json.JSONDecodeError as e:
+                raise SchemaInitializationError(statement="v2 traveler_metadata parse", cause=e)
                 
         now_iso = utcnow().isoformat()
         cur.execute(
@@ -176,8 +190,11 @@ CREATE TABLE audit_bom_components (
     ref_des         TEXT    NOT NULL,
     mount_type      TEXT    NOT NULL CHECK (mount_type IN ('T','S')),
     description     TEXT    NULL,
+    find_number     INTEGER NOT NULL,
     UNIQUE (source_file_id, ref_des)
 )
+-- Note: uniqueness on (source_file_id, component_mpn) is NOT enforced by DB.
+-- find_number 1:1 with MPN relies entirely on audit_bom.parse DUPLICATE_MPN check.
 """
 
 SCHEMA_V3_DDL_PDF_COORDS: str = """
@@ -194,24 +211,16 @@ CREATE TABLE pdf_component_coords (
 )
 """
 
-SCHEMA_V3_DDL_SOURCE_FILES_REBUILD: str = """
-CREATE TABLE source_files_v3 (
-    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
-    audit_id           INTEGER NOT NULL REFERENCES active_audits(id) ON DELETE CASCADE,
-    file_category      TEXT    NOT NULL CHECK (file_category IN ('BOM','Traveler','Notes','PDF')),
-    original_filename  TEXT    NOT NULL,
-    local_storage_path TEXT    NOT NULL,
-    file_hash          TEXT    NOT NULL,
-    ingested_at        TEXT    NOT NULL
-)
-"""
-
 def migrate_to_v3(
     conn: sqlite3.Connection,
     parser_registry: ParserRegistry,
 ) -> None:
     cur = conn.cursor()
-    cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=2)
+        
     row = cur.fetchone()
     if not row:
         raise SchemaMismatch(found_version=0, expected_version=2)
@@ -225,6 +234,12 @@ def migrate_to_v3(
     cur.execute("PRAGMA foreign_keys = OFF")
     cur.execute("BEGIN IMMEDIATE")
     try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+        row = cur.fetchone()
+        if row["version"] >= 3:
+            cur.execute("COMMIT")
+            return
+
         try:
             cur.execute(SCHEMA_V3_DDL_BOM_COMPONENTS)
             cur.execute(SCHEMA_V3_DDL_PDF_COORDS)
@@ -232,43 +247,46 @@ def migrate_to_v3(
             cur.execute("CREATE INDEX ix_abc_mpn ON audit_bom_components(source_file_id, component_mpn)")
             cur.execute("CREATE INDEX ix_pcc_source_file_page ON pdf_component_coords(source_file_id, page_index)")
             
-            cur.execute(SCHEMA_V3_DDL_SOURCE_FILES_REBUILD)
-            cur.execute("INSERT INTO source_files_v3 SELECT * FROM source_files")
-            cur.execute("DROP TABLE source_files")
-            cur.execute("ALTER TABLE source_files_v3 RENAME TO source_files")
-            cur.execute("CREATE INDEX ix_source_files_audit ON source_files(audit_id)")
-            cur.execute("CREATE INDEX ix_source_files_hash ON source_files(file_hash)")
-            
             cur.execute("PRAGMA foreign_key_check")
             fk_violations = cur.fetchall()
-            if fk_violations:
-                raise sqlite3.IntegrityError(f"Foreign key check failed: {fk_violations}")
         except sqlite3.Error as e:
-            raise SchemaInitializationError(statement="v3 DDL/rebuild", cause=e)
+            raise SchemaInitializationError(statement="v3 DDL", cause=e)
+
+        if fk_violations:
+            raise sqlite3.IntegrityError(f"Foreign key check failed: {fk_violations}")
             
         cur.execute("SELECT DISTINCT id, local_storage_path FROM source_files WHERE file_category = 'BOM'")
         bom_files = cur.fetchall()
-        import pathlib
-        from ..ingestion.errors import MalformedBomError
         
+        empty_ref_des_count = 0
+
         for sf in bom_files:
             sf_id = sf["id"]
             path = pathlib.Path(sf["local_storage_path"])
             if not path.exists():
-                raise MalformedBomError(path, "BACKFILL_FILE_MISSING", {"source_file_id": sf_id, "local_storage_path": str(path)})
+                raise BackfillSourceMissing(statement="v3 BOM backfill", cause=Exception(f"Missing BOM file {path}"))
             
-            bom_result = parser_registry.bom_parser.parse(path)
+            try:
+                bom_result = parser_registry.bom_parser.parse(path)
+            except MalformedBomError as e:
+                raise SchemaInitializationError(statement="v3 BOM backfill", cause=e)
+
             for item in bom_result.items:
                 if item.ref_des_list:
                     for rd in item.ref_des_list:
                         cur.execute(
                             """
                             INSERT INTO audit_bom_components 
-                            (source_file_id, component_mpn, ref_des, mount_type, description)
-                            VALUES (?, ?, ?, ?, ?)
+                            (source_file_id, component_mpn, ref_des, mount_type, description, find_number)
+                            VALUES (?, ?, ?, ?, ?, ?)
                             """,
-                            (sf_id, item.component_mpn, rd, item.mount_type, item.description)
+                            (sf_id, item.component_mpn, rd, item.mount_type, item.description, item.find_number)
                         )
+                else:
+                    empty_ref_des_count += 1
+                    
+        if empty_ref_des_count > 0:
+            logger.info(f"Skipped {empty_ref_des_count} BOM items with empty ref_des_list during v3 backfill")
                         
         now_iso = utcnow().isoformat()
         cur.execute(
@@ -280,24 +298,24 @@ def migrate_to_v3(
         cur.execute("ROLLBACK")
         raise
     finally:
-        cur.execute("PRAGMA foreign_keys = ON")
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+        except Exception:
+            logger.error("Failed to restore foreign_keys in v3 migration finally block.")
+            raise PersistenceError("Database state corrupted: failed to re-enable foreign keys")
 
 
 SCHEMA_V4_DDL_ACTIVE_AUDITS: str = """
 ALTER TABLE active_audits ADD COLUMN general_notes TEXT NULL
 """
 
-SCHEMA_V4_DDL_DROP_THT_NOTES: str = """
-ALTER TABLE tht_verification_checklist DROP COLUMN notes
-"""
-
-SCHEMA_V4_DDL_DROP_BUILD_NOTES: str = """
-ALTER TABLE build_notes_checklist DROP COLUMN notes
-"""
-
 def migrate_to_v4(conn: sqlite3.Connection) -> None:
     cur = conn.cursor()
-    cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=3)
+        
     row = cur.fetchone()
     if not row:
         raise SchemaMismatch(found_version=0, expected_version=3)
@@ -310,10 +328,14 @@ def migrate_to_v4(conn: sqlite3.Connection) -> None:
         
     cur.execute("BEGIN IMMEDIATE")
     try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+        row = cur.fetchone()
+        if row["version"] >= 4:
+            cur.execute("COMMIT")
+            return
+
         try:
             cur.execute(SCHEMA_V4_DDL_ACTIVE_AUDITS)
-            cur.execute(SCHEMA_V4_DDL_DROP_THT_NOTES)
-            cur.execute(SCHEMA_V4_DDL_DROP_BUILD_NOTES)
         except sqlite3.Error as e:
             raise SchemaInitializationError(statement="v4 DDL", cause=e)
             

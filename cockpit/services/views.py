@@ -132,6 +132,8 @@ class ChecklistRowView:
     primary_label: str
     secondary_label: str | None = None
     is_verified: bool = False
+    find_number: int | None = None
+    ref_des_list: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -80,6 +80,23 @@ pip install -r requirements-build.txt
 
 ## Running the app from source
 
+### After a rebuild that changes the database schema
+
+The app applies schema migrations automatically on startup, so additive changes (new columns, new tables) require no manual steps. If a rebuild makes a **breaking** schema change — such as renaming or dropping a column, changing a constraint, or restructuring a table — the existing database must be deleted before launching, because the migration system only runs forward.
+
+Delete the database file:
+
+```powershell
+# Default location on Windows
+Remove-Item "$env:APPDATA\Cockpit\v1\local_audit.db"
+```
+
+If you are using the `COCKPIT_APP_DATA` override or the local `data/` fallback, the file is at `<your-data-root>\v1\local_audit.db` instead.
+
+> **Warning:** Deleting the database permanently removes all active audit records and uploaded file references stored in it. The uploaded files themselves live under `uploads\` in the same folder and are **not** deleted by this step — you can remove those manually as well if a clean slate is needed.
+
+### Normal launch
+
 With the virtual environment active:
 
 ```powershell

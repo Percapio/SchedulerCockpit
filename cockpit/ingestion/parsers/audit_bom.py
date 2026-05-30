@@ -3,6 +3,7 @@
 import pathlib
 import re
 import openpyxl
+from typing import Any
 
 from ..errors import MalformedBomError
 from .results import BomItem, BomResult
@@ -19,6 +20,19 @@ CANONICAL_HEADER = [
     "Ref_Des", "Package", "Description", "SMT/THT", "Qty Need", "Qty On hand", 
     "Qty short", "comment"
 ]
+
+
+def coerce_find_number(raw: Any, path: pathlib.Path, mpn: str) -> int:
+    if raw is None or str(raw).strip() == "":
+        raise MalformedBomError(path, "MISSING_FIND_NUMBER", {"mpn": mpn})
+    try:
+        fval = float(raw)
+        ival = int(fval)
+        if fval != ival or ival < 1:
+            raise MalformedBomError(path, "INVALID_FIND_NUMBER", {"mpn": mpn, "raw": raw})
+        return ival
+    except (ValueError, TypeError):
+        raise MalformedBomError(path, "INVALID_FIND_NUMBER", {"mpn": mpn, "raw": raw})
 
 
 def _split_ref_des(raw: str | None) -> tuple[str, ...]:
@@ -102,6 +116,8 @@ def parse(path: pathlib.Path) -> BomResult:
                 excluded_pcb_count += 1
                 continue
                 
+            find_number = coerce_find_number(row[0], path, part_number)
+                
             description = str(row[8]) if len(row) > 8 and row[8] is not None else None
             ref_des_raw = str(row[6]) if len(row) > 6 and row[6] is not None else None
             
@@ -115,6 +131,7 @@ def parse(path: pathlib.Path) -> BomResult:
             seen_mpns.add(part_number)
             
             items.append(BomItem(
+                find_number=find_number,
                 component_mpn=part_number,
                 description=description,
                 ref_des_raw=ref_des_raw,

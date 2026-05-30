@@ -2,18 +2,20 @@
 
 from PyQt6.QtCore import pyqtSignal, Qt, QEvent, QObject
 from PyQt6.QtGui import QMouseEvent, QCursor
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QCheckBox, QLabel, QLineEdit
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QCheckBox, QLabel, QLineEdit
 
 from cockpit.services.views import ChecklistRowView, ChecklistRowKey, ChecklistRowKind
+from cockpit.ui.widgets.refdes_chip import RefDesChip
+from cockpit.ui.widgets.flow_layout import FlowLayout
 import logging
 logger = logging.getLogger(__name__)
-
 
 
 class ChecklistRow(QWidget):
     toggle_requested = pyqtSignal(object, bool)
     body_clicked = pyqtSignal(object)
     mpn_clicked = pyqtSignal(object)
+    refdes_chip_clicked = pyqtSignal(str)
 
     def __init__(self, row: ChecklistRowView, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -35,8 +37,19 @@ class ChecklistRow(QWidget):
         self.secondary_lbl.setWordWrap(True)
         
         if row.key.kind == ChecklistRowKind.THT:
-            layout.addWidget(self.primary_lbl, stretch=35)
-            layout.addWidget(self.secondary_lbl, stretch=65)
+            self.find_number_lbl = QLabel()
+            self.find_number_lbl.setProperty("class", "find-number-badge")
+            self.find_number_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            layout.addWidget(self.find_number_lbl, stretch=10)
+
+            layout.addWidget(self.primary_lbl, stretch=25)
+
+            self.chip_strip = QWidget()
+            self.chip_layout = FlowLayout(self.chip_strip, margin=0, h_spacing=4, v_spacing=4)
+            layout.addWidget(self.chip_strip, stretch=30)
+            
+            layout.addWidget(self.secondary_lbl, stretch=35)
+            self.chips: dict[str, RefDesChip] = {}
         else:
             layout.addWidget(self.primary_lbl)
             layout.addWidget(self.secondary_lbl, stretch=1)
@@ -54,6 +67,23 @@ class ChecklistRow(QWidget):
                 self.primary_lbl.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
                 self.primary_lbl.setProperty("role", "mpn")
                 self.primary_lbl.installEventFilter(self)
+                
+                if view.find_number is not None:
+                    self.find_number_lbl.setText(str(view.find_number))
+                else:
+                    self.find_number_lbl.setText("")
+                    
+                while self.chip_layout.count():
+                    item = self.chip_layout.takeAt(0)
+                    if item.widget():
+                        item.widget().deleteLater()
+                self.chips.clear()
+                
+                for rd in view.ref_des_list:
+                    chip = RefDesChip(rd)
+                    chip.clicked.connect(self.refdes_chip_clicked.emit)
+                    self.chip_layout.addWidget(chip)
+                    self.chips[rd] = chip
         finally:
             self._ignore_signals = False
             
@@ -82,8 +112,6 @@ class ChecklistRow(QWidget):
         self.checkbox.setEnabled(False)
         self.toggle_requested.emit(self._row.key, checked)
 
-
-
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if self._row.key.kind == ChecklistRowKind.NOTES:
             super().mousePressEvent(event)
@@ -92,7 +120,9 @@ class ChecklistRow(QWidget):
         pos = event.position().toPoint()
         if (self.checkbox.geometry().contains(pos) or
             self.primary_lbl.geometry().contains(pos) or
-            self.secondary_lbl.geometry().contains(pos)):
+            self.secondary_lbl.geometry().contains(pos) or
+            (hasattr(self, 'find_number_lbl') and self.find_number_lbl.geometry().contains(pos)) or
+            (hasattr(self, 'chip_strip') and self.chip_strip.geometry().contains(pos))):
             super().mousePressEvent(event)
         else:
             self.body_clicked.emit(self._row.key)
@@ -106,6 +136,11 @@ class ChecklistRow(QWidget):
     def cleanup(self) -> None:
         if self._row.key.kind == ChecklistRowKind.THT:
             self.primary_lbl.removeEventFilter(self)
+            for chip in self.chips.values():
+                try: chip.clicked.disconnect()
+                except Exception: pass
+        try: self.refdes_chip_clicked.disconnect()
+        except Exception: pass
         try: self.checkbox.toggled.disconnect()
         except Exception:
             logger.exception('Exception caught in checklist_row')

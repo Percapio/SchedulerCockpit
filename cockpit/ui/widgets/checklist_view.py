@@ -13,6 +13,7 @@ class ChecklistView(QScrollArea):
     empty_space_clicked = pyqtSignal()
     body_clicked = pyqtSignal(object)
     mpn_clicked = pyqtSignal(object)
+    refdes_chip_clicked = pyqtSignal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -64,6 +65,7 @@ class ChecklistView(QScrollArea):
             row_widget.toggle_requested.connect(self.toggle_requested.emit)
             row_widget.body_clicked.connect(self.body_clicked.emit)
             row_widget.mpn_clicked.connect(self.mpn_clicked.emit)
+            row_widget.refdes_chip_clicked.connect(self.refdes_chip_clicked.emit)
             self._layout.addWidget(row_widget)
             self._index[row_view.key] = row_widget
             

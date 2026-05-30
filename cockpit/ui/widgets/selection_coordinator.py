@@ -121,6 +121,9 @@ class SelectionCoordinator(QObject):
                     
             self._emit(SelectionIntent(kind=SelectionKind.BOM_REFDES, ref_des=ref_des))
 
+    def on_tht_refdes_clicked(self, ref_des: str) -> None:
+        self.on_bom_refdes_selected(ref_des)
+
     def on_empty_clicked(self) -> None:
         self._emit_clear()
 

@@ -30,7 +30,7 @@ def setup_db(tmp_path):
     tht_repo = ThtChecklistRepository(conn)
     notes_repo = BuildNotesChecklistRepository(conn)
     
-    checklist_svc = ChecklistService(conn, audit_repo, tht_repo, notes_repo, source_file_repo)
+    checklist_svc = ChecklistService(conn, audit_repo, tht_repo, notes_repo, source_file_repo, bom_repo)
     audit_metadata_svc = AuditMetadataService(conn, audit_repo)
     
     conn.execute("INSERT INTO active_audits (id, part_number, work_order_ref, split_suffix, quantity, status, created_at, updated_at) VALUES (1, 'p', 'w', '', 1, 'InProgress', '2020-01-01T00:00:00', '2020-01-01T00:00:00')")

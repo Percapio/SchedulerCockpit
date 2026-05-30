@@ -160,7 +160,7 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     )
     
     audit_read_svc = AuditReadService(audit_repo)
-    checklist_svc = ChecklistService(conn, audit_repo, tht_repo, notes_repo, source_file_repo)
+    checklist_svc = ChecklistService(conn, audit_repo, tht_repo, notes_repo, source_file_repo, bom_component_repo)
     split_svc = AuditSplitService(conn, audit_repo)
     audit_metadata_svc = AuditMetadataService(conn, audit_repo)
     

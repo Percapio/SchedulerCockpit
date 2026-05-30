@@ -14,40 +14,9 @@ from cockpit.persistence.errors import PersistenceError
 from cockpit.ui.theme import Theme
 from cockpit.ui.widgets.flow_layout import FlowLayout
 from .qt_lifecycle import purge_widget_subtree, _drain_layout_widgets
+from cockpit.ui.widgets.refdes_chip import RefDesChip, MPNLabelFilter
 
 logger = logging.getLogger(__name__)
-
-class MPNLabelFilter(QObject):
-    def __init__(self, parent: Any, row: 'AuditBomRow') -> None:
-        super().__init__(parent)
-        self.row = row
-
-    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
-        if event.type() == QEvent.Type.MouseButtonPress:
-            assert isinstance(event, QMouseEvent)
-            if event.button() == Qt.MouseButton.LeftButton:
-                self.row.mpn_label_clicked.emit(self.row._mpn_value)
-                return False  # Let Qt still handle selection
-        return False
-
-class RefDesChip(QLabel):
-    """
-    A single Reference Designator chip.
-    """
-    clicked = pyqtSignal(str)
-    
-    def __init__(self, ref_des: str) -> None:
-        super().__init__(ref_des)
-        self._ref_des = ref_des
-        self.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
-        self.setProperty("class", "refdes-chip")
-        self.setProperty("selected", False)
-
-    def mousePressEvent(self, ev: QMouseEvent) -> None:
-        if ev.button() == Qt.MouseButton.LeftButton:
-            self.clicked.emit(self._ref_des)
-        super().mousePressEvent(ev)
-
 
 class AuditBomRow(QFrame):
     mpn_label_clicked = pyqtSignal(str)
@@ -63,6 +32,17 @@ class AuditBomRow(QFrame):
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(0)
         grid.setVerticalSpacing(0)
+        
+        # Find# Label
+        self.find_number_badge = QLabel(str(view.find_number))
+        self.find_number_badge.setProperty("class", "find-number-badge")
+        self.find_number_badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._find_cell = QFrame(self)
+        self._find_cell.setFrameShape(QFrame.Shape.NoFrame)
+        self._find_cell.setProperty("class", "cell-find")
+        find_cell_layout = QVBoxLayout(self._find_cell)
+        find_cell_layout.setContentsMargins(0, 0, 0, 0)
+        find_cell_layout.addWidget(self.find_number_badge)
         
         # MPN Label
         self.mpn_label = QLabel(self._mpn_value)
@@ -83,8 +63,6 @@ class AuditBomRow(QFrame):
         
         # Description Label
         desc_text = view.description or ""
-        if view.mount_type:
-            desc_text = f"[{view.mount_type}] {desc_text}"
         self.desc_label = QLabel(desc_text)
         self.desc_label.setWordWrap(True)
         self.desc_label.setProperty("class", "desc-label")
@@ -120,12 +98,14 @@ class AuditBomRow(QFrame):
         refdes_cell_layout.setContentsMargins(0, 0, 0, 0)
         refdes_cell_layout.addWidget(self.chip_strip)
         
-        grid.addWidget(self._mpn_cell, 0, 0)
-        grid.addWidget(self._refdes_cell, 0, 1)
-        grid.addWidget(self._desc_cell, 1, 0, 1, 2)
+        grid.addWidget(self._find_cell, 0, 0)
+        grid.addWidget(self._mpn_cell, 0, 1)
+        grid.addWidget(self._refdes_cell, 0, 2)
+        grid.addWidget(self._desc_cell, 1, 0, 1, 3)
         
-        grid.setColumnStretch(0, 2)
-        grid.setColumnStretch(1, 3)
+        grid.setColumnStretch(0, 0)
+        grid.setColumnStretch(1, 2)
+        grid.setColumnStretch(2, 3)
 
     def _show_context_menu(self, pos: Any) -> None:
         menu = QMenu(self)

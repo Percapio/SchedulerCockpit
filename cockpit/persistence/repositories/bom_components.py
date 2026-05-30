@@ -21,10 +21,10 @@ class AuditBomComponentRepository:
             cur.executemany(
                 """
                 INSERT INTO audit_bom_components
-                (source_file_id, component_mpn, ref_des, mount_type, description)
-                VALUES (?, ?, ?, ?, ?)
+                (source_file_id, component_mpn, ref_des, mount_type, description, find_number)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                [(d.source_file_id, d.component_mpn, d.ref_des, d.mount_type, d.description)
+                [(d.source_file_id, d.component_mpn, d.ref_des, d.mount_type, d.description, d.find_number)
                  for d in drafts]
             )
             return cur.rowcount
@@ -46,7 +46,7 @@ class AuditBomComponentRepository:
             cur = self._conn.cursor()
             cur.execute(
                 """
-                SELECT id, source_file_id, component_mpn, ref_des, mount_type, description
+                SELECT id, source_file_id, component_mpn, ref_des, mount_type, description, find_number
                 FROM audit_bom_components
                 WHERE source_file_id = ?
                 ORDER BY component_mpn ASC, ref_des ASC
@@ -60,7 +60,8 @@ class AuditBomComponentRepository:
                     component_mpn=row["component_mpn"],
                     ref_des=row["ref_des"],
                     mount_type=row["mount_type"],
-                    description=row["description"]
+                    description=row["description"],
+                    find_number=row["find_number"]
                 )
                 for row in cur.fetchall()
             ]
@@ -77,8 +78,8 @@ class AuditBomComponentRepository:
             cur.execute(
                 """
                 INSERT INTO audit_bom_components
-                (source_file_id, component_mpn, ref_des, mount_type, description)
-                SELECT ?, component_mpn, ref_des, mount_type, description
+                (source_file_id, component_mpn, ref_des, mount_type, description, find_number)
+                SELECT ?, component_mpn, ref_des, mount_type, description, find_number
                 FROM audit_bom_components
                 WHERE source_file_id = ?
                 """,

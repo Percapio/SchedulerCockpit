@@ -23,10 +23,15 @@ class PersistenceUnavailable(PersistenceError):
 
 class SchemaInitializationError(PersistenceError):
     """A DDL statement in migrate_to_v1 failed; the init transaction was rolled back."""
-    def __init__(self, statement: str, cause: sqlite3.Error):
+    def __init__(self, statement: str, cause: Exception):
         super().__init__(f"Schema initialization failed on statement: {statement}. Cause: {cause}")
         self.statement = statement
         self.cause = cause
+
+
+class BackfillSourceMissing(SchemaInitializationError):
+    """A BOM file is missing during v3 backfill, treating it as a schema initialization error."""
+    pass
 
 
 class SchemaMismatch(PersistenceError):

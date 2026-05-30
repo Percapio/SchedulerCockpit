@@ -188,7 +188,8 @@ class IngestionService:
                         for rd in item.ref_des_list:
                             bom_drafts.append(AuditBomComponentDraft(
                                 source_file_id=bom_file.id, component_mpn=item.component_mpn,
-                                ref_des=rd, mount_type=item.mount_type, description=item.description
+                                ref_des=rd, mount_type=item.mount_type, description=item.description,
+                                find_number=item.find_number
                             ))
                 if bom_drafts:
                     self.bom_component_repo.bulk_insert(bom_drafts)

@@ -23,8 +23,7 @@ class ChecklistRowKey:
 class SelectionKind(StrEnum):
     THT_MPN = "tht_mpn"
     MPN_CELL = "mpn_cell"
-    BOM_REFDES = "bom_refdes"
-    BOM_MPN_SET = "bom_mpn_set"
+    BOM_MPN = "bom_mpn"
     CLEAR = "clear"
 
 
@@ -44,28 +43,14 @@ class ResolutionKind(StrEnum):
 class SelectionIntent:
     kind: SelectionKind
     mpn: str | None = None
-    ref_des: str | None = None
-    mpn_set: frozenset[str] | None = None
 
     def __post_init__(self) -> None:
-        if self.kind in (SelectionKind.THT_MPN, SelectionKind.MPN_CELL):
+        if self.kind in (SelectionKind.THT_MPN, SelectionKind.MPN_CELL, SelectionKind.BOM_MPN):
             if not self.mpn:
                 raise ValueError("mpn must be populated")
-            if self.ref_des is not None or self.mpn_set is not None:
-                raise ValueError("Only mpn allowed for THT_MPN/MPN_CELL")
-        elif self.kind == SelectionKind.BOM_REFDES:
-            if not self.ref_des:
-                raise ValueError("ref_des must be populated")
-            if self.mpn is not None or self.mpn_set is not None:
-                raise ValueError("Only ref_des allowed for BOM_REFDES")
-        elif self.kind == SelectionKind.BOM_MPN_SET:
-            if not self.mpn_set:
-                raise ValueError("mpn_set must be populated and non-empty")
-            if self.mpn is not None or self.ref_des is not None:
-                raise ValueError("Only mpn_set allowed for BOM_MPN_SET")
         elif self.kind == SelectionKind.CLEAR:
-            if self.mpn is not None or self.ref_des is not None or self.mpn_set is not None:
-                raise ValueError("All fields must be None for CLEAR")
+            if self.mpn is not None:
+                raise ValueError("mpn must be None for CLEAR")
 
 
 @dataclass(frozen=True)

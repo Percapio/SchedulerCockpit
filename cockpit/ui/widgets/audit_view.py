@@ -95,13 +95,11 @@ class AuditView(QWidget):
         # Connect Dashboard to Coordinator
         self._dashboard.tht_body_clicked.connect(self._coordinator.on_tht_body_clicked)
         self._dashboard.tht_mpn_clicked.connect(self._coordinator.on_tht_mpn_clicked)
-        self._dashboard.tht_refdes_clicked.connect(self._coordinator.on_tht_refdes_clicked)
         self._dashboard.empty_clicked.connect(self._coordinator.on_empty_clicked)
         self._dashboard.esc_pressed.connect(self._coordinator.on_escape_pressed)
         
         # Connect BOM Panel to Coordinator
-        self._bom_panel.bom_mpn_toggled.connect(self._coordinator.on_bom_mpn_toggled)
-        self._bom_panel.bom_refdes_selected.connect(self._coordinator.on_bom_refdes_selected)
+        self._bom_panel.bom_row_clicked.connect(self._coordinator.on_bom_row_clicked)
         self._bom_panel.empty_space_clicked.connect(self._coordinator.on_empty_clicked)
         
         # Connect Canvas to Coordinator

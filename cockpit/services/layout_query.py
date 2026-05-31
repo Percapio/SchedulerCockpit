@@ -126,60 +126,7 @@ class LayoutQueryService:
 
         bom_components = self.bom_component_repo.list_for_source_file(bom_sf.id) if bom_sf else []
 
-        if intent.kind == SelectionKind.BOM_REFDES:
-            ref_des = intent.ref_des
-            # Find MPN best effort
-            matches = [c.component_mpn for c in bom_components if c.ref_des == ref_des]
-            mpn = matches[0] if matches else None
-            
-            coords = _get_pdf_coords({ref_des})
-            if not coords:
-                return ResolvedSelection(
-                    kind=ResolutionKind.ABSENT_FROM_PDF if pdf_sf else ResolutionKind.NO_PDF,
-                    mpn=mpn or ref_des,  # Fallback to ref_des if no mpn found, though it's technically wrong shape? wait, if mpn is None, UNKNOWN_MPN
-                    mpn_set=None,
-                    ref_des_list=(ref_des,),
-                    coords=()
-                ) if mpn else ResolvedSelection(
-                    kind=ResolutionKind.UNKNOWN_MPN,
-                    mpn=ref_des, # Hack to pass non-empty string as required
-                    mpn_set=None,
-                    ref_des_list=(ref_des,),
-                    coords=()
-                )
-            
-            return ResolvedSelection(
-                kind=ResolutionKind.SINGLE_REFDES,
-                mpn=mpn or ref_des,
-                mpn_set=None,
-                ref_des_list=(ref_des,),
-                coords=coords
-            )
-
-        elif intent.kind == SelectionKind.BOM_MPN_SET:
-            mpn_set = intent.mpn_set
-            # Union ref_des
-            ref_des_list = sorted(set(c.ref_des for c in bom_components if c.component_mpn in mpn_set))
-            coords = _get_pdf_coords(set(ref_des_list))
-            
-            if not coords:
-                return ResolvedSelection(
-                    kind=ResolutionKind.MULTI_MPN_GROUP_ABSENT,
-                    mpn=None,
-                    mpn_set=mpn_set,
-                    ref_des_list=tuple(ref_des_list),
-                    coords=()
-                )
-            else:
-                return ResolvedSelection(
-                    kind=ResolutionKind.MULTI_MPN_GROUP,
-                    mpn=None,
-                    mpn_set=mpn_set,
-                    ref_des_list=tuple(ref_des_list),
-                    coords=coords
-                )
-
-        # Original THT_MPN / MPN_CELL logic
+        # SelectionKind.THT_MPN / MPN_CELL / BOM_MPN logic
         if intent.mpn is None:
             raise ValueError("intent.mpn must not be None for this kind")
         mpn = intent.mpn
@@ -242,7 +189,7 @@ class LayoutQueryService:
                     coords=()
                 )
 
-        elif intent.kind == SelectionKind.MPN_CELL:
+        elif intent.kind in (SelectionKind.MPN_CELL, SelectionKind.BOM_MPN):
             if k == 0:
                 return ResolvedSelection(
                     kind=ResolutionKind.GROUP_ABSENT,

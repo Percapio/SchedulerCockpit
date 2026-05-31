@@ -28,8 +28,6 @@ class SelectionCoordinator(QObject):
         self._dashboard = None
         self._bom_panel = None
         self._active: SelectionIntent | None = None
-        self._selected_mpn_set: frozenset[str] = frozenset()
-        self._selected_ref_des: str | None = None
 
     def on_renderer_refdes_clicked(self, ref_des: str) -> None:
         view = self._view_provider()
@@ -47,9 +45,10 @@ class SelectionCoordinator(QObject):
                 if self._dashboard:
                     self._dashboard.checklist_tht.scroll_to_row(row.key)
         elif location.mount_type == 'S':
-            self.on_bom_refdes_selected(ref_des)
-            if self._bom_panel:
-                self._bom_panel.scroll_to_refdes(ref_des)
+            if location.mpn:
+                self.on_bom_row_clicked(location.mpn)
+                if self._bom_panel:
+                    self._bom_panel.scroll_to_mpn(location.mpn)
 
     def register_dashboard(self, dashboard: 'Dashboard') -> None:
         self._dashboard = dashboard
@@ -74,8 +73,6 @@ class SelectionCoordinator(QObject):
 
         mpn = row.primary_label
         self._clear_panes()
-        self._selected_mpn_set = frozenset()
-        self._selected_ref_des = None
         
         if self._dashboard:
             self._dashboard.checklist_tht.set_selected_row(row_key)
@@ -98,58 +95,33 @@ class SelectionCoordinator(QObject):
             return
 
         mpn = row.primary_label
+
+        # Toggle off if already selected
+        if self._active and self._active.kind == SelectionKind.MPN_CELL and self._active.mpn == mpn:
+            self._emit_clear()
+            return
+
         self._clear_panes()
-        self._selected_mpn_set = frozenset()
-        self._selected_ref_des = None
         
         if self._dashboard:
             self._dashboard.checklist_tht.set_selected_row(row_key)
             
         self._emit(SelectionIntent(kind=SelectionKind.MPN_CELL, mpn=mpn))
 
-    def on_bom_mpn_toggled(self, mpn: str) -> None:
+    def on_bom_row_clicked(self, mpn: str) -> None:
         if not mpn:
             return
             
-        new_set = set(self._selected_mpn_set)
-        if mpn in new_set:
-            new_set.remove(mpn)
-        else:
-            new_set.add(mpn)
-            
-        self._selected_ref_des = None
-        
-        # We need to tell the dashboard to clear its selection
-        if self._dashboard:
-            self._dashboard.checklist_tht.clear_selected_row()
-            if hasattr(self._dashboard, 'checklist_notes'):
-                self._dashboard.checklist_notes.clear_selected_row()
-                
-        if not new_set:
+        # Toggle off if already selected
+        if self._active and self._active.kind == SelectionKind.BOM_MPN and self._active.mpn == mpn:
             self._emit_clear()
-        else:
-            self._selected_mpn_set = frozenset(new_set)
-            self._emit(SelectionIntent(kind=SelectionKind.BOM_MPN_SET, mpn_set=self._selected_mpn_set))
-
-    def on_bom_refdes_selected(self, ref_des: str) -> None:
-        if not ref_des:
             return
             
-        if self._selected_ref_des == ref_des:
-            self._emit_clear()
-        else:
-            self._selected_mpn_set = frozenset()
-            self._selected_ref_des = ref_des
+        self._clear_panes()
+        if self._bom_panel:
+            self._bom_panel.select_mpn(mpn)
             
-            if self._dashboard:
-                self._dashboard.checklist_tht.clear_selected_row()
-                if hasattr(self._dashboard, 'checklist_notes'):
-                    self._dashboard.checklist_notes.clear_selected_row()
-                    
-            self._emit(SelectionIntent(kind=SelectionKind.BOM_REFDES, ref_des=ref_des))
-
-    def on_tht_refdes_clicked(self, ref_des: str) -> None:
-        self.on_bom_refdes_selected(ref_des)
+        self._emit(SelectionIntent(kind=SelectionKind.BOM_MPN, mpn=mpn))
 
     def on_empty_clicked(self) -> None:
         self._emit_clear()
@@ -161,8 +133,6 @@ class SelectionCoordinator(QObject):
         self._emit_clear()
 
     def _emit_clear(self) -> None:
-        self._selected_mpn_set = frozenset()
-        self._selected_ref_des = None
         self._clear_panes()
         
         if self._active is not None and self._active.kind != SelectionKind.CLEAR:

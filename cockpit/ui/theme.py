@@ -105,8 +105,8 @@ class Theme:
         qss_lines.append(f"QLabel#ErrorFooter {{ font-family: monospace; font-size: {scale(11)}px; color: #666666; }}")
         
         # ChecklistRow
-        qss_lines.append(f"QWidget[class~=\"checklist-row\"] {{ background-color: {lp['row']['fill_rgb']}; border-radius: {lp['row']['corner_radius_px']}px; padding: {lp['row']['vertical_padding_px']}px {lp['row']['horizontal_padding_px']}px; border: {bp['grouping']['border_width_px']}px solid {bp['grouping']['border_rgb']}; }}")
-        qss_lines.append(f"QWidget[class~=\"checklist-row\"][selected=\"true\"] {{ background-color: {lp['row']['fill_selected_rgb']}; }}")
+        qss_lines.append(f"QFrame[class~=\"checklist-row\"] {{ background-color: {lp['row']['fill_rgb']}; border-radius: {lp['row']['corner_radius_px']}px; padding: {lp['row']['vertical_padding_px']}px {lp['row']['horizontal_padding_px']}px; border: {bp['grouping']['border_width_px']}px solid {bp['grouping']['border_rgb']}; }}")
+        qss_lines.append(f"QFrame[class~=\"checklist-row\"][selected=\"true\"] {{ background-color: {lp['row']['fill_selected_rgb']}; }}")
         qss_lines.append("QPushButton[indicator=\"true\"] { }")
         
         # Section Header

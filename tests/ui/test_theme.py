@@ -421,7 +421,7 @@ def test_Theme_Qss_ContainsExpectedSelectorsFromEverySection(valid_theme_data):
     )
     qss = theme.qss()
     assert "DropArea { background-color: #FAFAFA; }" in qss
-    assert "QWidget[class~=\"checklist-row\"] { background-color:" in qss
+    assert "QFrame[class~=\"checklist-row\"] { background-color:" in qss
     assert "Toast[severity=\"info\"] { background-color: #E3F2FD;" in qss
     assert "QFrame[class=\"bom-grouping\"] {" in qss
     assert "QLabel[class~=\"hint-label\"] { background-color: #FFFFFF;" in qss

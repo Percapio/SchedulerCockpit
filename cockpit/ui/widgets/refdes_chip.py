@@ -13,7 +13,7 @@ class MPNLabelFilter(QObject):
             assert isinstance(event, QMouseEvent)
             if event.button() == Qt.MouseButton.LeftButton:
                 self.row.mpn_label_clicked.emit(self.row._mpn_value)
-                return False  # Let Qt still handle selection
+                return True  # Stop propagation so parent row doesn't also click
         return False
 
 class RefDesChip(QLabel):
@@ -32,4 +32,6 @@ class RefDesChip(QLabel):
     def mousePressEvent(self, ev: QMouseEvent) -> None:
         if ev.button() == Qt.MouseButton.LeftButton:
             self.clicked.emit(self._ref_des)
+            ev.accept()
+            return
         super().mousePressEvent(ev)

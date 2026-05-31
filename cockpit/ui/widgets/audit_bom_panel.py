@@ -21,11 +21,11 @@ from cockpit.ui.widgets.component_row import ComponentRowCore, ComponentRowField
 logger = logging.getLogger(__name__)
 
 class AuditBomRow(QFrame):
-    mpn_label_clicked = pyqtSignal(str)
-    refdes_chip_clicked = pyqtSignal(str)
+    row_clicked = pyqtSignal(str)
     
     def __init__(self, view: AuditBomRowView, theme: Theme) -> None:
         super().__init__()
+        self.setProperty("class", "bom-grouping")
         self._view = view
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -37,27 +37,29 @@ class AuditBomRow(QFrame):
             ref_des_list=view.ref_des_list
         )
         self.core = ComponentRowCore(fields, theme)
-        self.core.mpn_label_clicked.connect(self.mpn_label_clicked.emit)
-        self.core.refdes_chip_clicked.connect(self.refdes_chip_clicked.emit)
+        self.core.mpn_label_clicked.connect(lambda _: self.row_clicked.emit(self._view.component_mpn))
+        self.core.refdes_chip_clicked.connect(lambda _: self.row_clicked.emit(self._view.component_mpn))
         layout.addWidget(self.core)
 
-    def set_mpn_selected(self, selected: bool) -> None:
-        self.core.set_mpn_selected(selected)
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.row_clicked.emit(self._view.component_mpn)
+        super().mousePressEvent(event)
 
-    def set_refdes_selected(self, ref_des: str | None) -> None:
-        self.core.set_refdes_selected(ref_des)
+    def set_selected(self, selected: bool) -> None:
+        self.setProperty("selected", selected)
+        self.core.set_mpn_selected(selected)
+        self.style().unpolish(self)
+        self.style().polish(self)
 
     def cleanup(self) -> None:
         self.core.cleanup()
-        try: self.mpn_label_clicked.disconnect()
-        except Exception: pass
-        try: self.refdes_chip_clicked.disconnect()
+        try: self.row_clicked.disconnect()
         except Exception: pass
 
 
 class AuditBomPanel(QWidget):
-    bom_mpn_toggled = pyqtSignal(str)
-    bom_refdes_selected = pyqtSignal(str)
+    bom_row_clicked = pyqtSignal(str)
     empty_space_clicked = pyqtSignal()
     error_occurred = pyqtSignal(object)  # FailurePayload
 
@@ -65,8 +67,7 @@ class AuditBomPanel(QWidget):
         super().__init__(parent)
         self._layout_query_service = layout_query_service
         self._theme = theme
-        self._selected_mpns: set[str] = set()
-        self._selected_ref_des: str | None = None
+        self._selected_mpn: str | None = None
         self._row_index: dict[str, AuditBomRow] = {}
 
         self.layout = QVBoxLayout(self)
@@ -92,8 +93,7 @@ class AuditBomPanel(QWidget):
 
     def load(self, audit_id: int) -> None:
         self._clear_layout()
-        self._selected_mpns.clear()
-        self._selected_ref_des = None
+        self._selected_mpn = None
         self._row_index.clear()
         self.header_label.setText("")
 
@@ -118,54 +118,26 @@ class AuditBomPanel(QWidget):
 
         for view in views:
             row = AuditBomRow(view, self._theme)
-            row.mpn_label_clicked.connect(self._on_mpn_label_clicked)
-            row.refdes_chip_clicked.connect(self._on_refdes_chip_clicked)
+            row.row_clicked.connect(self.bom_row_clicked.emit)
             self.container_layout.addWidget(row)
             self._row_index[view.component_mpn] = row
 
     def clear(self) -> None:
-        self._selected_mpns.clear()
-        self._selected_ref_des = None
+        self._selected_mpn = None
         for row in self._row_index.values():
-            row.set_mpn_selected(False)
-            row.set_refdes_selected(None)
+            row.set_selected(False)
 
-    def _on_mpn_label_clicked(self, mpn: str) -> None:
-        if mpn in self._selected_mpns:
-            self._selected_mpns.remove(mpn)
-            self.bom_mpn_toggled.emit(mpn)
-        else:
-            self._selected_ref_des = None
-            self._selected_mpns.add(mpn)
-            self.bom_mpn_toggled.emit(mpn)
-            
+    def select_mpn(self, mpn: str) -> None:
+        self._selected_mpn = mpn
         self._update_styles()
 
-    def _on_refdes_chip_clicked(self, ref_des: str) -> None:
-        self._selected_mpns.clear()
-        
-        if self._selected_ref_des == ref_des:
-            self._selected_ref_des = None
-        else:
-            self._selected_ref_des = ref_des
-            
-        self.bom_refdes_selected.emit(ref_des)
-        self._update_styles()
-
-    def select_refdes(self, ref_des: str) -> None:
-        self._selected_mpns.clear()
-        self._selected_ref_des = ref_des
-        self._update_styles()
-
-    def scroll_to_refdes(self, ref_des: str) -> None:
-        row = next((r for r in self._row_index.values() if ref_des in r._view.ref_des_list), None)
-        if row is not None:
-            self.scroll.ensureWidgetVisible(row)
+    def scroll_to_mpn(self, mpn: str) -> None:
+        if mpn in self._row_index:
+            self.scroll.ensureWidgetVisible(self._row_index[mpn])
 
     def _update_styles(self) -> None:
         for mpn, row in self._row_index.items():
-            row.set_mpn_selected(mpn in self._selected_mpns)
-            row.set_refdes_selected(self._selected_ref_des)
+            row.set_selected(mpn == self._selected_mpn)
 
     def _clear_layout(self) -> None:
         prior_children = _drain_layout_widgets(self.container_layout)
@@ -173,8 +145,21 @@ class AuditBomPanel(QWidget):
             purge_widget_subtree(child)
 
     def eventFilter(self, obj: QObject, event: QEvent) -> bool:
-        if obj is self.scroll.viewport() and event.type() == QEvent.Type.MouseButtonPress:
-            import PyQt6.QtGui
-            if isinstance(event, PyQt6.QtGui.QMouseEvent) and event.button() == Qt.MouseButton.LeftButton:
+        if (obj is self.scroll.viewport()
+                and event.type() == QEvent.Type.MouseButtonPress
+                and event.button() == Qt.MouseButton.LeftButton):
+            pos_in_container = self.container.mapFrom(
+                self.scroll.viewport(), event.position().toPoint())
+            last_row = self._last_row_widget_or_none()
+            if last_row is None or pos_in_container.y() > last_row.geometry().bottom():
                 self.empty_space_clicked.emit()
+                return True
         return super().eventFilter(obj, event)
+
+    def _last_row_widget_or_none(self) -> AuditBomRow | None:
+        for i in reversed(range(self.container_layout.count())):
+            item = self.container_layout.itemAt(i)
+            widget = item.widget()
+            if isinstance(widget, AuditBomRow):
+                return widget
+        return None

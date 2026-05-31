@@ -2,7 +2,7 @@
 
 from PyQt6.QtCore import pyqtSignal, Qt, QEvent, QObject
 from PyQt6.QtGui import QMouseEvent, QCursor
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QCheckBox, QLabel, QLineEdit
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QCheckBox, QLabel, QLineEdit, QFrame
 
 from cockpit.services.views import ChecklistRowView, ChecklistRowKey, ChecklistRowKind
 from cockpit.ui.widgets.refdes_chip import RefDesChip
@@ -13,11 +13,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class ChecklistRow(QWidget):
+class ChecklistRow(QFrame):
     toggle_requested = pyqtSignal(object, bool)
     body_clicked = pyqtSignal(object)
     mpn_clicked = pyqtSignal(object)
-    refdes_chip_clicked = pyqtSignal(str)
 
     def __init__(self, row: ChecklistRowView, theme: Theme, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -42,7 +41,7 @@ class ChecklistRow(QWidget):
             )
             self.core = ComponentRowCore(fields, theme)
             self.core.mpn_label_clicked.connect(self._on_core_mpn_clicked)
-            self.core.refdes_chip_clicked.connect(self.refdes_chip_clicked.emit)
+            self.core.refdes_chip_clicked.connect(lambda _: self.body_clicked.emit(self._row.key))
             layout.addWidget(self.core, stretch=1)
         else:
             self.setProperty("class", "component-card checklist-row")
@@ -102,6 +101,8 @@ class ChecklistRow(QWidget):
         self.setProperty("selected", selected)
         if self._row.key.kind == ChecklistRowKind.THT:
             self.core.set_mpn_selected(selected)
+            self.style().unpolish(self)
+            self.style().polish(self)
         else:
             for w in [self, self.primary_lbl, self.secondary_lbl]:
                 w.style().unpolish(w)
@@ -111,8 +112,6 @@ class ChecklistRow(QWidget):
         if self._row.key.kind == ChecklistRowKind.THT:
             self.core.cleanup()
         
-        try: self.refdes_chip_clicked.disconnect()
-        except Exception: pass
         try: self.checkbox.toggled.disconnect()
         except Exception:
             logger.exception('Exception caught in checklist_row')

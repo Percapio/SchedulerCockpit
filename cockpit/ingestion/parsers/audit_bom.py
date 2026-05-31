@@ -9,11 +9,14 @@ from ..errors import MalformedBomError
 from .results import BomItem, BomResult
 
 
-# Matches *...*  annotation markers (e.g. "*PLEASE X-RAY*") that annotate a
-# ref-des cell but are not themselves designators.
-_ANNOTATION_RE = re.compile(r'\*[^*]*\*')
+_ANNOTATION_RE = re.compile(
+    r'\*[^*]*\*'        # asterisk markers      (existing)
+    r'|\([^)]*\)'       # parenthesis wrappers  (NEW)
+    r'|\{[^}]*\}'       # curly-brace wrappers   (NEW)
+    r'|\[[^\]]*\]'      # square-bracket wrappers (NEW)
+)
 
-REFDES_TOKEN_REGEX = re.compile(r"^[A-Z0-9_]+(-[A-Z0-9_]+)*$")
+REFDES_TOKEN_REGEX = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 CANONICAL_HEADER = [
     "Find#", "PartNum", "Count", "MSL level", "Date code", "Baked date", 

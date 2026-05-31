@@ -36,7 +36,7 @@ class PickerRow(QFrame):
             QLabel(f"updated {format_updated_stamp(digest.updated_at)}"),
         ]
         layout = QHBoxLayout(self)
-        layout.setSpacing(2)
+        layout.setSpacing(12)
         layout.setContentsMargins(0, 0, 0, 0)
         for c in cells:
             layout.addWidget(c)

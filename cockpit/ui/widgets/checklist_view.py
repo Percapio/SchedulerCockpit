@@ -15,8 +15,9 @@ class ChecklistView(QScrollArea):
     mpn_clicked = pyqtSignal(object)
     refdes_chip_clicked = pyqtSignal(str)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, theme: 'Theme', parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._theme = theme
         self.setWidgetResizable(True)
         
         self._container = QWidget()
@@ -61,7 +62,7 @@ class ChecklistView(QScrollArea):
         self._layout.addWidget(header)
         
         for row_view in views:
-            row_widget = ChecklistRow(row_view)
+            row_widget = ChecklistRow(row_view, self._theme)
             row_widget.toggle_requested.connect(self.toggle_requested.emit)
             row_widget.body_clicked.connect(self.body_clicked.emit)
             row_widget.mpn_clicked.connect(self.mpn_clicked.emit)
@@ -86,3 +87,7 @@ class ChecklistView(QScrollArea):
     def clear_selected_row(self) -> None:
         for row_widget in self._index.values():
             row_widget.set_selected(False)
+
+    def scroll_to_row(self, row_key: ChecklistRowKey) -> None:
+        if row_key in self._index:
+            self.ensureWidgetVisible(self._index[row_key])

@@ -51,6 +51,7 @@ class AuditView(QWidget):
             completion_service=completion_service,
             audit_metadata_service=audit_metadata_service,
             ingestion_service=ingestion_service,
+            theme=self._theme,
             parent=self._splitter
         )
         
@@ -76,7 +77,10 @@ class AuditView(QWidget):
         layout.addWidget(self._splitter)
         
         # Setup Coordinator
-        self._coordinator = SelectionCoordinator(view_provider=lambda: self._dashboard._view)
+        self._coordinator = SelectionCoordinator(
+            view_provider=lambda: self._dashboard._view,
+            layout_query_service=layout_query_service
+        )
         self._coordinator.register_dashboard(self._dashboard)
         self._coordinator.register_bom_panel(self._bom_panel)
         
@@ -99,6 +103,10 @@ class AuditView(QWidget):
         self._bom_panel.bom_mpn_toggled.connect(self._coordinator.on_bom_mpn_toggled)
         self._bom_panel.bom_refdes_selected.connect(self._coordinator.on_bom_refdes_selected)
         self._bom_panel.empty_space_clicked.connect(self._coordinator.on_empty_clicked)
+        
+        # Connect Canvas to Coordinator
+        self._layout_canvas.refdes_clicked.connect(self._coordinator.on_renderer_refdes_clicked)
+        self._layout_canvas.empty_clicked.connect(self._coordinator.on_empty_clicked)
         
         # Connect Coordinator to Canvas
         self._coordinator.selection_changed.connect(self._layout_canvas.set_selection)

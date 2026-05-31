@@ -101,6 +101,8 @@ class ChecklistService:
 
         has_pdf = self._source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF) is not None
 
+        tht_placement_count: int = sum(len(ref_des_list) for _, ref_des_list in tht_index.values())
+
         return ActiveAuditView(
             audit_id=audit.id,
             part_number=audit.part_number,
@@ -112,9 +114,9 @@ class ChecklistService:
             traveler_metadata=audit.traveler_metadata,
             ship_date=audit.ship_date,
             has_pdf=has_pdf,
+            tht_placement_count=tht_placement_count,
             tht_rows=tht_views,
             notes_rows=notes_views,
-            general_notes=audit.general_notes,
         )
 
     def set_verification(

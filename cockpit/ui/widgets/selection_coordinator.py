@@ -6,6 +6,8 @@ import logging
 
 from cockpit.services.views import ActiveAuditView, ChecklistRowKey, ChecklistRowKind, SelectionIntent, SelectionKind
 
+from cockpit.services.layout_query import LayoutQueryService
+
 # Forward declarations for type hints without circular dependencies
 class Dashboard(Any): ...
 class AuditBomPanel(Any): ...
@@ -15,14 +17,39 @@ logger = logging.getLogger(__name__)
 class SelectionCoordinator(QObject):
     selection_changed = pyqtSignal(object)  # Emits SelectionIntent
 
-    def __init__(self, view_provider: Callable[[], ActiveAuditView | None]) -> None:
+    def __init__(
+        self,
+        view_provider: Callable[[], ActiveAuditView | None],
+        layout_query_service: LayoutQueryService
+    ) -> None:
         super().__init__()
         self._view_provider = view_provider
+        self._layout_query_service = layout_query_service
         self._dashboard = None
         self._bom_panel = None
         self._active: SelectionIntent | None = None
         self._selected_mpn_set: frozenset[str] = frozenset()
         self._selected_ref_des: str | None = None
+
+    def on_renderer_refdes_clicked(self, ref_des: str) -> None:
+        view = self._view_provider()
+        if not view:
+            return
+            
+        location = self._layout_query_service.locate_refdes(view.audit_id, ref_des)
+        if not location:
+            return
+            
+        if location.mount_type == 'T':
+            row = next((r for r in view.tht_rows if ref_des in r.ref_des_list), None)
+            if row:
+                self.on_tht_refdes_clicked(ref_des)
+                if self._dashboard:
+                    self._dashboard.checklist_tht.scroll_to_row(row.key)
+        elif location.mount_type == 'S':
+            self.on_bom_refdes_selected(ref_des)
+            if self._bom_panel:
+                self._bom_panel.scroll_to_refdes(ref_des)
 
     def register_dashboard(self, dashboard: 'Dashboard') -> None:
         self._dashboard = dashboard

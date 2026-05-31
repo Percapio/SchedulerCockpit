@@ -309,6 +309,14 @@ SCHEMA_V4_DDL_ACTIVE_AUDITS: str = """
 ALTER TABLE active_audits ADD COLUMN general_notes TEXT NULL
 """
 
+SCHEMA_V4_DDL_DROP_THT_NOTES: str = """
+ALTER TABLE tht_verification_checklist DROP COLUMN notes
+"""
+
+SCHEMA_V4_DDL_DROP_BUILD_NOTES: str = """
+ALTER TABLE build_notes_checklist DROP COLUMN notes
+"""
+
 def migrate_to_v4(conn: sqlite3.Connection) -> None:
     cur = conn.cursor()
     try:
@@ -321,6 +329,8 @@ def migrate_to_v4(conn: sqlite3.Connection) -> None:
         raise SchemaMismatch(found_version=0, expected_version=3)
         
     version = row["version"]
+    if version > 4:
+        raise SchemaMismatch(found_version=version, expected_version=4)
     if version >= 4:
         return
     if version < 3:
@@ -328,16 +338,20 @@ def migrate_to_v4(conn: sqlite3.Connection) -> None:
         
     cur.execute("BEGIN IMMEDIATE")
     try:
-        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
-        row = cur.fetchone()
-        if row["version"] >= 4:
-            cur.execute("COMMIT")
-            return
-
         try:
             cur.execute(SCHEMA_V4_DDL_ACTIVE_AUDITS)
-        except sqlite3.Error as e:
-            raise SchemaInitializationError(statement="v4 DDL", cause=e)
+        except sqlite3.OperationalError:
+            pass  # duplicate column name
+            
+        try:
+            cur.execute(SCHEMA_V4_DDL_DROP_THT_NOTES)
+        except sqlite3.OperationalError:
+            pass  # no such column
+            
+        try:
+            cur.execute(SCHEMA_V4_DDL_DROP_BUILD_NOTES)
+        except sqlite3.OperationalError:
+            pass  # no such column
             
         now_iso = utcnow().isoformat()
         cur.execute(

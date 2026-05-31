@@ -51,8 +51,8 @@ class AuditRepository:
                 """
                 INSERT INTO active_audits (
                     part_number, schedule_job_id, work_order_ref, split_suffix,
-                    quantity, status, traveler_metadata, general_notes, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    quantity, status, traveler_metadata, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft.part_number,
@@ -62,7 +62,6 @@ class AuditRepository:
                     draft.quantity,
                     AuditStatus.PENDING,
                     traveler_json,
-                    None,
                     now_iso,
                     now_iso
                 )
@@ -97,7 +96,11 @@ class AuditRepository:
         row = cur.fetchone()
         if not row:
             return None
-        return ActiveAudit(**row)
+        
+        import dataclasses
+        valid_fields = {f.name for f in dataclasses.fields(ActiveAudit)}
+        filtered_row = {k: v for k, v in row.items() if k in valid_fields}
+        return ActiveAudit(**filtered_row)
 
     def find_by_id(self, audit_id: int) -> ActiveAudit | None:
         cur = self.conn.cursor()
@@ -105,7 +108,11 @@ class AuditRepository:
         row = cur.fetchone()
         if not row:
             return None
-        return ActiveAudit(**row)
+            
+        import dataclasses
+        valid_fields = {f.name for f in dataclasses.fields(ActiveAudit)}
+        filtered_row = {k: v for k, v in row.items() if k in valid_fields}
+        return ActiveAudit(**filtered_row)
 
     def transition_status(self, audit_id: int, target: AuditStatus) -> ActiveAudit:
         cur = self.conn.cursor()
@@ -200,12 +207,6 @@ class AuditRepository:
         if cur.rowcount == 0:
             raise AuditNotFound(audit_id)
 
-    def set_general_notes(self, audit_id: int, text: str | None) -> None:
-        cur = self.conn.cursor()
-        cur.execute("UPDATE active_audits SET general_notes = ? WHERE id = ?", (text, audit_id))
-        if cur.rowcount == 0:
-            raise AuditNotFound(audit_id)
-
     def hard_delete(self, audit_id: int) -> None:
         cur = self.conn.cursor()
         cur.execute("DELETE FROM active_audits WHERE id = ?", (audit_id,))
@@ -216,11 +217,13 @@ class AuditRepository:
             """
             SELECT * FROM active_audits
             WHERE status != ?
-            ORDER BY updated_at DESC, created_at DESC
+            ORDER BY part_number ASC, work_order_ref ASC, split_suffix ASC
             """,
             (AuditStatus.COMPLETED.value,)
         )
-        return [ActiveAudit(**row) for row in cur.fetchall()]
+        import dataclasses
+        valid_fields = {f.name for f in dataclasses.fields(ActiveAudit)}
+        return [ActiveAudit(**{k: v for k, v in row.items() if k in valid_fields}) for row in cur.fetchall()]
 
     def list_completed(self) -> list[ActiveAudit]:
         cur = self.conn.cursor()
@@ -232,7 +235,9 @@ class AuditRepository:
             """,
             (AuditStatus.COMPLETED.value,)
         )
-        return [ActiveAudit(**row) for row in cur.fetchall()]
+        import dataclasses
+        valid_fields = {f.name for f in dataclasses.fields(ActiveAudit)}
+        return [ActiveAudit(**{k: v for k, v in row.items() if k in valid_fields}) for row in cur.fetchall()]
 
     def _validate_suffix_shape(self, suffix: str) -> None:
         if suffix is None:
@@ -315,8 +320,8 @@ class AuditRepository:
                 """
                 INSERT INTO active_audits (
                     part_number, schedule_job_id, work_order_ref, split_suffix,
-                    quantity, status, traveler_metadata, general_notes, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    quantity, status, traveler_metadata, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     source["part_number"],
@@ -326,7 +331,6 @@ class AuditRepository:
                     new_quantity,
                     AuditStatus.PENDING.value,
                     json.dumps(source["traveler_metadata"]) if source["traveler_metadata"] is not None else None,
-                    source.get("general_notes"),
                     now_iso,
                     now_iso
                 )

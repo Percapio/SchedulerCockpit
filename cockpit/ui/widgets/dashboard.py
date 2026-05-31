@@ -19,8 +19,8 @@ from cockpit.ui.widgets.add_drawing_dialog import AddDrawingDialog
 
 from .identity_header import IdentityHeader
 from .checklist_view import ChecklistView
-from .audit_notes_view import AuditNotesView
 from .split_dialog import SplitDialog
+from cockpit.ui.theme import Theme
 import logging
 logger = logging.getLogger(__name__)
 
@@ -52,9 +52,11 @@ class Dashboard(QWidget):
         completion_service: CompletionService,
         audit_metadata_service: AuditMetadataService,
         ingestion_service: IngestionService,
+        theme: Theme,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._theme = theme
         self._checklist_service = checklist_service
         self._split_service = split_service
         self._completion_service = completion_service
@@ -83,7 +85,7 @@ class Dashboard(QWidget):
         self._checklist_splitter.setChildrenCollapsible(False)
         layout.addWidget(self._checklist_splitter, stretch=1)
         
-        self.checklist_tht = ChecklistView()
+        self.checklist_tht = ChecklistView(self._theme)
         self.checklist_tht.toggle_requested.connect(self._on_row_toggle)
         self.checklist_tht.body_clicked.connect(self.tht_body_clicked.emit)
         self.checklist_tht.mpn_clicked.connect(self.tht_mpn_clicked.emit)
@@ -92,18 +94,13 @@ class Dashboard(QWidget):
         self.checklist_tht.setMinimumHeight(80)
         self._checklist_splitter.addWidget(self.checklist_tht)
         
-        self.checklist_notes = ChecklistView()
+        self.checklist_notes = ChecklistView(self._theme)
         self.checklist_notes.toggle_requested.connect(self._on_row_toggle)
         self.checklist_notes.empty_space_clicked.connect(self.empty_clicked.emit)
         self.checklist_notes.setMinimumHeight(80)
         self._checklist_splitter.addWidget(self.checklist_notes)
         
-        self.audit_notes = AuditNotesView()
-        self.audit_notes.notes_commit_requested.connect(self._on_general_notes_commit)
-        self.audit_notes.setMinimumHeight(80)
-        self._checklist_splitter.addWidget(self.audit_notes)
-        
-        self._checklist_splitter.setSizes([450, 250, 200]) # default ratio
+        self._checklist_splitter.setSizes([600, 300]) # default ratio
         
         footer = QHBoxLayout()
         self.split_btn = QPushButton("Split")
@@ -156,9 +153,8 @@ class Dashboard(QWidget):
             val = metadata.get(key, "—")
             self.metadata_layout.addWidget(QLabel(f"{label}: {val}"))
             
-        self.checklist_tht.populate_section(self._view.tht_rows, f"THT Verification ({len(self._view.tht_rows)} items)")
+        self.checklist_tht.populate_section(self._view.tht_rows, f"Through-Hole - Unique MPNs: {len(self._view.tht_rows)} | Total Placements: {self._view.tht_placement_count}")
         self.checklist_notes.populate_section(self._view.notes_rows, f"Build Notes ({len(self._view.notes_rows)} items)")
-        self.audit_notes.populate(self._view.general_notes)
         self._refresh_add_drawing_btn_label(self._view)
         self._update_enablement()
 
@@ -169,7 +165,7 @@ class Dashboard(QWidget):
             self.add_drawing_btn.setText("Add Drawing")
 
     def flush_audit_notes(self) -> None:
-        self.audit_notes.flush_pending()
+        pass
 
     def _on_back_requested(self) -> None:
         self.flush_audit_notes()
@@ -182,7 +178,6 @@ class Dashboard(QWidget):
         if self._view.status == AuditStatus.COMPLETED:
             self.checklist_tht.setEnabled(False)
             self.checklist_notes.setEnabled(False)
-            self.audit_notes.setEnabled(False)
             self.split_btn.setEnabled(False)
             self.verify_all_btn.setEnabled(False)
             self.complete_btn.setEnabled(False)
@@ -190,7 +185,6 @@ class Dashboard(QWidget):
         else:
             self.checklist_tht.setEnabled(True)
             self.checklist_notes.setEnabled(True)
-            self.audit_notes.setEnabled(True)
             self.split_btn.setEnabled(True)
             self.verify_all_btn.setEnabled(not self._view.is_fully_verified)
             self.complete_btn.setEnabled(self._view.is_fully_verified)
@@ -217,18 +211,6 @@ class Dashboard(QWidget):
                 self.checklist_notes.revert_row(row_key)
             self.reload()
             self.error_occurred.emit(render(exc))
-
-    def _on_general_notes_commit(self, notes: str | None) -> None:
-        if self._view is None:
-            return
-            
-        try:
-            self._audit_metadata_service.set_general_notes(self._view.audit_id, notes)
-            self._view = self._view.with_general_notes(notes)
-        except PersistenceError as exc:
-            logger.exception('Exception caught in dashboard')
-            self.error_occurred.emit(render(exc))
-            self.reload()
 
     def _on_split_clicked(self) -> None:
         if self._view is None:

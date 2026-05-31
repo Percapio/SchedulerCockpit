@@ -21,7 +21,7 @@ def app_config(tmp_path, monkeypatch):
     monkeypatch.setenv("COCKPIT_APP_DATA", str(root))
     
     from cockpit.ui.config import resolve_config
-    return resolve_config()
+    return resolve_config(root / "v1")
 
 
 @pytest.fixture

@@ -17,7 +17,6 @@ def test_identity_header_title_stripping(qtbot):
         status=AuditStatus.IN_PROGRESS,
         tht_rows=[],
         notes_rows=[],
-        general_notes=None,
         ship_date=None,
         traveler_metadata={"sales_order_number": "SO-999"},
         has_pdf=False

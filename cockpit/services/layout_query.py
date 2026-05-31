@@ -5,7 +5,7 @@ from cockpit.persistence.repositories.bom_components import AuditBomComponentRep
 from cockpit.persistence.repositories.pdf_coords import PdfComponentCoordRepository
 from cockpit.persistence.types import SourceFileCategory
 from cockpit.layout.renderer import PdfRenderer
-from cockpit.services.views import LayoutContext, ResolvedSelection, ResolutionKind, HighlightCoord, SelectionIntent, SelectionKind
+from cockpit.services.views import LayoutContext, ResolvedSelection, ResolutionKind, HighlightCoord, SelectionIntent, SelectionKind, RefDesLocation
 from dataclasses import dataclass
 
 
@@ -56,6 +56,26 @@ class LayoutQueryService:
             page_count=len(dimensions),
             page_dimensions=dimensions
         )
+
+    def list_pdf_coords_for_audit(self, audit_id: int) -> tuple[HighlightCoord, ...]:
+        pdf_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
+        if pdf_sf is None:
+            return ()
+        coords = self.pdf_coord_repo.list_for_source_file(pdf_sf.id)
+        return tuple(HighlightCoord(c.ref_des, c.page_index, c.x1, c.y1, c.x2, c.y2) for c in coords)
+
+    def locate_refdes(self, audit_id: int, ref_des: str) -> RefDesLocation | None:
+        bom_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.BOM)
+        if bom_sf is None:
+            return None
+        bom_components = self.bom_component_repo.list_for_source_file(bom_sf.id)
+        matches = [c for c in bom_components if c.ref_des == ref_des]
+        if not matches:
+            return None
+        if len(matches) > 1:
+            import logging
+            logging.getLogger(__name__).warning("ref_des %s maps to %d components; routing to first", ref_des, len(matches))
+        return RefDesLocation(mpn=matches[0].component_mpn, mount_type=matches[0].mount_type)
 
     def list_bom_rows_for_audit(self, audit_id: int) -> tuple[AuditBomRowView, ...]:
         bom_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.BOM)

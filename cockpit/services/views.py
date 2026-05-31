@@ -79,6 +79,12 @@ class HighlightCoord:
 
 
 @dataclass(frozen=True)
+class RefDesLocation:
+    mpn: str
+    mount_type: str
+
+
+@dataclass(frozen=True)
 class ResolvedSelection:
     kind: ResolutionKind
     mpn: str | None
@@ -148,9 +154,9 @@ class ActiveAuditView:
     traveler_metadata: dict[str, Any] | None
     ship_date: date | None
     has_pdf: bool
+    tht_placement_count: int = 0
     tht_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
     notes_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
-    general_notes: str | None = None
 
     @property
     def total_rows(self) -> int:
@@ -182,9 +188,6 @@ class ActiveAuditView:
 
     def with_ship_date(self, new_value: date | None) -> "ActiveAuditView":
         return replace(self, ship_date=new_value)
-
-    def with_general_notes(self, new_value: str | None) -> "ActiveAuditView":
-        return replace(self, general_notes=new_value)
 
 
 @dataclass(frozen=True)

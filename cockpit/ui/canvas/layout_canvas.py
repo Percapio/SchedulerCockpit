@@ -98,10 +98,16 @@ class _InnerGraphicsView(QGraphicsView):
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         self._canvas.mouseDoubleClickEvent(event)
 
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        self._canvas._on_graphics_view_mouse_press(event)
+        super().mousePressEvent(event)
+
 
 class LayoutCanvas(QWidget):
     error_occurred = pyqtSignal(object)
     font_scale_change_requested = pyqtSignal(int)
+    refdes_clicked = pyqtSignal(str)
+    empty_clicked = pyqtSignal()
 
     def __init__(
         self,
@@ -123,6 +129,7 @@ class LayoutCanvas(QWidget):
         self._last_resolved: ResolvedSelection | None = None
         self._current_scale = 1.0
         self._pixmap_cache: dict[int, tuple[int, QPixmap]] = {}
+        self._coord_cache: dict[int, list[HighlightCoord]] = {}
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -196,7 +203,13 @@ class LayoutCanvas(QWidget):
         self._last_intent = None
         self._last_resolved = None
         self._apply_selection(clear=True)
+        self._coord_cache.clear()
+        
         try:
+            coords = self._layout_query_service.list_pdf_coords_for_audit(audit_id)
+            for c in coords:
+                self._coord_cache.setdefault(c.page_index, []).append(c)
+                
             context = self._layout_query_service.load_for_audit(audit_id)
         except AuditNotFound:
             logger.exception('Exception caught in layout_canvas')
@@ -384,6 +397,37 @@ class LayoutCanvas(QWidget):
         self._current_scale = 1.0
         self._update_pan_cursor()
         super().mouseDoubleClickEvent(event)
+
+    def _on_graphics_view_mouse_press(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            if self._current_context is None or self._current_page_index is None:
+                return
+            
+            scene_pos = self._graphics_view.mapToScene(event.pos())
+            scene_rect = self._scene.sceneRect()
+            pw = scene_rect.width()
+            ph = scene_rect.height()
+            
+            page_dim = self._current_context.page_dimensions[self._current_page_index]
+            pdf_w, pdf_h = page_dim[0], page_dim[1]
+            
+            if pw == 0 or ph == 0:
+                return
+                
+            scale_x = pdf_w / pw
+            scale_y = pdf_h / ph
+            
+            pdf_x = scene_pos.x() * scale_x
+            pdf_y = scene_pos.y() * scale_y
+            
+            page_coords = self._coord_cache.get(self._current_page_index, [])
+            for c in page_coords:
+                # Add a 2px logical tolerance (pdf space)
+                if (c.x1 - 2) <= pdf_x <= (c.x2 + 2) and (c.y1 - 2) <= pdf_y <= (c.y2 + 2):
+                    self.refdes_clicked.emit(c.ref_des)
+                    return
+                    
+            self.empty_clicked.emit()
 
     def _update_pan_cursor(self) -> None:
         if self._current_scale > 1.0:

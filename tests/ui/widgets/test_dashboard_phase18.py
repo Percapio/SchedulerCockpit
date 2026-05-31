@@ -17,7 +17,8 @@ def dashboard(qtbot):
     comp = Mock(spec=CompletionService)
     meta = Mock(spec=AuditMetadataService)
     ing = Mock(spec=IngestionService)
-    d = Dashboard(chk, splt, comp, meta, ing)
+    theme = Mock()
+    d = Dashboard(chk, splt, comp, meta, ing, theme)
     qtbot.addWidget(d)
     return d
 
@@ -32,7 +33,6 @@ def test_dashboard_metadata_labels(dashboard):
         status=AuditStatus.IN_PROGRESS,
         tht_rows=[],
         notes_rows=[],
-        general_notes=None,
         ship_date=None,
         traveler_metadata={"customer_name": "TestCorp"},
         has_pdf=False
@@ -50,8 +50,5 @@ def test_dashboard_metadata_labels(dashboard):
     assert "S/O: —" in labels
 
 def test_dashboard_back_flushes_and_exits(dashboard, qtbot):
-    with patch.object(dashboard.audit_notes, "flush_pending") as mock_flush:
-        with qtbot.waitSignal(dashboard.exit_requested):
-            dashboard.header.back_requested.emit()
-            
-        mock_flush.assert_called_once()
+    with qtbot.waitSignal(dashboard.exit_requested):
+        dashboard.header.back_requested.emit()

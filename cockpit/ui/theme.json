@@ -41,11 +41,7 @@
       "horizontal_padding_px": 8,
       "gutter_px": 3
     },
-    "ship_date_field": {
-      "fill_rgb": "#FAFAFA",
-      "text_rgb": "#666666",
-      "border_rgb": "#CCCCCC"
-    },
+
     "progress_view": {
       "fill_rgb": "#FAFAFA",
       "text_rgb": "#000000"

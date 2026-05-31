@@ -6,7 +6,6 @@ from PyQt6.QtWidgets import QWidget, QHBoxLayout, QSplitter
 from cockpit.services.checklist import ChecklistService
 from cockpit.services.split import AuditSplitService
 from cockpit.services.completion import CompletionService
-from cockpit.services.audit_metadata import AuditMetadataService
 from cockpit.ingestion.service import IngestionService
 from cockpit.services.layout_query import LayoutQueryService
 from cockpit.layout.renderer import PdfRenderer
@@ -28,7 +27,6 @@ class AuditView(QWidget):
         checklist_service: ChecklistService,
         split_service: AuditSplitService,
         completion_service: CompletionService,
-        audit_metadata_service: AuditMetadataService,
         ingestion_service: IngestionService,
         layout_query_service: LayoutQueryService,
         pdf_renderer: PdfRenderer,
@@ -49,7 +47,6 @@ class AuditView(QWidget):
             checklist_service=checklist_service,
             split_service=split_service,
             completion_service=completion_service,
-            audit_metadata_service=audit_metadata_service,
             ingestion_service=ingestion_service,
             theme=self._theme,
             parent=self._splitter

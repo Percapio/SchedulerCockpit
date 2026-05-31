@@ -95,7 +95,7 @@ class AuditBomPanel(QWidget):
         self._clear_layout()
         self._selected_mpn = None
         self._row_index.clear()
-        self.header_label.setText("")
+        self._set_header_text("")
 
         try:
             views = self._layout_query_service.list_bom_rows_for_audit(audit_id)
@@ -114,7 +114,7 @@ class AuditBomPanel(QWidget):
 
         unique_mpns = len(views)
         total_placements = sum(len(v.ref_des_list) for v in views)
-        self.header_label.setText(f"SMT - Unique MPNs: {unique_mpns} | Total Placements: {total_placements}")
+        self._set_header_text(f"SMT - MPN Count: {unique_mpns} | Total Placements: {total_placements}")
 
         for view in views:
             row = AuditBomRow(view, self._theme)
@@ -163,3 +163,7 @@ class AuditBomPanel(QWidget):
             if isinstance(widget, AuditBomRow):
                 return widget
         return None
+
+    def _set_header_text(self, text: str) -> None:
+        self.header_label.setText(text)
+        self.header_label.setVisible(bool(text))

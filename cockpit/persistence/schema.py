@@ -329,8 +329,6 @@ def migrate_to_v4(conn: sqlite3.Connection) -> None:
         raise SchemaMismatch(found_version=0, expected_version=3)
         
     version = row["version"]
-    if version > 4:
-        raise SchemaMismatch(found_version=version, expected_version=4)
     if version >= 4:
         return
     if version < 3:
@@ -368,3 +366,42 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> None:
     migrate_to_v2(conn)
     migrate_to_v3(conn, parser_registry)
     migrate_to_v4(conn)
+    migrate_to_v5(conn)
+
+SCHEMA_V5_DDL_DROP_SHIP_DATE: str = """
+ALTER TABLE active_audits DROP COLUMN ship_date
+"""
+
+def migrate_to_v5(conn: sqlite3.Connection) -> None:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=4)
+        
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=4)
+        
+    version = row["version"]
+    if version >= 5:
+        return
+    if version < 4:
+        raise SchemaMismatch(found_version=version, expected_version=4)
+        
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        try:
+            cur.execute(SCHEMA_V5_DDL_DROP_SHIP_DATE)
+        except sqlite3.OperationalError:
+            pass  # no such column
+            
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 5, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+    except Exception:
+        cur.execute("ROLLBACK")
+        raise

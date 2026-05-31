@@ -54,7 +54,7 @@
     "left_panel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["section_header", "row", "ship_date_field", "progress_view", "layout"],
+      "required": ["section_header", "row", "progress_view", "layout"],
       "properties": {
         "layout": {
           "type": "object",
@@ -85,15 +85,7 @@
           },
           "required": ["fill_rgb", "fill_selected_rgb", "text_selected_rgb", "corner_radius_px", "vertical_padding_px", "horizontal_padding_px", "gutter_px"]
         },
-        "ship_date_field": {
-          "type": "object",
-          "properties": {
-            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "border_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
-          },
-          "required": ["fill_rgb", "text_rgb", "border_rgb"]
-        },
+
         "progress_view": {
           "type": "object",
           "properties": {

@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import (
 from cockpit.services.checklist import ChecklistService
 from cockpit.services.completion import CompletionService, CleanupFailedError
 from cockpit.services.split import AuditSplitService
-from cockpit.services.audit_metadata import AuditMetadataService
 from cockpit.services.views import ActiveAuditView, ChecklistRowKey, SelectionIntent, SelectionKind, ChecklistRowKind
 from cockpit.ingestion.service import IngestionService
 from cockpit.persistence.types import AuditStatus
@@ -49,7 +48,6 @@ class Dashboard(QWidget):
         checklist_service: ChecklistService,
         split_service: AuditSplitService,
         completion_service: CompletionService,
-        audit_metadata_service: AuditMetadataService,
         ingestion_service: IngestionService,
         theme: Theme,
         parent: QWidget | None = None,
@@ -59,7 +57,6 @@ class Dashboard(QWidget):
         self._checklist_service = checklist_service
         self._split_service = split_service
         self._completion_service = completion_service
-        self._audit_metadata_service = audit_metadata_service
         self._ingestion_service = ingestion_service
         self._view: ActiveAuditView | None = None
         self._current_audit_id: int | None = None
@@ -72,7 +69,6 @@ class Dashboard(QWidget):
         
         self.header = IdentityHeader()
         self.header.back_requested.connect(self._on_back_requested)
-        self.header.ship_date_commit_requested.connect(self._on_ship_date_commit)
         layout.addWidget(self.header)
         
         self.metadata_band = QWidget()
@@ -115,7 +111,7 @@ class Dashboard(QWidget):
         self.verify_all_btn.clicked.connect(self._on_verify_all_clicked)
         footer.addWidget(self.verify_all_btn)
         
-        self.complete_btn = QPushButton("Mark Complete")
+        self.complete_btn = QPushButton("Complete")
         self.complete_btn.clicked.connect(self._on_complete_clicked)
         footer.addWidget(self.complete_btn)
         
@@ -151,14 +147,14 @@ class Dashboard(QWidget):
             val = metadata.get(key, "—")
             self.metadata_layout.addWidget(QLabel(f"{label}: {val}"))
             
-        self.checklist_tht.populate_section(self._view.tht_rows, f"Through-Hole - Unique MPNs: {len(self._view.tht_rows)} | Total Placements: {self._view.tht_placement_count}")
+        self.checklist_tht.populate_section(self._view.tht_rows, f"T/H - MPN Count: {len(self._view.tht_rows)} | Total Placements: {self._view.tht_placement_count}")
         self.checklist_notes.populate_section(self._view.notes_rows, f"Build Notes ({len(self._view.notes_rows)} items)")
         self._refresh_add_drawing_btn_label(self._view)
         self._update_enablement()
 
     def _refresh_add_drawing_btn_label(self, view: ActiveAuditView) -> None:
         if view.has_pdf:
-            self.add_drawing_btn.setText("Replace Drawing")
+            self.add_drawing_btn.setText("Replace")
         else:
             self.add_drawing_btn.setText("Add Drawing")
 
@@ -179,14 +175,12 @@ class Dashboard(QWidget):
             self.split_btn.setEnabled(False)
             self.verify_all_btn.setEnabled(False)
             self.complete_btn.setEnabled(False)
-            self.header.ship_date_fld.setEnabled(False)
         else:
             self.checklist_tht.setEnabled(True)
             self.checklist_notes.setEnabled(True)
             self.split_btn.setEnabled(True)
             self.verify_all_btn.setEnabled(not self._view.is_fully_verified)
             self.complete_btn.setEnabled(self._view.is_fully_verified)
-            self.header.ship_date_fld.setEnabled(True)
 
 
 
@@ -272,7 +266,7 @@ class Dashboard(QWidget):
         try:
             reloaded = self._checklist_service.verify_all(self._view.audit_id)
             self._view = reloaded
-            self.checklist_tht.populate_section(reloaded.tht_rows, f"THT Verification ({len(reloaded.tht_rows)} items)")
+            self.checklist_tht.populate_section(reloaded.tht_rows, f"T/H Verification ({len(reloaded.tht_rows)} items)")
             self.checklist_notes.populate_section(reloaded.notes_rows, f"Build Notes ({len(reloaded.notes_rows)} items)")
             self._update_enablement()
         except PersistenceError as exc:
@@ -280,20 +274,3 @@ class Dashboard(QWidget):
             self.reload()
             payload = render(exc)
             self.error_occurred.emit(payload)
-
-    def _on_ship_date_commit(self, new_value) -> None:
-        if self._view is None:
-            return
-            
-        try:
-            self._audit_metadata_service.set_ship_date(self._view.audit_id, new_value)
-            self._view = self._view.with_ship_date(new_value)
-            self.header.set_audit(self._view)
-        except PersistenceError as exc:
-            logger.exception('Exception caught in dashboard')
-            self.header.ship_date_revert()
-            self.reload()
-            payload = render(exc)
-            self.error_occurred.emit(payload)
-
-

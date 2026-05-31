@@ -18,7 +18,6 @@ from cockpit.services.audit_read import AuditReadService
 from cockpit.services.checklist import ChecklistService
 from cockpit.services.split import AuditSplitService
 from cockpit.services.completion import CompletionService
-from cockpit.services.audit_metadata import AuditMetadataService
 from cockpit.services.layout_query import LayoutQueryService
 from cockpit.layout.renderer import PdfRenderer
 from cockpit.ui.theme import Theme
@@ -36,7 +35,6 @@ class MainWindow(QMainWindow):
         checklist_svc: ChecklistService,
         split_svc: AuditSplitService,
         completion_svc: CompletionService,
-        audit_metadata_svc: AuditMetadataService,
         layout_query_svc: LayoutQueryService,
         pdf_renderer: PdfRenderer,
         *,
@@ -79,7 +77,6 @@ class MainWindow(QMainWindow):
             checklist_service=checklist_svc,
             split_service=split_svc,
             completion_service=completion_svc,
-            audit_metadata_service=audit_metadata_svc,
             ingestion_service=self._bootstrapped.ingestion_service,
             layout_query_service=layout_query_svc,
             pdf_renderer=pdf_renderer,
@@ -99,6 +96,7 @@ class MainWindow(QMainWindow):
             
         self._font_scale.scale_changed.connect(on_scale_changed)
         self._audit_view.font_scale_change_requested.connect(self._font_scale.request_delta)
+        self.picker.font_scale_change_requested.connect(self._font_scale.request_delta)
         on_scale_changed(self._font_scale.current_pt())
         
         self._resolve_initial_page()

@@ -5,7 +5,6 @@ from cockpit.ui.widgets.dashboard import Dashboard
 from cockpit.services.checklist import ChecklistService
 from cockpit.services.split import AuditSplitService
 from cockpit.services.completion import CompletionService
-from cockpit.services.audit_metadata import AuditMetadataService
 from cockpit.ingestion.service import IngestionService
 from cockpit.services.views import ActiveAuditView
 from cockpit.persistence.types import AuditStatus
@@ -15,10 +14,9 @@ def dashboard(qtbot):
     chk = Mock(spec=ChecklistService)
     splt = Mock(spec=AuditSplitService)
     comp = Mock(spec=CompletionService)
-    meta = Mock(spec=AuditMetadataService)
     ing = Mock(spec=IngestionService)
     theme = Mock()
-    d = Dashboard(chk, splt, comp, meta, ing, theme)
+    d = Dashboard(chk, splt, comp, ing, theme)
     qtbot.addWidget(d)
     return d
 
@@ -33,7 +31,6 @@ def test_dashboard_metadata_labels(dashboard):
         status=AuditStatus.IN_PROGRESS,
         tht_rows=[],
         notes_rows=[],
-        ship_date=None,
         traveler_metadata={"customer_name": "TestCorp"},
         has_pdf=False
     )

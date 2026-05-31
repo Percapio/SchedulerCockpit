@@ -41,7 +41,7 @@ class SelectionCoordinator(QObject):
         if location.mount_type == 'T':
             row = next((r for r in view.tht_rows if ref_des in r.ref_des_list), None)
             if row:
-                self.on_tht_refdes_clicked(ref_des)
+                self.on_tht_mpn_clicked(row.key)
                 if self._dashboard:
                     self._dashboard.checklist_tht.scroll_to_row(row.key)
         elif location.mount_type == 'S':

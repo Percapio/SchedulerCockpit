@@ -137,7 +137,6 @@ class ActiveAuditView:
     status: AuditStatus
     split_reason: str | None
     traveler_metadata: dict[str, Any] | None
-    ship_date: date | None
     has_pdf: bool
     tht_placement_count: int = 0
     tht_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
@@ -171,8 +170,7 @@ class ActiveAuditView:
             
         return replace(self, tht_rows=tht, notes_rows=notes)
 
-    def with_ship_date(self, new_value: date | None) -> "ActiveAuditView":
-        return replace(self, ship_date=new_value)
+
 
 
 @dataclass(frozen=True)

@@ -24,7 +24,6 @@ from cockpit.services.split import AuditSplitService
 from cockpit.services.storage_reaper import StorageReaper
 from cockpit.services.completion import CompletionService
 from cockpit.services.startup_reconciler import StartupReconciler
-from cockpit.services.audit_metadata import AuditMetadataService
 from cockpit.services.layout_query import LayoutQueryService
 from cockpit.services.views import ReconciliationReport
 from cockpit.layout.renderer import PdfRenderer
@@ -44,7 +43,6 @@ class BootstrappedApp:
     checklist_svc: ChecklistService
     split_svc: AuditSplitService
     completion_svc: CompletionService
-    audit_metadata_svc: AuditMetadataService
     layout_query_svc: LayoutQueryService
     pdf_renderer: PdfRenderer
     reconciliation_report: ReconciliationReport
@@ -162,7 +160,6 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     audit_read_svc = AuditReadService(audit_repo)
     checklist_svc = ChecklistService(conn, audit_repo, tht_repo, notes_repo, source_file_repo, bom_component_repo)
     split_svc = AuditSplitService(conn, audit_repo)
-    audit_metadata_svc = AuditMetadataService(conn, audit_repo)
     
     storage_reaper = StorageReaper(source_file_repo)
     completion_svc = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)
@@ -189,7 +186,6 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
         checklist_svc=checklist_svc,
         split_svc=split_svc,
         completion_svc=completion_svc,
-        audit_metadata_svc=audit_metadata_svc,
         layout_query_svc=layout_query_svc,
         pdf_renderer=pdf_renderer,
         reconciliation_report=report

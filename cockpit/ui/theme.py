@@ -111,6 +111,7 @@ class Theme:
         
         # Section Header
         qss_lines.append(f"QLabel[class~=\"section-header\"] {{ background-color: {lp['section_header']['fill_rgb']}; color: {lp['section_header']['text_rgb']}; padding: {lp['section_header']['padding_px']}px; font-weight: bold; font-size: {scale(16)}px; }}")
+        qss_lines.append(f"QLabel[class~=\"bom-sticky-header\"] {{ background-color: {lp['section_header']['fill_rgb']}; color: {lp['section_header']['text_rgb']}; padding: {lp['section_header']['padding_px']}px; font-weight: bold; font-size: {scale(16)}px; }}")
         
         # Toast
         qss_lines.append(f"Toast[severity=\"info\"] {{ background-color: {base['toast']['info']['background_rgb']}; border: 1px solid {base['toast']['info']['border_rgb']}; border-radius: 8px; }}")
@@ -123,10 +124,6 @@ class Theme:
         qss_lines.append(f"Toast[severity=\"error\"] {{ background-color: {base['toast']['error']['background_rgb']}; border: 1px solid {base['toast']['error']['border_rgb']}; border-radius: 8px; }}")
         qss_lines.append(f"Toast[severity=\"error\"] QLabel#ToastTitle {{ color: {base['toast']['error']['text_rgb']}; font-weight: bold; }}")
         qss_lines.append(f"Toast[severity=\"error\"] QLabel#ToastSubtitle {{ color: {base['toast']['error']['text_rgb']}; }}")
-        
-        # ShipDateField
-        qss_lines.append(f"ShipDateField QLabel {{ color: {lp['ship_date_field']['text_rgb']}; font-size: {scale(11)}px; font-weight: bold; }}")
-        qss_lines.append(f"ShipDateField QDateEdit {{ font-size: {scale(14)}px; }}")
         
         # BOM Panel
         qss_lines.append(self._compose_bom_grouping(bp['grouping']))

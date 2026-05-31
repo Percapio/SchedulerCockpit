@@ -17,7 +17,6 @@ def test_identity_header_title_stripping(qtbot):
         status=AuditStatus.IN_PROGRESS,
         tht_rows=[],
         notes_rows=[],
-        ship_date=None,
         traveler_metadata={"sales_order_number": "SO-999"},
         has_pdf=False
     )
@@ -25,8 +24,3 @@ def test_identity_header_title_stripping(qtbot):
     header.set_audit(view)
     assert header.title_lbl.text() == "PN-123-B"
 
-def test_ship_date_field_label(qtbot):
-    from cockpit.ui.widgets.ship_date_field import ShipDateField
-    fld = ShipDateField()
-    qtbot.addWidget(fld)
-    assert fld._label.text() == "Ship Date"

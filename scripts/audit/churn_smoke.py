@@ -51,7 +51,6 @@ def run_smoke():
         checklist_svc=bootstrapped.checklist_svc,
         split_svc=bootstrapped.split_svc,
         completion_svc=bootstrapped.completion_svc,
-        audit_metadata_svc=bootstrapped.audit_metadata_svc,
         layout_query_svc=bootstrapped.layout_query_svc,
         pdf_renderer=bootstrapped.pdf_renderer
     )

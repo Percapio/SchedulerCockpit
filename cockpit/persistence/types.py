@@ -32,7 +32,6 @@ class ActiveAudit:
     status: AuditStatus
     split_reason: str | None
     traveler_metadata: dict[str, Any] | None
-    ship_date: date | None       # NEW (Phase 6)
     created_at: datetime         # UTC, tz-aware
     updated_at: datetime         # UTC, tz-aware
 

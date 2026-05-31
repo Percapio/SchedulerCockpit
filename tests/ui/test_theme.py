@@ -31,7 +31,6 @@ def valid_theme_data():
                 "corner_radius_px": 4, "vertical_padding_px": 6, "horizontal_padding_px": 8,
                 "gutter_px": 3
             },
-            "ship_date_field": { "fill_rgb": "#FAFAFA", "text_rgb": "#666666", "border_rgb": "#CCCCCC" },
             "progress_view": { "fill_rgb": "#FAFAFA", "text_rgb": "#000000" }
         },
         "canvas": {
@@ -424,6 +423,7 @@ def test_Theme_Qss_ContainsExpectedSelectorsFromEverySection(valid_theme_data):
     assert "QFrame[class~=\"checklist-row\"] { background-color:" in qss
     assert "Toast[severity=\"info\"] { background-color: #E3F2FD;" in qss
     assert "QFrame[class=\"bom-grouping\"] {" in qss
+    assert "QLabel[class~=\"bom-sticky-header\"] { background-color: #FAFAFA; color: #555555; padding: 4px; font-weight: bold; font-size: 16px;" in qss
     assert "QLabel[class~=\"hint-label\"] { background-color: #FFFFFF;" in qss
 
 def test_Theme_Frozen_AttributeMutationRaisesFrozenInstanceError(valid_theme_data):

@@ -112,7 +112,6 @@ class ChecklistService:
             status=audit.status,
             split_reason=audit.split_reason,
             traveler_metadata=audit.traveler_metadata,
-            ship_date=audit.ship_date,
             has_pdf=has_pdf,
             tht_placement_count=tht_placement_count,
             tht_rows=tht_views,

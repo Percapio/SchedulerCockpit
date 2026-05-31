@@ -43,7 +43,6 @@ def main_window(qtbot, bootstrapped_app, tmp_path):
         bootstrapped_app.checklist_svc,
         bootstrapped_app.split_svc,
         bootstrapped_app.completion_svc,
-        bootstrapped_app.audit_metadata_svc,
         bootstrapped_app.layout_query_svc,
         bootstrapped_app.pdf_renderer,
         theme=theme,

@@ -92528,3 +92528,1538 @@ Traceback (most recent call last):
   File "D:\Dev\Scheduler\Cockpit\tests\ui\widgets\test_add_drawing_dialog.py", line 21, in add_pdf_to_audit
     raise PersistenceError("DB locked")
 cockpit.persistence.errors.PersistenceError: DB locked
+2026-06-01 19:55:00,485 - MainThread - root - INFO - Duplicate log destination: D:\Dev\Scheduler\Cockpit\log.txt
+2026-06-01 19:55:00,532 - MainThread - root - INFO - Reconciliation completed successfully.
+2026-06-01 19:55:00,613 - MainThread - cockpit.ui.data_migration - ERROR - Exception caught in data_migration
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\data_migration.py", line 97, in _perform_migration
+    lock_path.unlink()
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\pathlib.py", line 1342, in unlink
+    os.unlink(self)
+PermissionError: [WinError 32] The process cannot access the file because it is being used by another process: 'C:\\Users\\spank\\AppData\\Local\\Temp\\pytest-of-spank\\pytest-349\\test_needs_migration0\\.migration.lock'
+2026-06-01 19:55:00,744 - MainThread - root - INFO - Duplicate log destination: D:\Dev\Scheduler\Cockpit\log.txt
+2026-06-01 19:55:00,744 - MainThread - cockpit - INFO - Primary log: C:\Users\spank\AppData\Local\Temp\pytest-of-spank\pytest-349\test_gatekeeper_violation0\cockpit_data\v1\logs\cockpit.log
+2026-06-01 19:55:00,744 - MainThread - cockpit - INFO - Build info: version=0.0.0-dev commit=source runtime=source
+2026-06-01 19:55:00,744 - MainThread - cockpit - INFO - Application data root: C:\Users\spank\AppData\Local\Temp\pytest-of-spank\pytest-349\test_gatekeeper_violation0\cockpit_data (Probe history: )
+2026-06-01 19:55:00,744 - MainThread - cockpit - INFO - Bootstrapping Cockpit application...
+2026-06-01 19:55:00,759 - MainThread - root - INFO - Reconciliation completed successfully.
+2026-06-01 19:55:00,957 - MainThread - root - INFO - Duplicate log destination: D:\Dev\Scheduler\Cockpit\log.txt
+2026-06-01 19:55:00,957 - MainThread - cockpit - INFO - Primary log: C:\Users\spank\AppData\Local\Temp\pytest-of-spank\pytest-349\test_successful_ingestion0\cockpit_data\v1\logs\cockpit.log
+2026-06-01 19:55:00,957 - MainThread - cockpit - INFO - Build info: version=0.0.0-dev commit=source runtime=source
+2026-06-01 19:55:00,957 - MainThread - cockpit - INFO - Application data root: C:\Users\spank\AppData\Local\Temp\pytest-of-spank\pytest-349\test_successful_ingestion0\cockpit_data (Probe history: )
+2026-06-01 19:55:00,957 - MainThread - cockpit - INFO - Bootstrapping Cockpit application...
+2026-06-01 19:55:00,973 - MainThread - root - INFO - Reconciliation completed successfully.
+2026-06-01 19:55:01,074 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 288, in load
+    theme_data = json.load(f)
+                 ^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\json\__init__.py", line 293, in load
+    return loads(fp.read(),
+           ^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\json\decoder.py", line 338, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\json\decoder.py", line 354, in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 3 (char 2)
+2026-06-01 19:55:01,078 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 299, in load
+    schema_data = json.load(f)
+                  ^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\json\__init__.py", line 293, in load
+    return loads(fp.read(),
+           ^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\json\decoder.py", line 338, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\json\decoder.py", line 354, in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ^^^^^^^^^^^^^^^^^^^^^^
+json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes: line 1 column 3 (char 2)
+2026-06-01 19:55:01,105 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 309, in load
+    jsonschema.validate(instance=theme_data, schema=schema_data)
+  File "D:\Dev\Scheduler\Cockpit\venv\Lib\site-packages\jsonschema\validators.py", line 1332, in validate
+    raise error
+jsonschema.exceptions.ValidationError: 'base' is a required property
+
+Failed validating 'required' in schema:
+    {'$schema': 'https://json-schema.org/draft/2020-12/schema',
+     'type': 'object',
+     'additionalProperties': False,
+     'required': ['application',
+                  'base',
+                  'left_panel',
+                  'canvas',
+                  'bom_panel'],
+     'properties': {'$schema': {'type': 'string'},
+                    'application': {'type': 'object',
+                                    'additionalProperties': False,
+                                    'required': ['font_scale'],
+                                    'properties': {'font_scale': {'type': 'object',
+                                                                  'properties': {'default_pt': {'type': 'integer',
+                                                                                                'minimum': 1},
+                                                                                 'min_pt': {'type': 'integer',
+                                                                                            'minimum': 1},
+                                                                                 'max_pt': {'type': 'integer',
+                                                                                            'minimum': 1},
+                                                                                 'step_pt': {'type': 'integer',
+                                                                                             'minimum': 1}},
+                                                                  'required': ['default_pt',
+                                                                               'min_pt',
+                                                                               'max_pt',
+                                                                               'step_pt']}}},
+                    'base': {'type': 'object',
+                             'additionalProperties': False,
+                             'required': ['window', 'font', 'toast'],
+                             'properties': {'window': {'type': 'object',
+                                                       'properties': {'rgb': {'type': 'string',
+                                                                              'pattern': '^#[0-9A-Fa-f]{6}$'}},
+                                                       'required': ['rgb']},
+                                            'font': {'type': 'object',
+                                                     'properties': {'family': {'type': 'string'},
+                                                                    'size_px': {'type': 'integer',
+                                                                                'minimum': 1}},
+                                                     'required': ['family',
+                                                                  'size_px']},
+                                            'toast': {'type': 'object',
+                                                      'properties': {'info': {'$ref': '#/$defs/toast_severity'},
+                                                                     'warn': {'$ref': '#/$defs/toast_severity'},
+                                                                     'error': {'$ref': '#/$defs/toast_severity'}},
+                                                      'required': ['info',
+                                                                   'warn',
+                                                                   'error']}}},
+                    'left_panel': {'type': 'object',
+                                   'additionalProperties': False,
+                                   'required': ['section_header',
+                                                'row',
+                                                'progress_view',
+                                                'layout'],
+                                   'properties': {'layout': {'type': 'object',
+                                                             'properties': {'min_width_px': {'type': 'integer',
+                                                                                             'minimum': 0}},
+                                                             'required': ['min_width_px']},
+                                                  'section_header': {'type': 'object',
+                                                                     'properties': {'fill_rgb': {'type': 'string',
+                                                                                                 'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                    'text_rgb': {'type': 'string',
+                                                                                                 'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                    'padding_px': {'type': 'integer',
+                                                                                                   'minimum': 0}},
+                                                                     'required': ['fill_rgb',
+                                                                                  'text_rgb',
+                                                                                  'padding_px']},
+                                                  'row': {'type': 'object',
+                                                          'properties': {'fill_rgb': {'type': 'string',
+                                                                                      'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'fill_selected_rgb': {'type': 'string',
+                                                                                               'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'text_selected_rgb': {'type': 'string',
+                                                                                               'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'corner_radius_px': {'type': 'integer',
+                                                                                              'minimum': 0},
+                                                                         'vertical_padding_px': {'type': 'integer',
+                                                                                                 'minimum': 0},
+                                                                         'horizontal_padding_px': {'type': 'integer',
+                                                                                                   'minimum': 0},
+                                                                         'gutter_px': {'type': 'integer',
+                                                                                       'minimum': 0}},
+                                                          'required': ['fill_rgb',
+                                                                       'fill_selected_rgb',
+                                                                       'text_selected_rgb',
+                                                                       'corner_radius_px',
+                                                                       'vertical_padding_px',
+                                                                       'horizontal_padding_px',
+                                                                       'gutter_px']},
+                                                  'progress_view': {'type': 'object',
+                                                                    'properties': {'fill_rgb': {'type': 'string',
+                                                                                                'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                   'text_rgb': {'type': 'string',
+                                                                                                'pattern': '^#[0-9A-Fa-f]{6}$'}},
+                                                                    'required': ['fill_rgb',
+                                                                                 'text_rgb']}}},
+                    'canvas': {'type': 'object',
+                               'additionalProperties': False,
+                               'required': ['colour',
+                                            'pen_width',
+                                            'z_order',
+                                            'zoom',
+                                            'scalar',
+                                            'hint_label'],
+                               'properties': {'colour': {'type': 'object',
+                                                         'additionalProperties': False,
+                                                         'required': ['highlight_pen',
+                                                                      'dim_overlay',
+                                                                      'hint_label_background',
+                                                                      'hint_label_text',
+                                                                      'hint_label_border'],
+                                                         'properties': {'highlight_pen': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'dim_overlay': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'hint_label_background': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'hint_label_text': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'hint_label_border': {'$ref': '#/$defs/color_with_alpha'}}},
+                                              'pen_width': {'type': 'object',
+                                                            'additionalProperties': False,
+                                                            'required': ['highlight'],
+                                                            'properties': {'highlight': {'type': 'integer',
+                                                                                         'minimum': 1}}},
+                                              'z_order': {'type': 'object',
+                                                          'additionalProperties': False,
+                                                          'required': ['base_pixmap',
+                                                                       'dim',
+                                                                       'highlight'],
+                                                          'properties': {'base_pixmap': {'type': 'integer'},
+                                                                         'dim': {'type': 'integer'},
+                                                                         'highlight': {'type': 'integer'}}},
+                                              'zoom': {'type': 'object',
+                                                       'additionalProperties': False,
+                                                       'required': ['min_scale',
+                                                                    'max_scale',
+                                                                    'step',
+                                                                    'render_multiplier'],
+                                                       'properties': {'min_scale': {'type': 'number',
+                                                                                    'minimum': 0.01,
+                                                                                    'maximum': 1.0},
+                                                                      'max_scale': {'type': 'number',
+                                                                                    'exclusiveMinimum': 1.0,
+                                                                                    'maximum': 16.0},
+                                                                      'step': {'type': 'number',
+                                                                               'exclusiveMinimum': 1.0,
+                                                                               'maximum': 2.0},
+                                                                      'render_multiplier': {'type': 'number',
+                                                                                            'minimum': 1.0,
+                                                                                            'maximum': 16.0}}},
+                                              'scalar': {'type': 'object',
+                                                         'additionalProperties': False,
+                                                         'required': ['highlight_scale'],
+                                                         'properties': {'highlight_scale': {'type': 'number',
+                                                                                            'minimum': 1.0,
+                                                                                            'maximum': 4.0}}},
+                                              'hint_label': {'type': 'object',
+                                                             'additionalProperties': False,
+                                                             'required': ['padding_px',
+                                                                          'border_width_px'],
+                                                             'properties': {'padding_px': {'type': 'integer',
+                                                                                           'minimum': 0},
+                                                                            'border_width_px': {'type': 'integer',
+                                                                                                'minimum': 0}}}}},
+                    'bom_panel': {'type': 'object',
+                                  'additionalProperties': False,
+                                  'required': ['grouping',
+                                               'cell',
+                                               'chip',
+                                               'layout'],
+                                  'properties': {'layout': {'type': 'object',
+                                                            'properties': {'min_width_percent': {'type': 'number',
+                                                                                                 'minimum': 0,
+                                                                                                 'maximum': 1},
+                                                                           'min_width_absolute_px': {'type': 'integer',
+                                                                                                     'minimum': 0}},
+                                                            'required': ['min_width_percent',
+                                                                         'min_width_absolute_px']},
+                                                 'grouping': {'type': 'object',
+                                                              'additionalProperties': False,
+                                                              'properties': {'border_rgb': {'type': 'string',
+                                                                                            'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                             'border_width_px': {'type': 'integer',
+                                                                                                 'minimum': 1,
+                                                                                                 'maximum': 4},
+                                                                             'fill_rgb': {'type': 'string',
+                                                                                          'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                             'fill_selected_rgb': {'type': 'string',
+                                                                                                   'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                             'corner_radius_px': {'type': 'integer',
+                                                                                                  'minimum': 0},
+                                                                             'inner_padding_px': {'type': 'integer',
+                                                                                                  'minimum': 0},
+                                                                             'gutter_px': {'type': 'integer',
+                                                                                           'minimum': 0}},
+                                                              'required': ['border_rgb',
+                                                                           'border_width_px',
+                                                                           'fill_rgb',
+                                                                           'fill_selected_rgb',
+                                                                           'corner_radius_px',
+                                                                           'inner_padding_px',
+                                                                           'gutter_px']},
+                                                 'cell': {'type': 'object',
+                                                          'properties': {'mpn': {'$ref': '#/$defs/cell_style'},
+                                                                         'refdes': {'$ref': '#/$defs/cell_style'},
+                                                                         'description': {'type': 'object',
+                                                                                         'additionalProperties': False,
+                                                                                         'properties': {'fill_rgb': {'type': 'string',
+                                                                                                                     'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                                        'text_rgb': {'type': 'string',
+                                                                                                                     'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                                        'text_selected_rgb': {'type': 'string',
+                                                                                                                              'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                                        'corner_radius_px': {'type': 'integer',
+                                                                                                                             'minimum': 0},
+                                                                                                        'padding_px': {'type': 'integer',
+                                                                                                                       'minimum': 0},
+                                                                                                        'font_size_px': {'type': 'integer',
+                                                                                                                         'minimum': 1}},
+                                                                                         'required': ['fill_rgb',
+                                                                                                      'text_rgb',
+                                                                                                      'text_selected_rgb',
+                                                                                                      'corner_radius_px',
+                                                                                                      'padding_px',
+                                                                                                      'font_size_px']}},
+                                                          'required': ['mpn',
+                                                                       'refdes',
+                                                                       'description']},
+                                                 'chip': {'type': 'object',
+                                                          'additionalProperties': False,
+                                                          'properties': {'fill_rgb': {'type': 'string',
+                                                                                      'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'fill_hover_rgb': {'type': 'string',
+                                                                                            'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'text_rgb': {'type': 'string',
+                                                                                      'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'text_selected_rgb': {'type': 'string',
+                                                                                               'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'corner_radius_px': {'type': 'integer',
+                                                                                              'minimum': 0},
+                                                                         'vertical_padding_px': {'type': 'integer',
+                                                                                                 'minimum': 0},
+                                                                         'horizontal_padding_px': {'type': 'integer',
+                                                                                                   'minimum': 0},
+                                                                         'flow_spacing_px': {'type': 'integer',
+                                                                                             'minimum': 0}},
+                                                          'required': ['fill_rgb',
+                                                                       'fill_hover_rgb',
+                                                                       'text_rgb',
+                                                                       'text_selected_rgb',
+                                                                       'corner_radius_px',
+                                                                       'vertical_padding_px',
+                                                                       'horizontal_padding_px',
+                                                                       'flow_spacing_px']}}}},
+     '$defs': {'toast_severity': {'type': 'object',
+                                  'properties': {'background_rgb': {'type': 'string',
+                                                                    'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                 'text_rgb': {'type': 'string',
+                                                              'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                 'border_rgb': {'type': 'string',
+                                                                'pattern': '^#[0-9A-Fa-f]{6}$'}},
+                                  'required': ['background_rgb',
+                                               'text_rgb',
+                                               'border_rgb']},
+               'color_with_alpha': {'type': 'object',
+                                    'properties': {'rgb': {'type': 'string',
+                                                           'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                   'alpha': {'type': 'integer',
+                                                             'minimum': 0,
+                                                             'maximum': 255}},
+                                    'required': ['rgb']},
+               'cell_style': {'type': 'object',
+                              'additionalProperties': False,
+                              'properties': {'fill_rgb': {'type': 'string',
+                                                          'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                             'text_rgb': {'type': 'string',
+                                                          'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                             'text_selected_rgb': {'type': 'string',
+                                                                   'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                             'corner_radius_px': {'type': 'integer',
+                                                                  'minimum': 0},
+                                             'padding_px': {'type': 'integer',
+                                                            'minimum': 0}},
+                              'required': ['fill_rgb',
+                                           'text_rgb',
+                                           'text_selected_rgb',
+                                           'corner_radius_px',
+                                           'padding_px']}}}
+
+On instance:
+    {'application': {'font_scale': {'default_pt': 10,
+                                    'min_pt': 8,
+                                    'max_pt': 24,
+                                    'step_pt': 1}},
+     'left_panel': {'layout': {'min_width_px': 280},
+                    'section_header': {'fill_rgb': '#FAFAFA',
+                                       'text_rgb': '#555555',
+                                       'padding_px': 4},
+                    'row': {'fill_rgb': '#2A2A2A',
+                            'fill_selected_rgb': '#FFFACD',
+                            'text_selected_rgb': '#000000',
+                            'corner_radius_px': 4,
+                            'vertical_padding_px': 6,
+                            'horizontal_padding_px': 8,
+                            'gutter_px': 3},
+                    'progress_view': {'fill_rgb': '#FAFAFA',
+                                      'text_rgb': '#000000'}},
+     'canvas': {'colour': {'highlight_pen': {'rgb': '#FF00FF'},
+                           'dim_overlay': {'rgb': '#000000', 'alpha': 128},
+                           'hint_label_background': {'rgb': '#FFFFFF'},
+                           'hint_label_text': {'rgb': '#000000'},
+                           'hint_label_border': {'rgb': '#000000'}},
+                'pen_width': {'highlight': 3},
+                'z_order': {'base_pixmap': 0.0,
+                            'dim': 1.0,
+                            'highlight': 2.0},
+                'zoom': {'min_scale': 1.0,
+                         'max_scale': 8.0,
+                         'step': 1.25,
+                         'render_multiplier': 3.0},
+                'scalar': {'highlight_scale': 2.0},
+                'hint_label': {'padding_px': 4, 'border_width_px': 1}},
+     'bom_panel': {'layout': {'min_width_percent': 0.15,
+                              'min_width_absolute_px': 200},
+                   'grouping': {'border_rgb': '#3F3F3F',
+                                'border_width_px': 1,
+                                'fill_rgb': '#252525',
+                                'fill_selected_rgb': '#FFFACD',
+                                'corner_radius_px': 4,
+                                'inner_padding_px': 6,
+                                'gutter_px': 3},
+                   'cell': {'mpn': {'fill_rgb': '#2A2A2A',
+                                    'text_rgb': '#E8E8E8',
+                                    'text_selected_rgb': '#000000',
+                                    'corner_radius_px': 4,
+                                    'padding_px': 6},
+                            'refdes': {'fill_rgb': '#2A2A2A',
+                                       'text_rgb': '#E8E8E8',
+                                       'text_selected_rgb': '#000000',
+                                       'corner_radius_px': 4,
+                                       'padding_px': 6},
+                            'description': {'fill_rgb': '#2A2A2A',
+                                            'text_rgb': '#AAAAAA',
+                                            'text_selected_rgb': '#000000',
+                                            'corner_radius_px': 4,
+                                            'padding_px': 6,
+                                            'font_size_px': 11}},
+                   'chip': {'fill_rgb': '#3A3A3A',
+                            'fill_hover_rgb': '#4A4A4A',
+                            'text_rgb': '#E8E8E8',
+                            'text_selected_rgb': '#FFFF00',
+                            'corner_radius_px': 3,
+                            'vertical_padding_px': 3,
+                            'horizontal_padding_px': 6,
+                            'flow_spacing_px': 4}}}
+2026-06-01 19:55:01,139 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 309, in load
+    jsonschema.validate(instance=theme_data, schema=schema_data)
+  File "D:\Dev\Scheduler\Cockpit\venv\Lib\site-packages\jsonschema\validators.py", line 1332, in validate
+    raise error
+jsonschema.exceptions.ValidationError: 'canvas' is a required property
+
+Failed validating 'required' in schema:
+    {'$schema': 'https://json-schema.org/draft/2020-12/schema',
+     'type': 'object',
+     'additionalProperties': False,
+     'required': ['application',
+                  'base',
+                  'left_panel',
+                  'canvas',
+                  'bom_panel'],
+     'properties': {'$schema': {'type': 'string'},
+                    'application': {'type': 'object',
+                                    'additionalProperties': False,
+                                    'required': ['font_scale'],
+                                    'properties': {'font_scale': {'type': 'object',
+                                                                  'properties': {'default_pt': {'type': 'integer',
+                                                                                                'minimum': 1},
+                                                                                 'min_pt': {'type': 'integer',
+                                                                                            'minimum': 1},
+                                                                                 'max_pt': {'type': 'integer',
+                                                                                            'minimum': 1},
+                                                                                 'step_pt': {'type': 'integer',
+                                                                                             'minimum': 1}},
+                                                                  'required': ['default_pt',
+                                                                               'min_pt',
+                                                                               'max_pt',
+                                                                               'step_pt']}}},
+                    'base': {'type': 'object',
+                             'additionalProperties': False,
+                             'required': ['window', 'font', 'toast'],
+                             'properties': {'window': {'type': 'object',
+                                                       'properties': {'rgb': {'type': 'string',
+                                                                              'pattern': '^#[0-9A-Fa-f]{6}$'}},
+                                                       'required': ['rgb']},
+                                            'font': {'type': 'object',
+                                                     'properties': {'family': {'type': 'string'},
+                                                                    'size_px': {'type': 'integer',
+                                                                                'minimum': 1}},
+                                                     'required': ['family',
+                                                                  'size_px']},
+                                            'toast': {'type': 'object',
+                                                      'properties': {'info': {'$ref': '#/$defs/toast_severity'},
+                                                                     'warn': {'$ref': '#/$defs/toast_severity'},
+                                                                     'error': {'$ref': '#/$defs/toast_severity'}},
+                                                      'required': ['info',
+                                                                   'warn',
+                                                                   'error']}}},
+                    'left_panel': {'type': 'object',
+                                   'additionalProperties': False,
+                                   'required': ['section_header',
+                                                'row',
+                                                'progress_view',
+                                                'layout'],
+                                   'properties': {'layout': {'type': 'object',
+                                                             'properties': {'min_width_px': {'type': 'integer',
+                                                                                             'minimum': 0}},
+                                                             'required': ['min_width_px']},
+                                                  'section_header': {'type': 'object',
+                                                                     'properties': {'fill_rgb': {'type': 'string',
+                                                                                                 'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                    'text_rgb': {'type': 'string',
+                                                                                                 'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                    'padding_px': {'type': 'integer',
+                                                                                                   'minimum': 0}},
+                                                                     'required': ['fill_rgb',
+                                                                                  'text_rgb',
+                                                                                  'padding_px']},
+                                                  'row': {'type': 'object',
+                                                          'properties': {'fill_rgb': {'type': 'string',
+                                                                                      'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'fill_selected_rgb': {'type': 'string',
+                                                                                               'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'text_selected_rgb': {'type': 'string',
+                                                                                               'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'corner_radius_px': {'type': 'integer',
+                                                                                              'minimum': 0},
+                                                                         'vertical_padding_px': {'type': 'integer',
+                                                                                                 'minimum': 0},
+                                                                         'horizontal_padding_px': {'type': 'integer',
+                                                                                                   'minimum': 0},
+                                                                         'gutter_px': {'type': 'integer',
+                                                                                       'minimum': 0}},
+                                                          'required': ['fill_rgb',
+                                                                       'fill_selected_rgb',
+                                                                       'text_selected_rgb',
+                                                                       'corner_radius_px',
+                                                                       'vertical_padding_px',
+                                                                       'horizontal_padding_px',
+                                                                       'gutter_px']},
+                                                  'progress_view': {'type': 'object',
+                                                                    'properties': {'fill_rgb': {'type': 'string',
+                                                                                                'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                   'text_rgb': {'type': 'string',
+                                                                                                'pattern': '^#[0-9A-Fa-f]{6}$'}},
+                                                                    'required': ['fill_rgb',
+                                                                                 'text_rgb']}}},
+                    'canvas': {'type': 'object',
+                               'additionalProperties': False,
+                               'required': ['colour',
+                                            'pen_width',
+                                            'z_order',
+                                            'zoom',
+                                            'scalar',
+                                            'hint_label'],
+                               'properties': {'colour': {'type': 'object',
+                                                         'additionalProperties': False,
+                                                         'required': ['highlight_pen',
+                                                                      'dim_overlay',
+                                                                      'hint_label_background',
+                                                                      'hint_label_text',
+                                                                      'hint_label_border'],
+                                                         'properties': {'highlight_pen': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'dim_overlay': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'hint_label_background': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'hint_label_text': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'hint_label_border': {'$ref': '#/$defs/color_with_alpha'}}},
+                                              'pen_width': {'type': 'object',
+                                                            'additionalProperties': False,
+                                                            'required': ['highlight'],
+                                                            'properties': {'highlight': {'type': 'integer',
+                                                                                         'minimum': 1}}},
+                                              'z_order': {'type': 'object',
+                                                          'additionalProperties': False,
+                                                          'required': ['base_pixmap',
+                                                                       'dim',
+                                                                       'highlight'],
+                                                          'properties': {'base_pixmap': {'type': 'integer'},
+                                                                         'dim': {'type': 'integer'},
+                                                                         'highlight': {'type': 'integer'}}},
+                                              'zoom': {'type': 'object',
+                                                       'additionalProperties': False,
+                                                       'required': ['min_scale',
+                                                                    'max_scale',
+                                                                    'step',
+                                                                    'render_multiplier'],
+                                                       'properties': {'min_scale': {'type': 'number',
+                                                                                    'minimum': 0.01,
+                                                                                    'maximum': 1.0},
+                                                                      'max_scale': {'type': 'number',
+                                                                                    'exclusiveMinimum': 1.0,
+                                                                                    'maximum': 16.0},
+                                                                      'step': {'type': 'number',
+                                                                               'exclusiveMinimum': 1.0,
+                                                                               'maximum': 2.0},
+                                                                      'render_multiplier': {'type': 'number',
+                                                                                            'minimum': 1.0,
+                                                                                            'maximum': 16.0}}},
+                                              'scalar': {'type': 'object',
+                                                         'additionalProperties': False,
+                                                         'required': ['highlight_scale'],
+                                                         'properties': {'highlight_scale': {'type': 'number',
+                                                                                            'minimum': 1.0,
+                                                                                            'maximum': 4.0}}},
+                                              'hint_label': {'type': 'object',
+                                                             'additionalProperties': False,
+                                                             'required': ['padding_px',
+                                                                          'border_width_px'],
+                                                             'properties': {'padding_px': {'type': 'integer',
+                                                                                           'minimum': 0},
+                                                                            'border_width_px': {'type': 'integer',
+                                                                                                'minimum': 0}}}}},
+                    'bom_panel': {'type': 'object',
+                                  'additionalProperties': False,
+                                  'required': ['grouping',
+                                               'cell',
+                                               'chip',
+                                               'layout'],
+                                  'properties': {'layout': {'type': 'object',
+                                                            'properties': {'min_width_percent': {'type': 'number',
+                                                                                                 'minimum': 0,
+                                                                                                 'maximum': 1},
+                                                                           'min_width_absolute_px': {'type': 'integer',
+                                                                                                     'minimum': 0}},
+                                                            'required': ['min_width_percent',
+                                                                         'min_width_absolute_px']},
+                                                 'grouping': {'type': 'object',
+                                                              'additionalProperties': False,
+                                                              'properties': {'border_rgb': {'type': 'string',
+                                                                                            'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                             'border_width_px': {'type': 'integer',
+                                                                                                 'minimum': 1,
+                                                                                                 'maximum': 4},
+                                                                             'fill_rgb': {'type': 'string',
+                                                                                          'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                             'fill_selected_rgb': {'type': 'string',
+                                                                                                   'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                             'corner_radius_px': {'type': 'integer',
+                                                                                                  'minimum': 0},
+                                                                             'inner_padding_px': {'type': 'integer',
+                                                                                                  'minimum': 0},
+                                                                             'gutter_px': {'type': 'integer',
+                                                                                           'minimum': 0}},
+                                                              'required': ['border_rgb',
+                                                                           'border_width_px',
+                                                                           'fill_rgb',
+                                                                           'fill_selected_rgb',
+                                                                           'corner_radius_px',
+                                                                           'inner_padding_px',
+                                                                           'gutter_px']},
+                                                 'cell': {'type': 'object',
+                                                          'properties': {'mpn': {'$ref': '#/$defs/cell_style'},
+                                                                         'refdes': {'$ref': '#/$defs/cell_style'},
+                                                                         'description': {'type': 'object',
+                                                                                         'additionalProperties': False,
+                                                                                         'properties': {'fill_rgb': {'type': 'string',
+                                                                                                                     'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                                        'text_rgb': {'type': 'string',
+                                                                                                                     'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                                        'text_selected_rgb': {'type': 'string',
+                                                                                                                              'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                                        'corner_radius_px': {'type': 'integer',
+                                                                                                                             'minimum': 0},
+                                                                                                        'padding_px': {'type': 'integer',
+                                                                                                                       'minimum': 0},
+                                                                                                        'font_size_px': {'type': 'integer',
+                                                                                                                         'minimum': 1}},
+                                                                                         'required': ['fill_rgb',
+                                                                                                      'text_rgb',
+                                                                                                      'text_selected_rgb',
+                                                                                                      'corner_radius_px',
+                                                                                                      'padding_px',
+                                                                                                      'font_size_px']}},
+                                                          'required': ['mpn',
+                                                                       'refdes',
+                                                                       'description']},
+                                                 'chip': {'type': 'object',
+                                                          'additionalProperties': False,
+                                                          'properties': {'fill_rgb': {'type': 'string',
+                                                                                      'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'fill_hover_rgb': {'type': 'string',
+                                                                                            'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'text_rgb': {'type': 'string',
+                                                                                      'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'text_selected_rgb': {'type': 'string',
+                                                                                               'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'corner_radius_px': {'type': 'integer',
+                                                                                              'minimum': 0},
+                                                                         'vertical_padding_px': {'type': 'integer',
+                                                                                                 'minimum': 0},
+                                                                         'horizontal_padding_px': {'type': 'integer',
+                                                                                                   'minimum': 0},
+                                                                         'flow_spacing_px': {'type': 'integer',
+                                                                                             'minimum': 0}},
+                                                          'required': ['fill_rgb',
+                                                                       'fill_hover_rgb',
+                                                                       'text_rgb',
+                                                                       'text_selected_rgb',
+                                                                       'corner_radius_px',
+                                                                       'vertical_padding_px',
+                                                                       'horizontal_padding_px',
+                                                                       'flow_spacing_px']}}}},
+     '$defs': {'toast_severity': {'type': 'object',
+                                  'properties': {'background_rgb': {'type': 'string',
+                                                                    'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                 'text_rgb': {'type': 'string',
+                                                              'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                 'border_rgb': {'type': 'string',
+                                                                'pattern': '^#[0-9A-Fa-f]{6}$'}},
+                                  'required': ['background_rgb',
+                                               'text_rgb',
+                                               'border_rgb']},
+               'color_with_alpha': {'type': 'object',
+                                    'properties': {'rgb': {'type': 'string',
+                                                           'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                   'alpha': {'type': 'integer',
+                                                             'minimum': 0,
+                                                             'maximum': 255}},
+                                    'required': ['rgb']},
+               'cell_style': {'type': 'object',
+                              'additionalProperties': False,
+                              'properties': {'fill_rgb': {'type': 'string',
+                                                          'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                             'text_rgb': {'type': 'string',
+                                                          'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                             'text_selected_rgb': {'type': 'string',
+                                                                   'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                             'corner_radius_px': {'type': 'integer',
+                                                                  'minimum': 0},
+                                             'padding_px': {'type': 'integer',
+                                                            'minimum': 0}},
+                              'required': ['fill_rgb',
+                                           'text_rgb',
+                                           'text_selected_rgb',
+                                           'corner_radius_px',
+                                           'padding_px']}}}
+
+On instance:
+    {'application': {'font_scale': {'default_pt': 10,
+                                    'min_pt': 8,
+                                    'max_pt': 24,
+                                    'step_pt': 1}},
+     'base': {'window': {'rgb': '#FAFAFA'},
+              'font': {'family': 'Segoe UI', 'size_px': 13},
+              'toast': {'info': {'background_rgb': '#E3F2FD',
+                                 'text_rgb': '#0D47A1',
+                                 'border_rgb': '#1976D2'},
+                        'warn': {'background_rgb': '#FFF3E0',
+                                 'text_rgb': '#E65100',
+                                 'border_rgb': '#FF9800'},
+                        'error': {'background_rgb': '#E8F5E9',
+                                  'text_rgb': '#2E7D32',
+                                  'border_rgb': '#4CAF50'}}},
+     'left_panel': {'layout': {'min_width_px': 280},
+                    'section_header': {'fill_rgb': '#FAFAFA',
+                                       'text_rgb': '#555555',
+                                       'padding_px': 4},
+                    'row': {'fill_rgb': '#2A2A2A',
+                            'fill_selected_rgb': '#FFFACD',
+                            'text_selected_rgb': '#000000',
+                            'corner_radius_px': 4,
+                            'vertical_padding_px': 6,
+                            'horizontal_padding_px': 8,
+                            'gutter_px': 3},
+                    'progress_view': {'fill_rgb': '#FAFAFA',
+                                      'text_rgb': '#000000'}},
+     'bom_panel': {'layout': {'min_width_percent': 0.15,
+                              'min_width_absolute_px': 200},
+                   'grouping': {'border_rgb': '#3F3F3F',
+                                'border_width_px': 1,
+                                'fill_rgb': '#252525',
+                                'fill_selected_rgb': '#FFFACD',
+                                'corner_radius_px': 4,
+                                'inner_padding_px': 6,
+                                'gutter_px': 3},
+                   'cell': {'mpn': {'fill_rgb': '#2A2A2A',
+                                    'text_rgb': '#E8E8E8',
+                                    'text_selected_rgb': '#000000',
+                                    'corner_radius_px': 4,
+                                    'padding_px': 6},
+                            'refdes': {'fill_rgb': '#2A2A2A',
+                                       'text_rgb': '#E8E8E8',
+                                       'text_selected_rgb': '#000000',
+                                       'corner_radius_px': 4,
+                                       'padding_px': 6},
+                            'description': {'fill_rgb': '#2A2A2A',
+                                            'text_rgb': '#AAAAAA',
+                                            'text_selected_rgb': '#000000',
+                                            'corner_radius_px': 4,
+                                            'padding_px': 6,
+                                            'font_size_px': 11}},
+                   'chip': {'fill_rgb': '#3A3A3A',
+                            'fill_hover_rgb': '#4A4A4A',
+                            'text_rgb': '#E8E8E8',
+                            'text_selected_rgb': '#FFFF00',
+                            'corner_radius_px': 3,
+                            'vertical_padding_px': 3,
+                            'horizontal_padding_px': 6,
+                            'flow_spacing_px': 4}}}
+2026-06-01 19:55:01,174 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 309, in load
+    jsonschema.validate(instance=theme_data, schema=schema_data)
+  File "D:\Dev\Scheduler\Cockpit\venv\Lib\site-packages\jsonschema\validators.py", line 1332, in validate
+    raise error
+jsonschema.exceptions.ValidationError: Additional properties are not allowed ('extra_key' was unexpected)
+
+Failed validating 'additionalProperties' in schema:
+    {'$schema': 'https://json-schema.org/draft/2020-12/schema',
+     'type': 'object',
+     'additionalProperties': False,
+     'required': ['application',
+                  'base',
+                  'left_panel',
+                  'canvas',
+                  'bom_panel'],
+     'properties': {'$schema': {'type': 'string'},
+                    'application': {'type': 'object',
+                                    'additionalProperties': False,
+                                    'required': ['font_scale'],
+                                    'properties': {'font_scale': {'type': 'object',
+                                                                  'properties': {'default_pt': {'type': 'integer',
+                                                                                                'minimum': 1},
+                                                                                 'min_pt': {'type': 'integer',
+                                                                                            'minimum': 1},
+                                                                                 'max_pt': {'type': 'integer',
+                                                                                            'minimum': 1},
+                                                                                 'step_pt': {'type': 'integer',
+                                                                                             'minimum': 1}},
+                                                                  'required': ['default_pt',
+                                                                               'min_pt',
+                                                                               'max_pt',
+                                                                               'step_pt']}}},
+                    'base': {'type': 'object',
+                             'additionalProperties': False,
+                             'required': ['window', 'font', 'toast'],
+                             'properties': {'window': {'type': 'object',
+                                                       'properties': {'rgb': {'type': 'string',
+                                                                              'pattern': '^#[0-9A-Fa-f]{6}$'}},
+                                                       'required': ['rgb']},
+                                            'font': {'type': 'object',
+                                                     'properties': {'family': {'type': 'string'},
+                                                                    'size_px': {'type': 'integer',
+                                                                                'minimum': 1}},
+                                                     'required': ['family',
+                                                                  'size_px']},
+                                            'toast': {'type': 'object',
+                                                      'properties': {'info': {'$ref': '#/$defs/toast_severity'},
+                                                                     'warn': {'$ref': '#/$defs/toast_severity'},
+                                                                     'error': {'$ref': '#/$defs/toast_severity'}},
+                                                      'required': ['info',
+                                                                   'warn',
+                                                                   'error']}}},
+                    'left_panel': {'type': 'object',
+                                   'additionalProperties': False,
+                                   'required': ['section_header',
+                                                'row',
+                                                'progress_view',
+                                                'layout'],
+                                   'properties': {'layout': {'type': 'object',
+                                                             'properties': {'min_width_px': {'type': 'integer',
+                                                                                             'minimum': 0}},
+                                                             'required': ['min_width_px']},
+                                                  'section_header': {'type': 'object',
+                                                                     'properties': {'fill_rgb': {'type': 'string',
+                                                                                                 'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                    'text_rgb': {'type': 'string',
+                                                                                                 'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                    'padding_px': {'type': 'integer',
+                                                                                                   'minimum': 0}},
+                                                                     'required': ['fill_rgb',
+                                                                                  'text_rgb',
+                                                                                  'padding_px']},
+                                                  'row': {'type': 'object',
+                                                          'properties': {'fill_rgb': {'type': 'string',
+                                                                                      'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'fill_selected_rgb': {'type': 'string',
+                                                                                               'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'text_selected_rgb': {'type': 'string',
+                                                                                               'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'corner_radius_px': {'type': 'integer',
+                                                                                              'minimum': 0},
+                                                                         'vertical_padding_px': {'type': 'integer',
+                                                                                                 'minimum': 0},
+                                                                         'horizontal_padding_px': {'type': 'integer',
+                                                                                                   'minimum': 0},
+                                                                         'gutter_px': {'type': 'integer',
+                                                                                       'minimum': 0}},
+                                                          'required': ['fill_rgb',
+                                                                       'fill_selected_rgb',
+                                                                       'text_selected_rgb',
+                                                                       'corner_radius_px',
+                                                                       'vertical_padding_px',
+                                                                       'horizontal_padding_px',
+                                                                       'gutter_px']},
+                                                  'progress_view': {'type': 'object',
+                                                                    'properties': {'fill_rgb': {'type': 'string',
+                                                                                                'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                   'text_rgb': {'type': 'string',
+                                                                                                'pattern': '^#[0-9A-Fa-f]{6}$'}},
+                                                                    'required': ['fill_rgb',
+                                                                                 'text_rgb']}}},
+                    'canvas': {'type': 'object',
+                               'additionalProperties': False,
+                               'required': ['colour',
+                                            'pen_width',
+                                            'z_order',
+                                            'zoom',
+                                            'scalar',
+                                            'hint_label'],
+                               'properties': {'colour': {'type': 'object',
+                                                         'additionalProperties': False,
+                                                         'required': ['highlight_pen',
+                                                                      'dim_overlay',
+                                                                      'hint_label_background',
+                                                                      'hint_label_text',
+                                                                      'hint_label_border'],
+                                                         'properties': {'highlight_pen': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'dim_overlay': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'hint_label_background': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'hint_label_text': {'$ref': '#/$defs/color_with_alpha'},
+                                                                        'hint_label_border': {'$ref': '#/$defs/color_with_alpha'}}},
+                                              'pen_width': {'type': 'object',
+                                                            'additionalProperties': False,
+                                                            'required': ['highlight'],
+                                                            'properties': {'highlight': {'type': 'integer',
+                                                                                         'minimum': 1}}},
+                                              'z_order': {'type': 'object',
+                                                          'additionalProperties': False,
+                                                          'required': ['base_pixmap',
+                                                                       'dim',
+                                                                       'highlight'],
+                                                          'properties': {'base_pixmap': {'type': 'integer'},
+                                                                         'dim': {'type': 'integer'},
+                                                                         'highlight': {'type': 'integer'}}},
+                                              'zoom': {'type': 'object',
+                                                       'additionalProperties': False,
+                                                       'required': ['min_scale',
+                                                                    'max_scale',
+                                                                    'step',
+                                                                    'render_multiplier'],
+                                                       'properties': {'min_scale': {'type': 'number',
+                                                                                    'minimum': 0.01,
+                                                                                    'maximum': 1.0},
+                                                                      'max_scale': {'type': 'number',
+                                                                                    'exclusiveMinimum': 1.0,
+                                                                                    'maximum': 16.0},
+                                                                      'step': {'type': 'number',
+                                                                               'exclusiveMinimum': 1.0,
+                                                                               'maximum': 2.0},
+                                                                      'render_multiplier': {'type': 'number',
+                                                                                            'minimum': 1.0,
+                                                                                            'maximum': 16.0}}},
+                                              'scalar': {'type': 'object',
+                                                         'additionalProperties': False,
+                                                         'required': ['highlight_scale'],
+                                                         'properties': {'highlight_scale': {'type': 'number',
+                                                                                            'minimum': 1.0,
+                                                                                            'maximum': 4.0}}},
+                                              'hint_label': {'type': 'object',
+                                                             'additionalProperties': False,
+                                                             'required': ['padding_px',
+                                                                          'border_width_px'],
+                                                             'properties': {'padding_px': {'type': 'integer',
+                                                                                           'minimum': 0},
+                                                                            'border_width_px': {'type': 'integer',
+                                                                                                'minimum': 0}}}}},
+                    'bom_panel': {'type': 'object',
+                                  'additionalProperties': False,
+                                  'required': ['grouping',
+                                               'cell',
+                                               'chip',
+                                               'layout'],
+                                  'properties': {'layout': {'type': 'object',
+                                                            'properties': {'min_width_percent': {'type': 'number',
+                                                                                                 'minimum': 0,
+                                                                                                 'maximum': 1},
+                                                                           'min_width_absolute_px': {'type': 'integer',
+                                                                                                     'minimum': 0}},
+                                                            'required': ['min_width_percent',
+                                                                         'min_width_absolute_px']},
+                                                 'grouping': {'type': 'object',
+                                                              'additionalProperties': False,
+                                                              'properties': {'border_rgb': {'type': 'string',
+                                                                                            'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                             'border_width_px': {'type': 'integer',
+                                                                                                 'minimum': 1,
+                                                                                                 'maximum': 4},
+                                                                             'fill_rgb': {'type': 'string',
+                                                                                          'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                             'fill_selected_rgb': {'type': 'string',
+                                                                                                   'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                             'corner_radius_px': {'type': 'integer',
+                                                                                                  'minimum': 0},
+                                                                             'inner_padding_px': {'type': 'integer',
+                                                                                                  'minimum': 0},
+                                                                             'gutter_px': {'type': 'integer',
+                                                                                           'minimum': 0}},
+                                                              'required': ['border_rgb',
+                                                                           'border_width_px',
+                                                                           'fill_rgb',
+                                                                           'fill_selected_rgb',
+                                                                           'corner_radius_px',
+                                                                           'inner_padding_px',
+                                                                           'gutter_px']},
+                                                 'cell': {'type': 'object',
+                                                          'properties': {'mpn': {'$ref': '#/$defs/cell_style'},
+                                                                         'refdes': {'$ref': '#/$defs/cell_style'},
+                                                                         'description': {'type': 'object',
+                                                                                         'additionalProperties': False,
+                                                                                         'properties': {'fill_rgb': {'type': 'string',
+                                                                                                                     'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                                        'text_rgb': {'type': 'string',
+                                                                                                                     'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                                        'text_selected_rgb': {'type': 'string',
+                                                                                                                              'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                                                        'corner_radius_px': {'type': 'integer',
+                                                                                                                             'minimum': 0},
+                                                                                                        'padding_px': {'type': 'integer',
+                                                                                                                       'minimum': 0},
+                                                                                                        'font_size_px': {'type': 'integer',
+                                                                                                                         'minimum': 1}},
+                                                                                         'required': ['fill_rgb',
+                                                                                                      'text_rgb',
+                                                                                                      'text_selected_rgb',
+                                                                                                      'corner_radius_px',
+                                                                                                      'padding_px',
+                                                                                                      'font_size_px']}},
+                                                          'required': ['mpn',
+                                                                       'refdes',
+                                                                       'description']},
+                                                 'chip': {'type': 'object',
+                                                          'additionalProperties': False,
+                                                          'properties': {'fill_rgb': {'type': 'string',
+                                                                                      'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'fill_hover_rgb': {'type': 'string',
+                                                                                            'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'text_rgb': {'type': 'string',
+                                                                                      'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'text_selected_rgb': {'type': 'string',
+                                                                                               'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                                         'corner_radius_px': {'type': 'integer',
+                                                                                              'minimum': 0},
+                                                                         'vertical_padding_px': {'type': 'integer',
+                                                                                                 'minimum': 0},
+                                                                         'horizontal_padding_px': {'type': 'integer',
+                                                                                                   'minimum': 0},
+                                                                         'flow_spacing_px': {'type': 'integer',
+                                                                                             'minimum': 0}},
+                                                          'required': ['fill_rgb',
+                                                                       'fill_hover_rgb',
+                                                                       'text_rgb',
+                                                                       'text_selected_rgb',
+                                                                       'corner_radius_px',
+                                                                       'vertical_padding_px',
+                                                                       'horizontal_padding_px',
+                                                                       'flow_spacing_px']}}}},
+     '$defs': {'toast_severity': {'type': 'object',
+                                  'properties': {'background_rgb': {'type': 'string',
+                                                                    'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                 'text_rgb': {'type': 'string',
+                                                              'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                 'border_rgb': {'type': 'string',
+                                                                'pattern': '^#[0-9A-Fa-f]{6}$'}},
+                                  'required': ['background_rgb',
+                                               'text_rgb',
+                                               'border_rgb']},
+               'color_with_alpha': {'type': 'object',
+                                    'properties': {'rgb': {'type': 'string',
+                                                           'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                                   'alpha': {'type': 'integer',
+                                                             'minimum': 0,
+                                                             'maximum': 255}},
+                                    'required': ['rgb']},
+               'cell_style': {'type': 'object',
+                              'additionalProperties': False,
+                              'properties': {'fill_rgb': {'type': 'string',
+                                                          'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                             'text_rgb': {'type': 'string',
+                                                          'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                             'text_selected_rgb': {'type': 'string',
+                                                                   'pattern': '^#[0-9A-Fa-f]{6}$'},
+                                             'corner_radius_px': {'type': 'integer',
+                                                                  'minimum': 0},
+                                             'padding_px': {'type': 'integer',
+                                                            'minimum': 0}},
+                              'required': ['fill_rgb',
+                                           'text_rgb',
+                                           'text_selected_rgb',
+                                           'corner_radius_px',
+                                           'padding_px']}}}
+
+On instance:
+    {'application': {'font_scale': {'default_pt': 10,
+                                    'min_pt': 8,
+                                    'max_pt': 24,
+                                    'step_pt': 1}},
+     'base': {'window': {'rgb': '#FAFAFA'},
+              'font': {'family': 'Segoe UI', 'size_px': 13},
+              'toast': {'info': {'background_rgb': '#E3F2FD',
+                                 'text_rgb': '#0D47A1',
+                                 'border_rgb': '#1976D2'},
+                        'warn': {'background_rgb': '#FFF3E0',
+                                 'text_rgb': '#E65100',
+                                 'border_rgb': '#FF9800'},
+                        'error': {'background_rgb': '#E8F5E9',
+                                  'text_rgb': '#2E7D32',
+                                  'border_rgb': '#4CAF50'}}},
+     'left_panel': {'layout': {'min_width_px': 280},
+                    'section_header': {'fill_rgb': '#FAFAFA',
+                                       'text_rgb': '#555555',
+                                       'padding_px': 4},
+                    'row': {'fill_rgb': '#2A2A2A',
+                            'fill_selected_rgb': '#FFFACD',
+                            'text_selected_rgb': '#000000',
+                            'corner_radius_px': 4,
+                            'vertical_padding_px': 6,
+                            'horizontal_padding_px': 8,
+                            'gutter_px': 3},
+                    'progress_view': {'fill_rgb': '#FAFAFA',
+                                      'text_rgb': '#000000'}},
+     'canvas': {'colour': {'highlight_pen': {'rgb': '#FF00FF'},
+                           'dim_overlay': {'rgb': '#000000', 'alpha': 128},
+                           'hint_label_background': {'rgb': '#FFFFFF'},
+                           'hint_label_text': {'rgb': '#000000'},
+                           'hint_label_border': {'rgb': '#000000'}},
+                'pen_width': {'highlight': 3},
+                'z_order': {'base_pixmap': 0.0,
+                            'dim': 1.0,
+                            'highlight': 2.0},
+                'zoom': {'min_scale': 1.0,
+                         'max_scale': 8.0,
+                         'step': 1.25,
+                         'render_multiplier': 3.0},
+                'scalar': {'highlight_scale': 2.0},
+                'hint_label': {'padding_px': 4, 'border_width_px': 1}},
+     'bom_panel': {'layout': {'min_width_percent': 0.15,
+                              'min_width_absolute_px': 200},
+                   'grouping': {'border_rgb': '#3F3F3F',
+                                'border_width_px': 1,
+                                'fill_rgb': '#252525',
+                                'fill_selected_rgb': '#FFFACD',
+                                'corner_radius_px': 4,
+                                'inner_padding_px': 6,
+                                'gutter_px': 3},
+                   'cell': {'mpn': {'fill_rgb': '#2A2A2A',
+                                    'text_rgb': '#E8E8E8',
+                                    'text_selected_rgb': '#000000',
+                                    'corner_radius_px': 4,
+                                    'padding_px': 6},
+                            'refdes': {'fill_rgb': '#2A2A2A',
+                                       'text_rgb': '#E8E8E8',
+                                       'text_selected_rgb': '#000000',
+                                       'corner_radius_px': 4,
+                                       'padding_px': 6},
+                            'description': {'fill_rgb': '#2A2A2A',
+                                            'text_rgb': '#AAAAAA',
+                                            'text_selected_rgb': '#000000',
+                                            'corner_radius_px': 4,
+                                            'padding_px': 6,
+                                            'font_size_px': 11}},
+                   'chip': {'fill_rgb': '#3A3A3A',
+                            'fill_hover_rgb': '#4A4A4A',
+                            'text_rgb': '#E8E8E8',
+                            'text_selected_rgb': '#FFFF00',
+                            'corner_radius_px': 3,
+                            'vertical_padding_px': 3,
+                            'horizontal_padding_px': 6,
+                            'flow_spacing_px': 4}},
+     'extra_key': {}}
+2026-06-01 19:55:01,213 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 309, in load
+    jsonschema.validate(instance=theme_data, schema=schema_data)
+  File "D:\Dev\Scheduler\Cockpit\venv\Lib\site-packages\jsonschema\validators.py", line 1332, in validate
+    raise error
+jsonschema.exceptions.ValidationError: Additional properties are not allowed ('crosshair' was unexpected)
+
+Failed validating 'additionalProperties' in schema['properties']['canvas']['properties']['colour']:
+    {'type': 'object',
+     'additionalProperties': False,
+     'required': ['highlight_pen',
+                  'dim_overlay',
+                  'hint_label_background',
+                  'hint_label_text',
+                  'hint_label_border'],
+     'properties': {'highlight_pen': {'$ref': '#/$defs/color_with_alpha'},
+                    'dim_overlay': {'$ref': '#/$defs/color_with_alpha'},
+                    'hint_label_background': {'$ref': '#/$defs/color_with_alpha'},
+                    'hint_label_text': {'$ref': '#/$defs/color_with_alpha'},
+                    'hint_label_border': {'$ref': '#/$defs/color_with_alpha'}}}
+
+On instance['canvas']['colour']:
+    {'highlight_pen': {'rgb': '#FF00FF'},
+     'dim_overlay': {'rgb': '#000000', 'alpha': 128},
+     'hint_label_background': {'rgb': '#FFFFFF'},
+     'hint_label_text': {'rgb': '#000000'},
+     'hint_label_border': {'rgb': '#000000'},
+     'crosshair': {'rgb': '#FFFF00'}}
+2026-06-01 19:55:01,244 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 309, in load
+    jsonschema.validate(instance=theme_data, schema=schema_data)
+  File "D:\Dev\Scheduler\Cockpit\venv\Lib\site-packages\jsonschema\validators.py", line 1332, in validate
+    raise error
+jsonschema.exceptions.ValidationError: Additional properties are not allowed ('gutter_px' was unexpected)
+
+Failed validating 'additionalProperties' in schema['properties']['bom_panel']['properties']['chip']:
+    {'type': 'object',
+     'additionalProperties': False,
+     'properties': {'fill_rgb': {'type': 'string',
+                                 'pattern': '^#[0-9A-Fa-f]{6}$'},
+                    'fill_hover_rgb': {'type': 'string',
+                                       'pattern': '^#[0-9A-Fa-f]{6}$'},
+                    'text_rgb': {'type': 'string',
+                                 'pattern': '^#[0-9A-Fa-f]{6}$'},
+                    'text_selected_rgb': {'type': 'string',
+                                          'pattern': '^#[0-9A-Fa-f]{6}$'},
+                    'corner_radius_px': {'type': 'integer', 'minimum': 0},
+                    'vertical_padding_px': {'type': 'integer',
+                                            'minimum': 0},
+                    'horizontal_padding_px': {'type': 'integer',
+                                              'minimum': 0},
+                    'flow_spacing_px': {'type': 'integer', 'minimum': 0}},
+     'required': ['fill_rgb',
+                  'fill_hover_rgb',
+                  'text_rgb',
+                  'text_selected_rgb',
+                  'corner_radius_px',
+                  'vertical_padding_px',
+                  'horizontal_padding_px',
+                  'flow_spacing_px']}
+
+On instance['bom_panel']['chip']:
+    {'fill_rgb': '#3A3A3A',
+     'fill_hover_rgb': '#4A4A4A',
+     'text_rgb': '#E8E8E8',
+     'text_selected_rgb': '#FFFF00',
+     'corner_radius_px': 3,
+     'vertical_padding_px': 3,
+     'horizontal_padding_px': 6,
+     'flow_spacing_px': 4,
+     'gutter_px': 4}
+2026-06-01 19:55:01,271 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 309, in load
+    jsonschema.validate(instance=theme_data, schema=schema_data)
+  File "D:\Dev\Scheduler\Cockpit\venv\Lib\site-packages\jsonschema\validators.py", line 1332, in validate
+    raise error
+jsonschema.exceptions.ValidationError: 'flow_spacing_px' is a required property
+
+Failed validating 'required' in schema['properties']['bom_panel']['properties']['chip']:
+    {'type': 'object',
+     'additionalProperties': False,
+     'properties': {'fill_rgb': {'type': 'string',
+                                 'pattern': '^#[0-9A-Fa-f]{6}$'},
+                    'fill_hover_rgb': {'type': 'string',
+                                       'pattern': '^#[0-9A-Fa-f]{6}$'},
+                    'text_rgb': {'type': 'string',
+                                 'pattern': '^#[0-9A-Fa-f]{6}$'},
+                    'text_selected_rgb': {'type': 'string',
+                                          'pattern': '^#[0-9A-Fa-f]{6}$'},
+                    'corner_radius_px': {'type': 'integer', 'minimum': 0},
+                    'vertical_padding_px': {'type': 'integer',
+                                            'minimum': 0},
+                    'horizontal_padding_px': {'type': 'integer',
+                                              'minimum': 0},
+                    'flow_spacing_px': {'type': 'integer', 'minimum': 0}},
+     'required': ['fill_rgb',
+                  'fill_hover_rgb',
+                  'text_rgb',
+                  'text_selected_rgb',
+                  'corner_radius_px',
+                  'vertical_padding_px',
+                  'horizontal_padding_px',
+                  'flow_spacing_px']}
+
+On instance['bom_panel']['chip']:
+    {'fill_rgb': '#3A3A3A',
+     'fill_hover_rgb': '#4A4A4A',
+     'text_rgb': '#E8E8E8',
+     'text_selected_rgb': '#FFFF00',
+     'corner_radius_px': 3,
+     'vertical_padding_px': 3,
+     'horizontal_padding_px': 6}
+2026-06-01 19:55:01,300 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 309, in load
+    jsonschema.validate(instance=theme_data, schema=schema_data)
+  File "D:\Dev\Scheduler\Cockpit\venv\Lib\site-packages\jsonschema\validators.py", line 1332, in validate
+    raise error
+jsonschema.exceptions.ValidationError: 'zoom' is a required property
+
+Failed validating 'required' in schema['properties']['canvas']:
+    {'type': 'object',
+     'additionalProperties': False,
+     'required': ['colour',
+                  'pen_width',
+                  'z_order',
+                  'zoom',
+                  'scalar',
+                  'hint_label'],
+     'properties': {'colour': {'type': 'object',
+                               'additionalProperties': False,
+                               'required': ['highlight_pen',
+                                            'dim_overlay',
+                                            'hint_label_background',
+                                            'hint_label_text',
+                                            'hint_label_border'],
+                               'properties': {'highlight_pen': {'$ref': '#/$defs/color_with_alpha'},
+                                              'dim_overlay': {'$ref': '#/$defs/color_with_alpha'},
+                                              'hint_label_background': {'$ref': '#/$defs/color_with_alpha'},
+                                              'hint_label_text': {'$ref': '#/$defs/color_with_alpha'},
+                                              'hint_label_border': {'$ref': '#/$defs/color_with_alpha'}}},
+                    'pen_width': {'type': 'object',
+                                  'additionalProperties': False,
+                                  'required': ['highlight'],
+                                  'properties': {'highlight': {'type': 'integer',
+                                                               'minimum': 1}}},
+                    'z_order': {'type': 'object',
+                                'additionalProperties': False,
+                                'required': ['base_pixmap',
+                                             'dim',
+                                             'highlight'],
+                                'properties': {'base_pixmap': {'type': 'integer'},
+                                               'dim': {'type': 'integer'},
+                                               'highlight': {'type': 'integer'}}},
+                    'zoom': {'type': 'object',
+                             'additionalProperties': False,
+                             'required': ['min_scale',
+                                          'max_scale',
+                                          'step',
+                                          'render_multiplier'],
+                             'properties': {'min_scale': {'type': 'number',
+                                                          'minimum': 0.01,
+                                                          'maximum': 1.0},
+                                            'max_scale': {'type': 'number',
+                                                          'exclusiveMinimum': 1.0,
+                                                          'maximum': 16.0},
+                                            'step': {'type': 'number',
+                                                     'exclusiveMinimum': 1.0,
+                                                     'maximum': 2.0},
+                                            'render_multiplier': {'type': 'number',
+                                                                  'minimum': 1.0,
+                                                                  'maximum': 16.0}}},
+                    'scalar': {'type': 'object',
+                               'additionalProperties': False,
+                               'required': ['highlight_scale'],
+                               'properties': {'highlight_scale': {'type': 'number',
+                                                                  'minimum': 1.0,
+                                                                  'maximum': 4.0}}},
+                    'hint_label': {'type': 'object',
+                                   'additionalProperties': False,
+                                   'required': ['padding_px',
+                                                'border_width_px'],
+                                   'properties': {'padding_px': {'type': 'integer',
+                                                                 'minimum': 0},
+                                                  'border_width_px': {'type': 'integer',
+                                                                      'minimum': 0}}}}}
+
+On instance['canvas']:
+    {'colour': {'highlight_pen': {'rgb': '#FF00FF'},
+                'dim_overlay': {'rgb': '#000000', 'alpha': 128},
+                'hint_label_background': {'rgb': '#FFFFFF'},
+                'hint_label_text': {'rgb': '#000000'},
+                'hint_label_border': {'rgb': '#000000'}},
+     'pen_width': {'highlight': 3},
+     'z_order': {'base_pixmap': 0.0, 'dim': 1.0, 'highlight': 2.0},
+     'scalar': {'highlight_scale': 2.0},
+     'hint_label': {'padding_px': 4, 'border_width_px': 1}}
+2026-06-01 19:55:01,398 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 309, in load
+    jsonschema.validate(instance=theme_data, schema=schema_data)
+  File "D:\Dev\Scheduler\Cockpit\venv\Lib\site-packages\jsonschema\validators.py", line 1332, in validate
+    raise error
+jsonschema.exceptions.ValidationError: 'render_multiplier' is a required property
+
+Failed validating 'required' in schema['properties']['canvas']['properties']['zoom']:
+    {'type': 'object',
+     'additionalProperties': False,
+     'required': ['min_scale', 'max_scale', 'step', 'render_multiplier'],
+     'properties': {'min_scale': {'type': 'number',
+                                  'minimum': 0.01,
+                                  'maximum': 1.0},
+                    'max_scale': {'type': 'number',
+                                  'exclusiveMinimum': 1.0,
+                                  'maximum': 16.0},
+                    'step': {'type': 'number',
+                             'exclusiveMinimum': 1.0,
+                             'maximum': 2.0},
+                    'render_multiplier': {'type': 'number',
+                                          'minimum': 1.0,
+                                          'maximum': 16.0}}}
+
+On instance['canvas']['zoom']:
+    {'min_scale': 1.0, 'max_scale': 8.0, 'step': 1.25}
+2026-06-01 19:55:01,428 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 309, in load
+    jsonschema.validate(instance=theme_data, schema=schema_data)
+  File "D:\Dev\Scheduler\Cockpit\venv\Lib\site-packages\jsonschema\validators.py", line 1332, in validate
+    raise error
+jsonschema.exceptions.ValidationError: 0.5 is less than the minimum of 1.0
+
+Failed validating 'minimum' in schema['properties']['canvas']['properties']['zoom']['properties']['render_multiplier']:
+    {'type': 'number', 'minimum': 1.0, 'maximum': 16.0}
+
+On instance['canvas']['zoom']['render_multiplier']:
+    0.5
+2026-06-01 19:55:01,466 - MainThread - cockpit.ui.theme - ERROR - Exception caught in theme
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\theme.py", line 309, in load
+    jsonschema.validate(instance=theme_data, schema=schema_data)
+  File "D:\Dev\Scheduler\Cockpit\venv\Lib\site-packages\jsonschema\validators.py", line 1332, in validate
+    raise error
+jsonschema.exceptions.ValidationError: 20.0 is greater than the maximum of 16.0
+
+Failed validating 'maximum' in schema['properties']['canvas']['properties']['zoom']['properties']['render_multiplier']:
+    {'type': 'number', 'minimum': 1.0, 'maximum': 16.0}
+
+On instance['canvas']['zoom']['render_multiplier']:
+    20.0
+2026-06-01 19:55:01,475 - MainThread - cockpit.ui.widgets.add_drawing_dialog - ERROR - Exception caught in add_drawing_dialog
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\widgets\add_drawing_dialog.py", line 82, in dropEvent
+    self._ingestion_service.add_pdf_to_audit(self._audit_id, dropped_path)
+  File "D:\Dev\Scheduler\Cockpit\tests\ui\widgets\test_add_drawing_dialog.py", line 19, in add_pdf_to_audit
+    raise IngestionError(pdf_path, "Bad PDF", {})
+cockpit.ingestion.errors.IngestionError: (WindowsPath('test.pdf'), 'Bad PDF', {})
+2026-06-01 19:55:01,477 - MainThread - cockpit.ui.widgets.add_drawing_dialog - ERROR - Exception caught in add_drawing_dialog
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\widgets\add_drawing_dialog.py", line 82, in dropEvent
+    self._ingestion_service.add_pdf_to_audit(self._audit_id, dropped_path)
+  File "D:\Dev\Scheduler\Cockpit\tests\ui\widgets\test_add_drawing_dialog.py", line 21, in add_pdf_to_audit
+    raise PersistenceError("DB locked")
+cockpit.persistence.errors.PersistenceError: DB locked
+2026-06-01 19:56:26,750 - MainThread - root - INFO - Duplicate log destination: D:\Dev\Scheduler\Cockpit\log.txt
+2026-06-01 19:56:26,750 - MainThread - cockpit - INFO - Primary log: C:\Users\spank\AppData\Roaming\Cockpit\v1\logs\cockpit.log
+2026-06-01 19:56:26,750 - MainThread - cockpit - INFO - Build info: version=0.0.0-dev commit=source runtime=source
+2026-06-01 19:56:26,750 - MainThread - cockpit - INFO - Application data root: C:\Users\spank\AppData\Roaming\Cockpit (Probe history: %APPDATA% default -> OK)
+2026-06-01 19:56:26,750 - MainThread - cockpit - INFO - Bootstrapping Cockpit application...
+2026-06-01 19:56:26,854 - MainThread - cockpit.services.startup_reconciler - ERROR - Exception caught in startup_reconciler
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\startup_reconciler.py", line 88, in reconcile
+    d.rmdir()
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\pathlib.py", line 1351, in rmdir
+    os.rmdir(self)
+OSError: [WinError 145] The directory is not empty: 'C:\\Users\\spank\\AppData\\Roaming\\Cockpit\\v1\\uploads\\B139092\\unsplit'
+2026-06-01 19:56:26,855 - MainThread - cockpit.services.startup_reconciler - ERROR - Exception caught in startup_reconciler
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\startup_reconciler.py", line 88, in reconcile
+    d.rmdir()
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\pathlib.py", line 1351, in rmdir
+    os.rmdir(self)
+OSError: [WinError 145] The directory is not empty: 'C:\\Users\\spank\\AppData\\Roaming\\Cockpit\\v1\\uploads\\B139058\\unsplit'
+2026-06-01 19:56:26,855 - MainThread - cockpit.services.startup_reconciler - ERROR - Exception caught in startup_reconciler
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\startup_reconciler.py", line 88, in reconcile
+    d.rmdir()
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\pathlib.py", line 1351, in rmdir
+    os.rmdir(self)
+OSError: [WinError 145] The directory is not empty: 'C:\\Users\\spank\\AppData\\Roaming\\Cockpit\\v1\\uploads\\B139073\\unsplit'
+2026-06-01 19:56:26,856 - MainThread - cockpit.services.startup_reconciler - ERROR - Exception caught in startup_reconciler
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\startup_reconciler.py", line 88, in reconcile
+    d.rmdir()
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\pathlib.py", line 1351, in rmdir
+    os.rmdir(self)
+OSError: [WinError 145] The directory is not empty: 'C:\\Users\\spank\\AppData\\Roaming\\Cockpit\\v1\\uploads\\B139092'
+2026-06-01 19:56:26,856 - MainThread - cockpit.services.startup_reconciler - ERROR - Exception caught in startup_reconciler
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\startup_reconciler.py", line 88, in reconcile
+    d.rmdir()
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\pathlib.py", line 1351, in rmdir
+    os.rmdir(self)
+OSError: [WinError 145] The directory is not empty: 'C:\\Users\\spank\\AppData\\Roaming\\Cockpit\\v1\\uploads\\B139058'
+2026-06-01 19:56:26,857 - MainThread - cockpit.services.startup_reconciler - ERROR - Exception caught in startup_reconciler
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\startup_reconciler.py", line 88, in reconcile
+    d.rmdir()
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\Lib\pathlib.py", line 1351, in rmdir
+    os.rmdir(self)
+OSError: [WinError 145] The directory is not empty: 'C:\\Users\\spank\\AppData\\Roaming\\Cockpit\\v1\\uploads\\B139073'
+2026-06-01 19:56:26,857 - MainThread - root - INFO - Reconciliation completed successfully.
+2026-06-01 19:56:29,846 - MainThread - cockpit.ui.widgets.dashboard - ERROR - Exception caught in dashboard
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\persistence\repositories\bom_components.py", line 47, in list_for_source_file
+    cur.execute(
+sqlite3.OperationalError: no such column: find_number
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\widgets\dashboard.py", line 123, in load
+    self._view = self._checklist_service.load_active_audit(audit_id)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\checklist.py", line 68, in load_active_audit
+    tht_index = self.build_tht_refdes_index(bom_sf.id if bom_sf else None)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\checklist.py", line 44, in build_tht_refdes_index
+    bom_components = self._bom_component_repo.list_for_source_file(bom_sf_id)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Dev\Scheduler\Cockpit\cockpit\persistence\repositories\bom_components.py", line 69, in list_for_source_file
+    raise PersistenceUnavailable(self._conn, e) from e
+cockpit.persistence.errors.PersistenceUnavailable: Cannot initialize persistence at <sqlite3.Connection object at 0x000002352DA01F30>: no such column: find_number
+2026-06-01 19:56:31,310 - MainThread - cockpit.ui.widgets.audit_bom_panel - ERROR - Exception caught in audit_bom_panel
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\persistence\repositories\bom_components.py", line 47, in list_for_source_file
+    cur.execute(
+sqlite3.OperationalError: no such column: find_number
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\widgets\audit_bom_panel.py", line 101, in load
+    views = self._layout_query_service.list_bom_rows_for_audit(audit_id)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\layout_query.py", line 85, in list_bom_rows_for_audit
+    bom_components = self.bom_component_repo.list_for_source_file(bom_sf.id)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Dev\Scheduler\Cockpit\cockpit\persistence\repositories\bom_components.py", line 69, in list_for_source_file
+    raise PersistenceUnavailable(self._conn, e) from e
+cockpit.persistence.errors.PersistenceUnavailable: Cannot initialize persistence at <sqlite3.Connection object at 0x000002352DA01F30>: no such column: find_number
+2026-06-01 19:56:34,837 - MainThread - cockpit.ui.widgets.dashboard - ERROR - Exception caught in dashboard
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\persistence\repositories\bom_components.py", line 47, in list_for_source_file
+    cur.execute(
+sqlite3.OperationalError: no such column: find_number
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\widgets\dashboard.py", line 123, in load
+    self._view = self._checklist_service.load_active_audit(audit_id)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\checklist.py", line 68, in load_active_audit
+    tht_index = self.build_tht_refdes_index(bom_sf.id if bom_sf else None)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\checklist.py", line 44, in build_tht_refdes_index
+    bom_components = self._bom_component_repo.list_for_source_file(bom_sf_id)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Dev\Scheduler\Cockpit\cockpit\persistence\repositories\bom_components.py", line 69, in list_for_source_file
+    raise PersistenceUnavailable(self._conn, e) from e
+cockpit.persistence.errors.PersistenceUnavailable: Cannot initialize persistence at <sqlite3.Connection object at 0x000002352DA01F30>: no such column: find_number
+2026-06-01 19:56:35,846 - MainThread - cockpit.ui.widgets.audit_bom_panel - ERROR - Exception caught in audit_bom_panel
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\persistence\repositories\bom_components.py", line 47, in list_for_source_file
+    cur.execute(
+sqlite3.OperationalError: no such column: find_number
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Dev\Scheduler\Cockpit\cockpit\ui\widgets\audit_bom_panel.py", line 101, in load
+    views = self._layout_query_service.list_bom_rows_for_audit(audit_id)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Dev\Scheduler\Cockpit\cockpit\services\layout_query.py", line 85, in list_bom_rows_for_audit
+    bom_components = self.bom_component_repo.list_for_source_file(bom_sf.id)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Dev\Scheduler\Cockpit\cockpit\persistence\repositories\bom_components.py", line 69, in list_for_source_file
+    raise PersistenceUnavailable(self._conn, e) from e
+cockpit.persistence.errors.PersistenceUnavailable: Cannot initialize persistence at <sqlite3.Connection object at 0x000002352DA01F30>: no such column: find_number

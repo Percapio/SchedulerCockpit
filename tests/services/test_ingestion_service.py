@@ -141,3 +141,126 @@ def test_add_pdf_to_audit_parse_error_rollback(ingestion_service):
         
     pdf_sf = service.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
     assert pdf_sf is None
+
+def test_ingest_all_smt_board_persists_empty_tht_checklist(ingestion_service, monkeypatch):
+    service, _, tmp_path = ingestion_service
+    from cockpit.ingestion.progress import ProgressStage
+    from cockpit.ingestion.parsers.results import BomItem, EcoItem, IngestionIntent
+    from cockpit.persistence.types import ActiveAuditDraft
+    
+    # 1. Create files
+    bom_path = tmp_path / "TEST-123 AUDIT BOM.xlsx"
+    bom_path.write_text("a")
+    trav_path = tmp_path / "TEST-123 Traveler.xlsx"
+    trav_path.write_text("a")
+    eco_path = tmp_path / "TEST-123 ECO.docx"
+    eco_path.write_text("a")
+    
+    paths = [bom_path, trav_path, eco_path]
+    
+    # 2. Monkeypatch
+    monkeypatch.setattr("cockpit.ingestion.parsers.audit_bom.parse", lambda p: None)
+    monkeypatch.setattr("cockpit.ingestion.parsers.eco_build_notes.parse", lambda p: type("EcoResult", (), {"items": [1]})())
+    monkeypatch.setattr("cockpit.ingestion.parsers.traveler.parse", lambda p, cm: None)
+    
+    # Mock intent
+    bom_items = [
+        BomItem(
+            component_mpn="SMT-1",
+            description="SMT Component",
+            mount_type="S",
+            ref_des_raw="C1",
+            ref_des_list=("C1",),
+            find_number=1
+        )
+    ]
+    eco_items = [
+        EcoItem(
+            row_sequence=1,
+            original_text="Test note",
+            source_table_index=0
+        )
+    ]
+    
+    intent_mock = IngestionIntent(
+        audit_draft=ActiveAuditDraft(part_number="TEST-123", work_order_ref="WO", quantity=1),
+        bom_items=bom_items,
+        eco_items=eco_items
+    )
+    
+    monkeypatch.setattr("cockpit.ingestion.cross_validation.reconcile", lambda b, e, t, cm: intent_mock)
+    
+    events = []
+    def progress(evt):
+        events.append(evt)
+        
+    audit = service.ingest(paths, progress)
+    
+    assert audit is not None
+    assert service.tht_repo.list_for_audit(audit.id) == []
+    assert len(service.notes_repo.list_for_audit(audit.id)) > 0
+    
+    persisted_events = [e for e in events if e.stage == ProgressStage.PERSISTED]
+    assert len(persisted_events) == 1
+    assert persisted_events[0].detail["tht_item_count"] == 0
+
+
+def test_ingest_mixed_board_reports_tht_count_not_bom_count(ingestion_service, monkeypatch):
+    service, _, tmp_path = ingestion_service
+    from cockpit.ingestion.progress import ProgressStage
+    from cockpit.ingestion.parsers.results import BomItem, EcoItem, IngestionIntent
+    from cockpit.persistence.types import ActiveAuditDraft
+    
+    bom_path = tmp_path / "TEST-123 AUDIT BOM.xlsx"
+    bom_path.write_text("a")
+    trav_path = tmp_path / "TEST-123 Traveler.xlsx"
+    trav_path.write_text("a")
+    eco_path = tmp_path / "TEST-123 ECO.docx"
+    eco_path.write_text("a")
+    
+    paths = [bom_path, trav_path, eco_path]
+    
+    monkeypatch.setattr("cockpit.ingestion.parsers.audit_bom.parse", lambda p: None)
+    monkeypatch.setattr("cockpit.ingestion.parsers.eco_build_notes.parse", lambda p: type("EcoResult", (), {"items": [1]})())
+    monkeypatch.setattr("cockpit.ingestion.parsers.traveler.parse", lambda p, cm: None)
+    
+    bom_items = [
+        BomItem(component_mpn="SMT-1", description="SMT Component", mount_type="S", ref_des_raw="C1", ref_des_list=("C1",), find_number=1),
+        BomItem(component_mpn="SMT-2", description="SMT Component 2", mount_type="S", ref_des_raw="C2", ref_des_list=("C2",), find_number=2),
+        BomItem(component_mpn="SMT-3", description="SMT Component 3", mount_type="S", ref_des_raw="C3", ref_des_list=("C3",), find_number=3),
+        BomItem(component_mpn="THT-1", description="THT Component", mount_type="T", ref_des_raw="R1", ref_des_list=("R1",), find_number=4),
+        BomItem(component_mpn="THT-2", description="THT Component 2", mount_type="T", ref_des_raw="R2", ref_des_list=("R2",), find_number=5),
+    ]
+    eco_items = [
+        EcoItem(row_sequence=1, original_text="Test note", source_table_index=0)
+    ]
+    
+    intent_mock = IngestionIntent(
+        audit_draft=ActiveAuditDraft(part_number="TEST-123", work_order_ref="WO", quantity=1),
+        bom_items=bom_items,
+        eco_items=eco_items
+    )
+    
+    monkeypatch.setattr("cockpit.ingestion.cross_validation.reconcile", lambda b, e, t, cm: intent_mock)
+    
+    events = []
+    def progress(evt):
+        events.append(evt)
+        
+    audit = service.ingest(paths, progress)
+    
+    assert audit is not None
+    tht_items = service.tht_repo.list_for_audit(audit.id)
+    assert len(tht_items) == 2
+    
+    persisted_events = [e for e in events if e.stage == ProgressStage.PERSISTED]
+    assert len(persisted_events) == 1
+    assert persisted_events[0].detail["tht_item_count"] == 2
+    assert persisted_events[0].detail["tht_item_count"] != len(bom_items)
+
+def test_tht_insert_many_still_rejects_empty(ingestion_service):
+    service, _, _ = ingestion_service
+    from cockpit.persistence.errors import InvalidArgumentError
+    
+    with pytest.raises(InvalidArgumentError, match="Cannot be empty"):
+        service.tht_repo.insert_many([])

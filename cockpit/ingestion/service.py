@@ -195,12 +195,14 @@ class IngestionService:
                     self.bom_component_repo.bulk_insert(bom_drafts)
                     
                 # Insert THT checklist items (only where mount_type == 'T')
-                self.tht_repo.insert_many([
+                through_hole_drafts = [
                     ThtChecklistItemDraft(
                         audit_id=audit.id, source_file_id=bom_file.id,
                         component_mpn=item.component_mpn, description=item.description
                     ) for item in intent.bom_items if item.mount_type == 'T'
-                ])
+                ]
+                if through_hole_drafts:
+                    self.tht_repo.insert_many(through_hole_drafts)
                 
             if pdf_result and pdf_file:
                 pdf_drafts = [
@@ -220,7 +222,7 @@ class IngestionService:
                     ) for item in intent.eco_items
                 ])
 
-            _emit(ProgressStage.PERSISTED, {"tht_item_count": len(intent.bom_items) if intent.bom_items else 0})
+            _emit(ProgressStage.PERSISTED, {"tht_item_count": len(through_hole_drafts) if intent.bom_items else 0})
 
             self.conn.execute("RELEASE SAVEPOINT ingest")
             return audit

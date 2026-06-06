@@ -17,6 +17,7 @@ class CoordinateAnchor:
     value_offset: tuple[int, int]
     value_type: Literal["string", "integer", "date"] | None = None
     required: bool = False
+    modifier_field: str | None = None
 
 
 @dataclass(frozen=True)
@@ -85,7 +86,8 @@ def load(path: pathlib.Path | None = None) -> TravelerCoordinateMap:
                 anchor_text=anchor_text,
                 value_offset=(int(offset[0]), int(offset[1])),
                 value_type=raw_anchor.get("value_type"),
-                required=bool(raw_anchor.get("required", False))
+                required=bool(raw_anchor.get("required", False)),
+                modifier_field=raw_anchor.get("modifier_field")
             ))
             
     except KeyError as e:
@@ -95,14 +97,26 @@ def load(path: pathlib.Path | None = None) -> TravelerCoordinateMap:
 
     # Semantic validation
     field_keys = {a.field_key for a in anchors}
-    for identity_field in [identity_mapping.part_number_field, identity_mapping.work_order_ref_field, identity_mapping.quantity_field]:
+    identity_fields = [identity_mapping.part_number_field, identity_mapping.work_order_ref_field, identity_mapping.quantity_field]
+    for identity_field in identity_fields:
         if identity_field not in field_keys:
             raise CoordinateMapError(source_label, "IDENTITY_FIELD_MISSING_FROM_ANCHORS", {"field": identity_field})
             
+    seen_modifier_fields = set()
     for anchor in anchors:
-        if anchor.field_key in [identity_mapping.part_number_field, identity_mapping.work_order_ref_field, identity_mapping.quantity_field]:
+        if anchor.field_key in identity_fields:
             if not anchor.required:
                 raise CoordinateMapError(source_label, "IDENTITY_FIELD_NOT_REQUIRED", {"field_key": anchor.field_key})
+                
+        if anchor.modifier_field is not None:
+            mod = anchor.modifier_field
+            if not mod.strip():
+                raise CoordinateMapError(source_label, "MODIFIER_FIELD_EMPTY", {"anchor_field_key": anchor.field_key})
+            if anchor.value_type != "string":
+                raise CoordinateMapError(source_label, "MODIFIER_FIELD_ON_NON_STRING_ANCHOR", {"anchor_field_key": anchor.field_key, "value_type": anchor.value_type})
+            if mod in field_keys or mod in identity_fields or mod in seen_modifier_fields:
+                raise CoordinateMapError(source_label, "MODIFIER_FIELD_COLLISION", {"anchor_field_key": anchor.field_key, "modifier_field": mod})
+            seen_modifier_fields.add(mod)
                 
     return TravelerCoordinateMap(
         version=version,

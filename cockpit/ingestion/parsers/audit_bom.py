@@ -6,6 +6,7 @@ import openpyxl
 from typing import Any
 
 from ..errors import MalformedBomError
+from ..filename_rules import derive_part_number_from_filename
 from .results import BomItem, BomResult
 
 
@@ -16,13 +17,56 @@ _ANNOTATION_RE = re.compile(
     r'|\[[^\]]*\]'      # square-bracket wrappers (NEW)
 )
 
-REFDES_TOKEN_REGEX = re.compile(r"^[A-Za-z0-9_.-]+$")
+REFDES_TOKEN_REGEX = re.compile(r"^[A-Za-z0-9_.+-]+$")
 
 CANONICAL_HEADER = [
     "Find#", "PartNum", "Count", "MSL level", "Date code", "Baked date", 
     "Ref_Des", "Package", "Description", "SMT/THT", "Qty Need", "Qty On hand", 
     "Qty short", "comment"
 ]
+
+
+def normalize_sheet_label(label: str) -> str:
+    """Normalize sheet label for case-insensitive matching."""
+    return str(label).strip().casefold()
+
+
+def is_valid_excel_sheet_name(candidate: str) -> bool:
+    """Check if the given string could be a valid Excel worksheet name."""
+    if not candidate:
+        return False
+    if len(candidate) > 31:
+        return False
+    for c in ":\\/?*[]":
+        if c in candidate:
+            return False
+    return True
+
+
+def choose_bom_sheet(path: pathlib.Path, available_sheet_names: list[str], declared_part_number: str) -> str:
+    """Select the worksheet to parse, prioritizing canonical over assembly name."""
+    available_norms = {normalize_sheet_label(n): n for n in available_sheet_names}
+    
+    canon_norm = normalize_sheet_label("AUDIT BOM")
+    if canon_norm in available_norms:
+        return available_norms[canon_norm]
+        
+    if not is_valid_excel_sheet_name(declared_part_number):
+        raise MalformedBomError(path, "MISSING_SHEET", {
+            "expected_canonical": "AUDIT BOM",
+            "expected_assembly": None,
+            "available": available_sheet_names
+        })
+        
+    decl_norm = normalize_sheet_label(declared_part_number)
+    if decl_norm in available_norms:
+        return available_norms[decl_norm]
+        
+    raise MalformedBomError(path, "MISSING_SHEET", {
+        "expected_canonical": "AUDIT BOM",
+        "expected_assembly": declared_part_number,
+        "available": available_sheet_names
+    })
 
 
 def coerce_find_number(raw: Any, path: pathlib.Path, mpn: str) -> int:
@@ -56,7 +100,7 @@ def _split_ref_des(raw: str | None) -> tuple[str, ...]:
 
 def parse(path: pathlib.Path) -> BomResult:
     """Parse the Audit BOM Excel file and extract THT items."""
-    declared_part_number = path.name.split()[0].strip()
+    declared_part_number = derive_part_number_from_filename(path)
 
     try:
         # data_only=True to get values, not formulas
@@ -65,10 +109,8 @@ def parse(path: pathlib.Path) -> BomResult:
         raise MalformedBomError(path, "UNREADABLE_WORKBOOK", {"error": str(e)})
 
     try:
-        if "AUDIT BOM" not in wb.sheetnames:
-            raise MalformedBomError(path, "MISSING_SHEET", {"expected": "AUDIT BOM", "available": wb.sheetnames})
-            
-        ws = wb["AUDIT BOM"]
+        selected_sheet_name = choose_bom_sheet(path, wb.sheetnames, declared_part_number)
+        ws = wb[selected_sheet_name]
         
         # Check header
         header_row = [cell.value for cell in ws[1]]

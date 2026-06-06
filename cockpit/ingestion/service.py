@@ -22,6 +22,7 @@ from . import cross_validation
 from . import gatekeeper
 from . import hashing
 from .errors import FileStorageError
+from .filename_rules import derive_part_number_from_filename
 from .parsers import audit_bom, coordinate_map, eco_build_notes, traveler
 from .progress import ProgressEvent, ProgressStage
 
@@ -78,7 +79,7 @@ class IngestionService:
         # Parse part number early from BOM name to construct storage path
         # In case of mismatch, cross_validation will catch it, but we need
         # a directory name now.
-        temp_part_number = quartet.bom_path.name.split()[0].strip()
+        temp_part_number = derive_part_number_from_filename(quartet.bom_path)
         audit_dir = self.file_storage_root / temp_part_number / "unsplit"
 
         try:

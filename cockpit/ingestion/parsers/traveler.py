@@ -68,6 +68,17 @@ def _coerce_value(path: pathlib.Path, field_key: str, value: Any, declared_type:
     return value
 
 
+def split_leading_token(coerced_value: str) -> tuple[str, str | None]:
+    """Separate a part-number token from trailing free-text carried in the same cell.
+    
+    e.g. "123456-1 1ST ARTICLE" -> ("123456-1", "1ST ARTICLE").
+    """
+    parts = coerced_value.split(maxsplit=1)
+    base_token = parts[0]
+    trailing_modifier = " ".join(parts[1].split()) if len(parts) > 1 else None
+    return base_token, trailing_modifier
+
+
 def parse(path: pathlib.Path, coord_map: TravelerCoordinateMap) -> TravelerResult:
     """Parse Traveler Excel file and extract metadata."""
     try:
@@ -117,7 +128,16 @@ def parse(path: pathlib.Path, coord_map: TravelerCoordinateMap) -> TravelerResul
                 target_val = None
                 
             coerced_val = _coerce_value(path, anchor.field_key, target_val, anchor.value_type)
-            extracted_fields[anchor.field_key] = coerced_val
+            if anchor.modifier_field is None:
+                extracted_fields[anchor.field_key] = coerced_val
+            else:
+                if isinstance(coerced_val, str) and coerced_val:
+                    base_token, trailing_modifier = split_leading_token(coerced_val)
+                    extracted_fields[anchor.field_key] = base_token
+                    extracted_fields[anchor.modifier_field] = trailing_modifier
+                else:
+                    extracted_fields[anchor.field_key] = coerced_val
+                    extracted_fields[anchor.modifier_field] = None
             
         return TravelerResult(
             sheet_name_used=coord_map.sheet_name,

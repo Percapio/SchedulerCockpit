@@ -32,3 +32,20 @@ def test_split_ref_des_symbol_only_token_passes():
 def test_split_ref_des_hyphen_unconstrained():
     assert _split_ref_des("R1-R5") == ("R1-R5",)
     assert _split_ref_des("-R1, R2-") == ("-R1", "R2-")
+
+def test_split_ref_des_plus_accepted():
+    assert _split_ref_des("TP_12V+") == ("TP_12V+",)
+    assert _split_ref_des("+SYS") == ("+SYS",)
+
+def test_split_ref_des_plus_with_annotation():
+    assert _split_ref_des("TP_12V+, *PLEASE X-RAY*, (note +5V)") == ("TP_12V+",)
+
+def test_split_ref_des_rejects_comma():
+    from cockpit.ingestion.parsers.audit_bom import REFDES_TOKEN_REGEX
+    assert REFDES_TOKEN_REGEX.match(",") is None
+
+def test_split_ref_des_rejects_out_of_set_chars():
+    with pytest.raises(ValueError, match="INVALID_REFDES_TOKEN"):
+        _split_ref_des("R1#")
+    with pytest.raises(ValueError, match="INVALID_REFDES_TOKEN"):
+        _split_ref_des("R1$")

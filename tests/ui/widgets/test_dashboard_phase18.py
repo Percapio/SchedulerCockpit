@@ -16,11 +16,13 @@ def dashboard(qtbot):
     comp = Mock(spec=CompletionService)
     ing = Mock(spec=IngestionService)
     theme = Mock()
-    d = Dashboard(chk, splt, comp, ing, theme)
+    rel = Mock()
+    setb = Mock()
+    d = Dashboard(chk, splt, comp, ing, rel, setb, theme)
     qtbot.addWidget(d)
     return d
 
-def test_dashboard_metadata_labels(dashboard):
+def test_dashboard_metadata_emitted(dashboard, qtbot):
     view = ActiveAuditView(
         audit_id=1,
         part_number="PN-123",
@@ -28,23 +30,19 @@ def test_dashboard_metadata_labels(dashboard):
         split_suffix=None,
         quantity=10,
         split_reason=None,
-        status=AuditStatus.IN_PROGRESS,
+        status=AuditStatus.NOT_CLEAR,
         tht_rows=[],
         notes_rows=[],
         traveler_metadata={"customer_name": "TestCorp"},
-        has_pdf=False
+        has_pdf=False,
+        tht_placement_count=0
     )
     dashboard._view = view
-    dashboard._apply_view()
     
-    labels = []
-    for i in range(dashboard.metadata_layout.count()):
-        widget = dashboard.metadata_layout.itemAt(i).widget()
-        if isinstance(widget, QLabel):
-            labels.append(widget.text())
-            
-    assert "Customer: TestCorp" in labels
-    assert "S/O: —" in labels
+    with qtbot.waitSignal(dashboard.metadata_changed, timeout=1000) as blocker:
+        dashboard._apply_view()
+        
+    assert blocker.args[0] == {"customer_name": "TestCorp"}
 
 def test_dashboard_back_flushes_and_exits(dashboard, qtbot):
     with qtbot.waitSignal(dashboard.exit_requested):

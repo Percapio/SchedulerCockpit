@@ -8,6 +8,8 @@ from cockpit.services.split import AuditSplitService
 from cockpit.services.completion import CompletionService
 from cockpit.ingestion.service import IngestionService
 from cockpit.services.layout_query import LayoutQueryService
+from cockpit.services.release import ReleaseService
+from cockpit.services.setup_bom import SetupBomService
 from cockpit.layout.renderer import PdfRenderer
 from cockpit.ui.widgets.dashboard import Dashboard
 from cockpit.ui.canvas.layout_canvas import LayoutCanvas
@@ -29,6 +31,8 @@ class AuditView(QWidget):
         completion_service: CompletionService,
         ingestion_service: IngestionService,
         layout_query_service: LayoutQueryService,
+        release_service: ReleaseService,
+        setup_bom_service: SetupBomService,
         pdf_renderer: PdfRenderer,
         parent: QWidget | None = None,
         *,
@@ -37,8 +41,22 @@ class AuditView(QWidget):
         super().__init__(parent)
         self._theme = theme
         
-        layout = QHBoxLayout(self)
+        from PyQt6.QtWidgets import QVBoxLayout, QLineEdit
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        
+        self._metadata_band = QWidget()
+        self._metadata_layout = QHBoxLayout(self._metadata_band)
+        self._metadata_layout.setContentsMargins(0, 0, 0, 0)
+        
+        header = QHBoxLayout()
+        header.addWidget(self._metadata_band)
+        header.addStretch(4)
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search BOM & Build Notes...")
+        self.search_input.textChanged.connect(self._on_search_changed)
+        header.addWidget(self.search_input, 2)
+        layout.addLayout(header)
         
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
         self._splitter.setChildrenCollapsible(False)
@@ -48,6 +66,8 @@ class AuditView(QWidget):
             split_service=split_service,
             completion_service=completion_service,
             ingestion_service=ingestion_service,
+            release_service=release_service,
+            setup_bom_service=setup_bom_service,
             theme=self._theme,
             parent=self._splitter
         )
@@ -84,6 +104,7 @@ class AuditView(QWidget):
         # Signal wiring
         self._dashboard.exit_requested.connect(self.exit_requested.emit)
         self._dashboard.error_occurred.connect(self.error_occurred.emit)
+        self._dashboard.metadata_changed.connect(self._on_metadata_changed)
         self._dashboard.reload_requested.connect(self.load)
         self._layout_canvas.error_occurred.connect(self.error_occurred.emit)
         self._layout_canvas.font_scale_change_requested.connect(self.font_scale_change_requested.emit)
@@ -179,3 +200,38 @@ class AuditView(QWidget):
 
     def flush_pending_writes(self) -> None:
         self._dashboard.flush_audit_notes()
+
+    def _on_search_changed(self, text: str) -> None:
+        query = text.strip()
+        self._dashboard.apply_filter(query)
+        self._bom_panel.apply_filter(query)
+
+    def _on_metadata_changed(self, metadata: dict) -> None:
+        while self._metadata_layout.count():
+            item = self._metadata_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+                
+        if not metadata:
+            return
+            
+        from PyQt6.QtWidgets import QLabel
+            
+        _METADATA_DISPLAY_LABELS = {
+            "customer_name": "Customer",
+            "sales_order_number": "S/O",
+            "lead_time_days": "LT",
+            "release_date": "Release",
+        }
+        for key, label in _METADATA_DISPLAY_LABELS.items():
+            val = metadata.get(key, "—")
+            self._metadata_layout.addWidget(QLabel(f"{label}: {val}"))
+            
+        clean_val = metadata.get("process_clean")
+        if clean_val:
+            self._metadata_layout.addWidget(QLabel(f"CLEAN: {clean_val}"))
+            
+        rowc_val = metadata.get("rowc_ref")
+        rowc_label = metadata.get("rowc_label")
+        if rowc_val and rowc_label:
+            self._metadata_layout.addWidget(QLabel(f"{rowc_label} {rowc_val}"))

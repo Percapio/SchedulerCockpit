@@ -25,6 +25,8 @@ from cockpit.services.storage_reaper import StorageReaper
 from cockpit.services.completion import CompletionService
 from cockpit.services.startup_reconciler import StartupReconciler
 from cockpit.services.layout_query import LayoutQueryService
+from cockpit.services.release import ReleaseService
+from cockpit.services.setup_bom import SetupBomService
 from cockpit.services.views import ReconciliationReport
 from cockpit.layout.renderer import PdfRenderer
 from cockpit.ingestion.hashing import sha256_hex
@@ -44,6 +46,8 @@ class BootstrappedApp:
     split_svc: AuditSplitService
     completion_svc: CompletionService
     layout_query_svc: LayoutQueryService
+    release_svc: ReleaseService
+    setup_bom_svc: SetupBomService
     pdf_renderer: PdfRenderer
     reconciliation_report: ReconciliationReport
 
@@ -164,6 +168,9 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     storage_reaper = StorageReaper(source_file_repo)
     completion_svc = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)
     
+    release_svc = ReleaseService(audit_repo)
+    setup_bom_svc = SetupBomService(audit_repo, bom_component_repo, pdf_coord_repo, source_file_repo)
+    
     startup_reconciler = StartupReconciler(
         audit_repo=audit_repo,
         source_file_repo=source_file_repo,
@@ -187,6 +194,8 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
         split_svc=split_svc,
         completion_svc=completion_svc,
         layout_query_svc=layout_query_svc,
+        release_svc=release_svc,
+        setup_bom_svc=setup_bom_svc,
         pdf_renderer=pdf_renderer,
         reconciliation_report=report
     )

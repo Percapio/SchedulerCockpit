@@ -104,8 +104,7 @@ class BuildNotesChecklistRepository:
         if not row:
             raise AuditNotFound(audit_id)
             
-        if row["status"] == AuditStatus.COMPLETED.value:
-            raise IllegalStateTransition(audit_id, AuditStatus.COMPLETED, AuditStatus.COMPLETED)
+        # Completed audits are hard-deleted, no status check needed
             
         cur.execute(
             "UPDATE build_notes_checklist SET is_verified = 1 WHERE audit_id = ? AND is_verified = 0",

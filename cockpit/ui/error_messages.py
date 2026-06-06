@@ -122,6 +122,15 @@ def render(exc: Exception) -> FailurePayload:
             reason_code="ANCHOR_NOT_FOUND"
         )
 
+    if isinstance(exc, PrintError):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Couldn't print",
+            summary=f"Failed to send to printer: {exc.reason}",
+            detail=[],
+            reason_code="PRINT_ERROR"
+        )
+
     if isinstance(exc, CoercionError):
         return FailurePayload(
             exception_class=exc_class,

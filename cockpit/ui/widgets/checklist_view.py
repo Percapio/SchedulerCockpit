@@ -89,3 +89,24 @@ class ChecklistView(QScrollArea):
     def scroll_to_row(self, row_key: ChecklistRowKey) -> None:
         if row_key in self._index:
             self.ensureWidgetVisible(self._index[row_key])
+
+    def apply_filter(self, query: str) -> None:
+        q = query.strip().lower()
+        vbar = self.verticalScrollBar()
+        old_val = vbar.value()
+        
+        for row_widget in self._index.values():
+            if not q:
+                row_widget.setVisible(True)
+                continue
+            
+            view = row_widget._row
+            text = view.primary_label.lower()
+            if view.secondary_label:
+                text += " " + view.secondary_label.lower()
+            if view.ref_des_list:
+                text += " " + " ".join(view.ref_des_list).lower()
+                
+            row_widget.setVisible(q in text)
+            
+        vbar.setValue(old_val)

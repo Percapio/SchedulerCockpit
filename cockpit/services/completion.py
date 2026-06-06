@@ -36,8 +36,6 @@ class CompletionService:
     def complete_and_cleanup(self, audit_id: int) -> CompletionOutcome:
         captured = self._source_file_repo.list_for_audit(audit_id)
         
-        self._audit_repo.transition_status(audit_id, AuditStatus.COMPLETED)
-        
         cur = self._conn.cursor()
         cur.execute("SAVEPOINT completion")
         try:

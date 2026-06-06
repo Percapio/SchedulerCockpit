@@ -42,6 +42,13 @@ class SchemaMismatch(PersistenceError):
         self.expected_version = expected_version
 
 
+class MigrationError(PersistenceError):
+    """A data migration failed or found unmigratable data."""
+    def __init__(self, reason: str):
+        super().__init__(f"Migration failed: {reason}")
+        self.reason = reason
+
+
 # ---------- input validation ----------
 
 class InvalidArgumentError(PersistenceError, ValueError):

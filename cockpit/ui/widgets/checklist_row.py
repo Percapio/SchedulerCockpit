@@ -53,8 +53,31 @@ class ChecklistRow(QFrame):
             
             layout.addWidget(self.primary_lbl)
             layout.addWidget(self.secondary_lbl, stretch=1)
+            
+            self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            self.customContextMenuRequested.connect(self._show_notes_context_menu)
         
         self._apply_view(row)
+
+    def _show_notes_context_menu(self, pos) -> None:
+        if self._row.key.kind != ChecklistRowKind.NOTES:
+            return
+            
+        from PyQt6.QtWidgets import QMenu, QApplication
+        menu = QMenu(self)
+        copy_action = menu.addAction("Copy Build Note")
+        
+        action = menu.exec(self.mapToGlobal(pos))
+        if action == copy_action:
+            clipboard = QApplication.clipboard()
+            if clipboard:
+                clipboard.setText(self._notes_copy_text())
+                
+    def _notes_copy_text(self) -> str:
+        text = self._row.primary_label
+        if self._row.secondary_label:
+            text += "\n" + self._row.secondary_label
+        return text.strip()
 
     def _on_core_mpn_clicked(self, mpn: str) -> None:
         self.mpn_clicked.emit(self._row.key)

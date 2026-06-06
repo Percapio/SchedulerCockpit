@@ -367,6 +367,7 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> None:
     migrate_to_v3(conn, parser_registry)
     migrate_to_v4(conn)
     migrate_to_v5(conn)
+    migrate_to_v6(conn)
 
 SCHEMA_V5_DDL_DROP_SHIP_DATE: str = """
 ALTER TABLE active_audits DROP COLUMN ship_date
@@ -405,3 +406,91 @@ def migrate_to_v5(conn: sqlite3.Connection) -> None:
     except Exception:
         cur.execute("ROLLBACK")
         raise
+
+
+SCHEMA_V6_DDL_NEW_TABLE: str = """
+CREATE TABLE active_audits_v6 (
+    id INTEGER PRIMARY KEY,
+    part_number TEXT NOT NULL,
+    schedule_job_id INTEGER,
+    work_order_ref TEXT NOT NULL,
+    split_suffix TEXT NOT NULL DEFAULT '',
+    quantity INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Not Clear' CHECK(status IN ('Shipping','THT','SMT','Ready-to-Run','ON HOLD','Not Clear')),
+    split_reason TEXT,
+    traveler_metadata TEXT,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    general_notes TEXT NULL,
+    UNIQUE(part_number, work_order_ref, split_suffix)
+);
+"""
+
+SCHEMA_V6_DML_COPY: str = """
+INSERT INTO active_audits_v6 (
+    id, part_number, schedule_job_id, work_order_ref, split_suffix, quantity, 
+    status, split_reason, traveler_metadata, created_at, updated_at, general_notes
+)
+SELECT 
+    id, part_number, schedule_job_id, work_order_ref, split_suffix, quantity,
+    CASE 
+        WHEN status IN ('Pending', 'InProgress') THEN 'Not Clear'
+        ELSE 'Not Clear' 
+    END,
+    split_reason, traveler_metadata, created_at, updated_at, general_notes
+FROM active_audits;
+"""
+
+SCHEMA_V6_DDL_DROP: str = "DROP TABLE active_audits"
+SCHEMA_V6_DDL_RENAME: str = "ALTER TABLE active_audits_v6 RENAME TO active_audits"
+
+def migrate_to_v6(conn: sqlite3.Connection) -> None:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=5)
+        
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=5)
+        
+    version = row["version"]
+    if version >= 6:
+        return
+    if version < 5:
+        raise SchemaMismatch(found_version=version, expected_version=5)
+        
+    cur.execute("PRAGMA foreign_keys = OFF")
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        cur.execute("SELECT COUNT(*) as cnt FROM active_audits WHERE status = 'Completed'")
+        count = cur.fetchone()["cnt"]
+        if count > 0:
+            from .errors import MigrationError
+            raise MigrationError(f"Found {count} 'Completed' audits. Cannot migrate.")
+
+        try:
+            cur.execute(SCHEMA_V6_DDL_NEW_TABLE)
+            cur.execute(SCHEMA_V6_DML_COPY)
+            cur.execute(SCHEMA_V6_DDL_DROP)
+            cur.execute(SCHEMA_V6_DDL_RENAME)
+        except sqlite3.Error as e:
+            raise SchemaInitializationError(statement="v6 migration", cause=e)
+            
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 6, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+    except Exception:
+        cur.execute("ROLLBACK")
+        raise
+    finally:
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+        except Exception:
+            logger.error("Failed to restore foreign_keys in v6 migration finally block.")
+            from .errors import PersistenceError
+            raise PersistenceError("Database state corrupted: failed to re-enable foreign keys")

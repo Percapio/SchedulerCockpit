@@ -18,6 +18,11 @@ class IdentityHeader(QWidget):
         self.title_lbl.setProperty("class", "h2")
         layout.addWidget(self.title_lbl)
         
+        self.itar_lbl = QLabel()
+        self.itar_lbl.setStyleSheet("color: red; font-weight: bold;")
+        self.itar_lbl.hide()
+        layout.addWidget(self.itar_lbl)
+        
         self.qty_lbl = QLabel()
         layout.addWidget(self.qty_lbl)
         
@@ -40,5 +45,13 @@ class IdentityHeader(QWidget):
         metadata = view.traveler_metadata or {}
         sales_order = metadata.get("sales_order_number", view.work_order_ref)
         self.title_lbl.setText(f"{view.part_number}{suffix}")
+        
+        itar_val = metadata.get("itar_classification")
+        if itar_val == "ITAR":
+            self.itar_lbl.setText("[ITAR]")
+            self.itar_lbl.show()
+        else:
+            self.itar_lbl.hide()
+            
         self.qty_lbl.setText(f"Qty: {view.quantity}")
         self.status_lbl.setText(f"Status: {view.status}")

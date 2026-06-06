@@ -152,14 +152,13 @@ class SplitDialog(QDialog):
         except Exception as e:
             logger.exception('Exception caught in split_dialog')
             self.setCursor(Qt.CursorShape.ArrowCursor)
-            # Re-raise so the Dashboard can catch it and show ErrorDialog,
-            # or rather, wait. The dialog's parent is the Dashboard, if this
-            # raises, it will bubble up to the event loop. Wait, the Architecture doc
-            # says "surface via ErrorDialog; leave the SplitDialog open".
-            # The easiest way is to let the dashboard handle it.
-            # But the dashboard doesn't wrap dialog.exec() in a try-except.
-            # I'll emit a signal or raise and catch it. Let me just raise it for now
-            # and catch it in the dashboard.
-            raise
+            from cockpit.ui.error_messages import render
+            try:
+                msg = render(e).summary
+            except Exception:
+                msg = str(e) or "Split failed"
+            self._error_label.setText(msg)
+            self._error_label.show()
+            self.submit_btn.setEnabled(True)
         finally:
             self.setCursor(Qt.CursorShape.ArrowCursor)

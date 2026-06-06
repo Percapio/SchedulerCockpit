@@ -11,6 +11,8 @@ from cockpit.services.completion import CompletionService, CleanupFailedError
 from cockpit.services.split import AuditSplitService
 from cockpit.services.views import ActiveAuditView, ChecklistRowKey, SelectionIntent, SelectionKind, ChecklistRowKind
 from cockpit.ingestion.service import IngestionService
+from cockpit.services.release import ReleaseService
+from cockpit.services.setup_bom import SetupBomService
 from cockpit.persistence.types import AuditStatus
 from cockpit.persistence.errors import PersistenceError, IncompleteChecklistError, IllegalStateTransition
 from cockpit.ui.error_messages import render
@@ -25,18 +27,12 @@ logger = logging.getLogger(__name__)
 
 
 
-_METADATA_DISPLAY_LABELS: dict[str, str] = {
-    "customer_name": "Customer",
-    "sales_order_number": "S/O",
-    "lead_time_days": "LT",
-    "release_date": "Release",
-}
-
 
 class Dashboard(QWidget):
     exit_requested = pyqtSignal()
     error_occurred = pyqtSignal(object)
     reload_requested = pyqtSignal(int)
+    metadata_changed = pyqtSignal(dict)
     
     tht_body_clicked = pyqtSignal(object)
     tht_mpn_clicked = pyqtSignal(object)
@@ -49,6 +45,8 @@ class Dashboard(QWidget):
         split_service: AuditSplitService,
         completion_service: CompletionService,
         ingestion_service: IngestionService,
+        release_service: ReleaseService,
+        setup_bom_service: SetupBomService,
         theme: Theme,
         parent: QWidget | None = None,
     ) -> None:
@@ -58,6 +56,8 @@ class Dashboard(QWidget):
         self._split_service = split_service
         self._completion_service = completion_service
         self._ingestion_service = ingestion_service
+        self._release_service = release_service
+        self._setup_bom_service = setup_bom_service
         self._view: ActiveAuditView | None = None
         self._current_audit_id: int | None = None
         
@@ -70,11 +70,6 @@ class Dashboard(QWidget):
         self.header = IdentityHeader()
         self.header.back_requested.connect(self._on_back_requested)
         layout.addWidget(self.header)
-        
-        self.metadata_band = QWidget()
-        self.metadata_layout = QHBoxLayout(self.metadata_band)
-        self.metadata_layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.metadata_band)
         
         self._checklist_splitter = QSplitter(Qt.Orientation.Vertical)
         self._checklist_splitter.setChildrenCollapsible(False)
@@ -97,13 +92,15 @@ class Dashboard(QWidget):
         self._checklist_splitter.setSizes([600, 300]) # default ratio
         
         footer = QHBoxLayout()
-        self.split_btn = QPushButton("Split")
-        self.split_btn.clicked.connect(self._on_split_clicked)
-        footer.addWidget(self.split_btn)
-        
-        self.add_drawing_btn = QPushButton("Add Drawing")
-        self.add_drawing_btn.clicked.connect(self._on_add_drawing_clicked)
-        footer.addWidget(self.add_drawing_btn)
+        from PyQt6.QtWidgets import QToolButton, QMenu
+        self.actions_menu_btn = QToolButton()
+        self.actions_menu_btn.setText("⋯")
+        self.actions_menu_btn.setStyleSheet("QToolButton::menu-indicator { image: none; } QToolButton { font-weight: bold; font-size: 16px; padding: 2px 8px; }")
+        self.actions_menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.actions_menu = QMenu()
+        self.actions_menu_btn.setMenu(self.actions_menu)
+        self.actions_menu.aboutToShow.connect(self._rebuild_actions_menu)
+        footer.addWidget(self.actions_menu_btn)
         
         footer.addStretch()
         
@@ -135,52 +132,65 @@ class Dashboard(QWidget):
             return
             
         self.header.set_audit(self._view)
-        
-        # Build metadata band
-        while self.metadata_layout.count():
-            item = self.metadata_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-                
         metadata = self._view.traveler_metadata or {}
-        for key, label in _METADATA_DISPLAY_LABELS.items():
-            val = metadata.get(key, "—")
-            self.metadata_layout.addWidget(QLabel(f"{label}: {val}"))
-            
+        self.metadata_changed.emit(metadata)
         self.checklist_tht.populate_section(self._view.tht_rows, f"T/H - MPN Count: {len(self._view.tht_rows)} | Total Placements: {self._view.tht_placement_count}")
         self.checklist_notes.populate_section(self._view.notes_rows, f"Build Notes ({len(self._view.notes_rows)} items)")
-        self._refresh_add_drawing_btn_label(self._view)
         self._update_enablement()
 
-    def _refresh_add_drawing_btn_label(self, view: ActiveAuditView) -> None:
-        if view.has_pdf:
-            self.add_drawing_btn.setText("Replace")
-        else:
-            self.add_drawing_btn.setText("Add Drawing")
+    def _rebuild_actions_menu(self) -> None:
+        if self._view is None:
+            return
+            
+        self.actions_menu.clear()
+        
+        add_drawing_action = self.actions_menu.addAction("Replace" if self._view.has_pdf else "Add Drawing")
+        add_drawing_action.triggered.connect(self._on_add_drawing_clicked)
+        
+        split_action = self.actions_menu.addAction("Split")
+        split_action.triggered.connect(self._on_split_clicked)
+        
+        release_action = self.actions_menu.addAction("Release…")
+        release_action.triggered.connect(self._on_release_clicked)
+        
+        setup_action = self.actions_menu.addAction("Setup…")
+        setup_action.triggered.connect(self._on_setup_clicked)
 
     def flush_audit_notes(self) -> None:
         pass
 
     def _on_back_requested(self) -> None:
+        self.metadata_changed.emit({})
         self.flush_audit_notes()
         self.exit_requested.emit()
+
+    def apply_filter(self, query: str) -> None:
+        self.checklist_tht.apply_filter(query)
+        self.checklist_notes.apply_filter(query)
 
     def _update_enablement(self) -> None:
         if self._view is None:
             return
             
-        if self._view.status == AuditStatus.COMPLETED:
-            self.checklist_tht.setEnabled(False)
-            self.checklist_notes.setEnabled(False)
-            self.split_btn.setEnabled(False)
-            self.verify_all_btn.setEnabled(False)
+        self.checklist_tht.setEnabled(True)
+        self.checklist_notes.setEnabled(True)
+        
+        is_verified = self._view.is_fully_verified
+        
+        # Check if we are transitioning from unverified to verified
+        just_verified = is_verified and not self.complete_btn.isVisible()
+        
+        self.verify_all_btn.setVisible(not is_verified)
+        self.verify_all_btn.setEnabled(not is_verified)
+        
+        self.complete_btn.setVisible(is_verified)
+        
+        if just_verified:
             self.complete_btn.setEnabled(False)
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(500, lambda: self.complete_btn.setEnabled(True))
         else:
-            self.checklist_tht.setEnabled(True)
-            self.checklist_notes.setEnabled(True)
-            self.split_btn.setEnabled(True)
-            self.verify_all_btn.setEnabled(not self._view.is_fully_verified)
-            self.complete_btn.setEnabled(self._view.is_fully_verified)
+            self.complete_btn.setEnabled(is_verified)
 
 
 
@@ -228,9 +238,64 @@ class Dashboard(QWidget):
         if self._view is None:
             return
         from PyQt6.QtWidgets import QDialog
+        from cockpit.ui.widgets.add_drawing_dialog import AddDrawingDialog
         dialog = AddDrawingDialog(self._ingestion_service, self._view.audit_id, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.reload_requested.emit(self._view.audit_id)
+
+    def _on_release_clicked(self) -> None:
+        if self._view is None:
+            return
+            
+        try:
+            defaults = self._release_service.build_defaults(self._view)
+            
+            from cockpit.ui.widgets.release_dialog import ReleaseDialog
+            from PyQt6.QtWidgets import QDialog
+            
+            dialog = ReleaseDialog(defaults, self._view.status, self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                new_data, new_status = dialog.get_result()
+                
+                # 1. Persist the workflow_status before print (per spec)
+                from cockpit.persistence.repositories.audits import AuditRepository
+                self._release_service.transition_status(self._view.audit_id, new_status)
+                self.reload() # update view with new status
+                
+                # 2. Print
+                from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
+                printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+                print_dialog = QPrintDialog(printer, self)
+                if print_dialog.exec():
+                    self._release_service.print_release_form(new_data, printer)
+        except Exception as e:
+            logger.exception('Exception caught in dashboard')
+            self.error_occurred.emit(render(e))
+        
+    def _on_setup_clicked(self) -> None:
+        if self._view is None:
+            return
+            
+        try:
+            from cockpit.ui.widgets.setup_dialog import SetupDialog
+            from PyQt6.QtWidgets import QDialog, QMessageBox
+            
+            dialog = SetupDialog(self)
+            if dialog.exec() == QDialog.DialogCode.Accepted:
+                side, process = dialog.get_filters()
+                rows = self._setup_bom_service.build(self._view.audit_id, side, process)
+                if not rows:
+                    QMessageBox.warning(self, "No Components", "No components found for the selected Side and Process filters. Nothing to print.")
+                    return
+                
+                from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
+                printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+                print_dialog = QPrintDialog(printer, self)
+                if print_dialog.exec():
+                    self._setup_bom_service.print_bom(rows, printer)
+        except Exception as e:
+            logger.exception('Exception caught in dashboard setup')
+            self.error_occurred.emit(render(e))
 
     def _on_complete_clicked(self) -> None:
         if self._current_audit_id is None:

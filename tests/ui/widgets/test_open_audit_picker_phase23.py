@@ -64,7 +64,7 @@ def test_OpenAuditPicker_populate_and_click(qtbot):
         work_order_ref="WO-999",
         split_suffix="-B",
         quantity=500,
-        status="IN_PROGRESS",
+        status="Not Clear",
         updated_at=datetime(2026, 5, 31, 12, 0, 0, tzinfo=timezone.utc)
     )
     picker.populate([digest])

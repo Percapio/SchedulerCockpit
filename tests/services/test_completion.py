@@ -35,25 +35,26 @@ def test_hard_delete_failure_leaves_completed(tmp_path, monkeypatch):
     source_file_repo = SourceFileRepository(conn)
     
     # insert an audit
-    conn.execute("INSERT INTO active_audits (id, part_number, work_order_ref, split_suffix, quantity, status, created_at, updated_at) VALUES (1, 'p', 'w', '', 1, 'InProgress', '2020-01-01T00:00:00', '2020-01-01T00:00:00')")
-    # complete checklists so transition works
+    conn.execute("INSERT INTO active_audits (id, part_number, work_order_ref, split_suffix, quantity, status, created_at, updated_at) VALUES (1, 'p', 'w', '', 1, 'Not Clear', '2020-01-01T00:00:00', '2020-01-01T00:00:00')")
+    # complete everything so it passes checklist check if it was there
     conn.execute("INSERT INTO tht_verification_checklist (audit_id, component_mpn, is_verified) VALUES (1, 'c', 1)")
-    
+
     storage_reaper = StorageReaper(source_file_repo)
     completion_service = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)
-    
+
+    from cockpit.persistence.errors import PersistenceError
     def mock_hard_delete(audit_id):
         raise PersistenceError("Simulated kill")
         
     monkeypatch.setattr(audit_repo, "hard_delete", mock_hard_delete)
-    
+
     with pytest.raises(PersistenceError, match="Simulated kill"):
         completion_service.complete_and_cleanup(1)
-        
-    # verify status is Completed
+
+    # verify status is still Not Clear
     cur = conn.cursor()
     cur.execute("SELECT status FROM active_audits WHERE id = 1")
-    assert cur.fetchone()["status"] == AuditStatus.COMPLETED.value
+    assert cur.fetchone()["status"] == AuditStatus.NOT_CLEAR.value
 
 
 def test_startup_reconciler_orphan_file(tmp_path):
@@ -91,35 +92,3 @@ def test_startup_reconciler_orphan_file(tmp_path):
     assert len(report.orphans_deleted) == 1
     assert not orphan_file.exists()
     assert not orphan_dir.exists()
-
-
-def test_incomplete_checklist_rollback(tmp_path):
-    db_path = tmp_path / "test.db"
-    conn = sqlite3.connect(db_path, isolation_level=None)
-    conn = sqlite3.connect(db_path, isolation_level=None)
-    conn.row_factory = hydrating_row_factory
-    class DummyParser:
-        def parse(self, path): return None
-        
-    registry = ParserRegistry(DummyParser(), None, None, None, None)
-    migrate(conn, registry)
-        
-    bom_repo = AuditBomComponentRepository(conn)
-    pdf_repo = PdfComponentCoordRepository(conn)
-    audit_repo = AuditRepository(conn, bom_repo, pdf_repo)
-    source_file_repo = SourceFileRepository(conn)
-    storage_reaper = StorageReaper(source_file_repo)
-    completion_service = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)
-    
-    # insert an audit
-    conn.execute("INSERT INTO active_audits (id, part_number, work_order_ref, split_suffix, quantity, status, created_at, updated_at) VALUES (1, 'p', 'w', '', 1, 'InProgress', '2020-01-01T00:00:00', '2020-01-01T00:00:00')")
-    # leave checklist incomplete
-    conn.execute("INSERT INTO tht_verification_checklist (audit_id, component_mpn, is_verified) VALUES (1, 'c', 0)")
-    
-    with pytest.raises(IncompleteChecklistError):
-        completion_service.complete_and_cleanup(1)
-        
-    # verify status is still InProgress
-    cur = conn.cursor()
-    cur.execute("SELECT status FROM active_audits WHERE id = 1")
-    assert cur.fetchone()["status"] == AuditStatus.IN_PROGRESS.value

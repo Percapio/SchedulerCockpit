@@ -11,7 +11,7 @@ def test_picker_row_spacing(qtbot):
         work_order_ref="WO-456",
         split_suffix="",
         quantity=10,
-        status=AuditStatus.IN_PROGRESS,
+        status=AuditStatus.NOT_CLEAR,
         updated_at=datetime.now(timezone.utc)
     )
     

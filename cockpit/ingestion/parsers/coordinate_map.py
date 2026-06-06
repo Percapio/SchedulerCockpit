@@ -18,6 +18,7 @@ class CoordinateAnchor:
     value_type: Literal["string", "integer", "date"] | None = None
     required: bool = False
     modifier_field: str | None = None
+    label_field: str | None = None
 
 
 @dataclass(frozen=True)
@@ -87,7 +88,8 @@ def load(path: pathlib.Path | None = None) -> TravelerCoordinateMap:
                 value_offset=(int(offset[0]), int(offset[1])),
                 value_type=raw_anchor.get("value_type"),
                 required=bool(raw_anchor.get("required", False)),
-                modifier_field=raw_anchor.get("modifier_field")
+                modifier_field=raw_anchor.get("modifier_field"),
+                label_field=raw_anchor.get("label_field")
             ))
             
     except KeyError as e:
@@ -103,6 +105,7 @@ def load(path: pathlib.Path | None = None) -> TravelerCoordinateMap:
             raise CoordinateMapError(source_label, "IDENTITY_FIELD_MISSING_FROM_ANCHORS", {"field": identity_field})
             
     seen_modifier_fields = set()
+    seen_label_fields = set()
     for anchor in anchors:
         if anchor.field_key in identity_fields:
             if not anchor.required:
@@ -117,6 +120,14 @@ def load(path: pathlib.Path | None = None) -> TravelerCoordinateMap:
             if mod in field_keys or mod in identity_fields or mod in seen_modifier_fields:
                 raise CoordinateMapError(source_label, "MODIFIER_FIELD_COLLISION", {"anchor_field_key": anchor.field_key, "modifier_field": mod})
             seen_modifier_fields.add(mod)
+            
+        if anchor.label_field is not None:
+            lab = anchor.label_field
+            if not lab.strip():
+                raise CoordinateMapError(source_label, "LABEL_FIELD_EMPTY", {"anchor_field_key": anchor.field_key})
+            if lab in field_keys or lab in identity_fields or lab in seen_modifier_fields or lab in seen_label_fields:
+                raise CoordinateMapError(source_label, "LABEL_FIELD_COLLISION", {"anchor_field_key": anchor.field_key, "label_field": lab})
+            seen_label_fields.add(lab)
                 
     return TravelerCoordinateMap(
         version=version,

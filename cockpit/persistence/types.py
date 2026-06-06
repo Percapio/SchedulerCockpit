@@ -7,9 +7,12 @@ from typing import Any
 
 
 class AuditStatus(StrEnum):
-    PENDING = "Pending"
-    IN_PROGRESS = "InProgress"
-    COMPLETED = "Completed"
+    SHIPPING = "Shipping"
+    THT = "THT"
+    SMT = "SMT"
+    READY_TO_RUN = "Ready-to-Run"
+    ON_HOLD = "ON HOLD"
+    NOT_CLEAR = "Not Clear"
 
 
 class SourceFileCategory(StrEnum):

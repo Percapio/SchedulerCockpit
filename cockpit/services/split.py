@@ -36,8 +36,7 @@ class AuditSplitService:
             from cockpit.persistence.errors import AuditNotFound
             raise AuditNotFound(source_audit_id)
 
-        if source.status not in (AuditStatus.PENDING, AuditStatus.IN_PROGRESS):
-            raise IllegalStateTransition(source_audit_id, source.status, AuditStatus.PENDING)
+        # Any status can be split now
 
         if source.split_suffix == "":
             if source_new_suffix is None:

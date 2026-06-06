@@ -14,7 +14,7 @@ def test_identity_header_title_stripping(qtbot):
         split_suffix="-B",
         quantity=10,
         split_reason=None,
-        status=AuditStatus.IN_PROGRESS,
+        status=AuditStatus.NOT_CLEAR,
         tht_rows=[],
         notes_rows=[],
         traveler_metadata={"sales_order_number": "SO-999"},

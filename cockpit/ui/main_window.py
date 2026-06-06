@@ -79,6 +79,8 @@ class MainWindow(QMainWindow):
             completion_service=completion_svc,
             ingestion_service=self._bootstrapped.ingestion_service,
             layout_query_service=layout_query_svc,
+            release_service=self._bootstrapped.release_svc,
+            setup_bom_service=self._bootstrapped.setup_bom_svc,
             pdf_renderer=pdf_renderer,
             theme=self._theme
         )

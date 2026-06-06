@@ -60,7 +60,7 @@ class AuditRepository:
                     draft.work_order_ref,
                     draft.split_suffix,
                     draft.quantity,
-                    AuditStatus.PENDING,
+                    AuditStatus.NOT_CLEAR.value,
                     traveler_json,
                     now_iso,
                     now_iso
@@ -125,40 +125,10 @@ class AuditRepository:
 
             current_status = AuditStatus(row["status"])
 
-            # Validate transition per state diagram
-            allowed = False
-            if current_status == AuditStatus.PENDING and target == AuditStatus.IN_PROGRESS:
-                allowed = True
-            elif current_status == AuditStatus.IN_PROGRESS and target == AuditStatus.PENDING:
-                allowed = True
-            elif current_status == AuditStatus.IN_PROGRESS and target == AuditStatus.COMPLETED:
-                allowed = True
-            elif current_status == AuditStatus.PENDING and target == AuditStatus.COMPLETED:
-                allowed = True
-            
-            if not allowed:
-                raise IllegalStateTransition(audit_id, current_status, target)
-
-            if target == AuditStatus.COMPLETED:
-                cur.execute(
-                    "SELECT COUNT(*) as unverified FROM tht_verification_checklist WHERE audit_id = ? AND is_verified = 0",
-                    (audit_id,)
-                )
-                tht_unverified = cur.fetchone()["unverified"]
-
-                cur.execute(
-                    "SELECT COUNT(*) as unverified FROM build_notes_checklist WHERE audit_id = ? AND is_verified = 0",
-                    (audit_id,)
-                )
-                notes_unverified = cur.fetchone()["unverified"]
-
-                if tht_unverified > 0 or notes_unverified > 0:
-                    raise IncompleteChecklistError(audit_id, tht_unverified, notes_unverified)
-
             now_iso = utcnow().isoformat()
             cur.execute(
                 "UPDATE active_audits SET status = ?, updated_at = ? WHERE id = ?",
-                (target, now_iso, audit_id)
+                (target.value, now_iso, audit_id)
             )
             cur.execute("COMMIT")
         except Exception:
@@ -196,28 +166,17 @@ class AuditRepository:
         cur.execute(
             """
             SELECT * FROM active_audits
-            WHERE status != ?
             ORDER BY part_number ASC, work_order_ref ASC, split_suffix ASC
-            """,
-            (AuditStatus.COMPLETED.value,)
+            """
         )
         import dataclasses
         valid_fields = {f.name for f in dataclasses.fields(ActiveAudit)}
         return [ActiveAudit(**{k: v for k, v in row.items() if k in valid_fields}) for row in cur.fetchall()]
 
     def list_completed(self) -> list[ActiveAudit]:
-        cur = self.conn.cursor()
-        cur.execute(
-            """
-            SELECT * FROM active_audits
-            WHERE status = ?
-            ORDER BY created_at ASC
-            """,
-            (AuditStatus.COMPLETED.value,)
-        )
-        import dataclasses
-        valid_fields = {f.name for f in dataclasses.fields(ActiveAudit)}
-        return [ActiveAudit(**{k: v for k, v in row.items() if k in valid_fields}) for row in cur.fetchall()]
+        # Completed audits are hard-deleted, so this always returns empty.
+        # Leaving the signature intact for backwards compatibility with call sites until they are removed.
+        return []
 
     def _validate_suffix_shape(self, suffix: str) -> None:
         if suffix is None:
@@ -239,9 +198,6 @@ class AuditRepository:
         row = cur.fetchone()
         if not row:
             raise AuditNotFound(audit_id)
-            
-        if row["status"] == AuditStatus.COMPLETED.value:
-            raise IllegalStateTransition(audit_id, AuditStatus.COMPLETED, AuditStatus.COMPLETED)
             
         try:
             cur.execute(
@@ -265,9 +221,6 @@ class AuditRepository:
         if not row:
             raise AuditNotFound(audit_id)
             
-        if row["status"] == AuditStatus.COMPLETED.value:
-            raise IllegalStateTransition(audit_id, AuditStatus.COMPLETED, AuditStatus.COMPLETED)
-            
         cur.execute("UPDATE active_audits SET quantity = ? WHERE id = ?", (new_quantity, audit_id))
         return self.find_by_id(audit_id)  # type: ignore
 
@@ -290,9 +243,6 @@ class AuditRepository:
         if not source:
             raise AuditNotFound(source_audit_id)
             
-        if source["status"] == AuditStatus.COMPLETED.value:
-            raise IllegalStateTransition(source_audit_id, AuditStatus.COMPLETED, AuditStatus.PENDING)
-            
         now_iso = utcnow().isoformat()
         
         try:
@@ -309,7 +259,7 @@ class AuditRepository:
                     source["work_order_ref"],
                     new_suffix,
                     new_quantity,
-                    AuditStatus.PENDING.value,
+                    AuditStatus.NOT_CLEAR.value,
                     json.dumps(source["traveler_metadata"]) if source["traveler_metadata"] is not None else None,
                     now_iso,
                     now_iso

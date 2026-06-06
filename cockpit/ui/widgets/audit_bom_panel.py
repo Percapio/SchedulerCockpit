@@ -167,3 +167,24 @@ class AuditBomPanel(QWidget):
     def _set_header_text(self, text: str) -> None:
         self.header_label.setText(text)
         self.header_label.setVisible(bool(text))
+
+    def apply_filter(self, query: str) -> None:
+        q = query.strip().lower()
+        vbar = self.scroll.verticalScrollBar()
+        old_val = vbar.value()
+        
+        for row in self._row_index.values():
+            if not q:
+                row.setVisible(True)
+                continue
+                
+            view = row._view
+            text = view.component_mpn.lower()
+            if view.description:
+                text += " " + view.description.lower()
+            if view.ref_des_list:
+                text += " " + " ".join(view.ref_des_list).lower()
+                
+            row.setVisible(q in text)
+            
+        vbar.setValue(old_val)

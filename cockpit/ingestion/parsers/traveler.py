@@ -138,6 +138,10 @@ def parse(path: pathlib.Path, coord_map: TravelerCoordinateMap) -> TravelerResul
                 else:
                     extracted_fields[anchor.field_key] = coerced_val
                     extracted_fields[anchor.modifier_field] = None
+                    
+            if anchor.label_field is not None:
+                matched_label = expected_texts[expected_norms.index(observed_norm)]
+                extracted_fields[anchor.label_field] = matched_label
             
         return TravelerResult(
             sheet_name_used=coord_map.sheet_name,

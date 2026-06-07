@@ -20,8 +20,8 @@ class RowKind:
 
 class AuditListModel(QAbstractTableModel):
     COLUMNS = [
-        "Start-By Date", "Ship Date", "Assembly Number", "Work Order", "Lead-Time",
-        "Quantity", "Type", "Classification", "Class", "Process",
+        "Start-By Date", "Ship Date", "B#", "S/O", "LT",
+        "QTY", "Type", "Classification", "Class", "Process",
         "FSU (hrs)", "SMT (hrs)", "THT (hrs)", "Date Ingested"
     ]
     
@@ -127,7 +127,7 @@ class AuditListModel(QAbstractTableModel):
             if col == 9: return d.process or ""
             if col == 10: return f"{d.feeder_setuptime:.1f}" if d.feeder_setuptime is not None else ""
             if col == 11: return f"{d.smt_runtime:.1f}" if d.smt_runtime is not None else ""
-            if col == 12: return f"{d.tht_runtime * 12:.1f}" if d.tht_runtime is not None else ""
+            if col == 12: return f"{d.tht_runtime:.1f}" if d.tht_runtime is not None else ""
             if col == 13:
                 if not d.date_ingested: return ""
                 local = d.date_ingested.astimezone(PST)

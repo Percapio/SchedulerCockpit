@@ -29,13 +29,13 @@ class ReleaseDialog(QDialog):
         
         # Auto fields (editable)
         self.assembly_input = QLineEdit(initial_data.assembly_number or "")
-        form.addRow("Assembly Number:", self.assembly_input)
+        form.addRow("B#:", self.assembly_input)
         
         self.qty_input = QLineEdit(str(initial_data.quantity) if initial_data.quantity is not None else "")
         form.addRow("Quantity:", self.qty_input)
         
         self.lead_time_input = QLineEdit(str(initial_data.lead_time_days) if initial_data.lead_time_days is not None else "")
-        form.addRow("Lead Time (days):", self.lead_time_input)
+        form.addRow("LT:", self.lead_time_input)
         
         self.repeat_input = QLineEdit(initial_data.repeat)
         form.addRow("Type:", self.repeat_input)
@@ -70,7 +70,7 @@ class ReleaseDialog(QDialog):
         
         self.setup_side_combo = QComboBox()
         self.setup_side_combo.addItems(PAGE_SIDE_LABELS)
-        form.addRow("Setup First Side:", self.setup_side_combo)
+        form.addRow("1st Setup Side:", self.setup_side_combo)
         # PCB Clear composer
         self.pcb_date_input = QLineEdit()
         self.pcb_clear_check = QCheckBox("Is Clear")

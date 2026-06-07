@@ -46,6 +46,7 @@ class AuditView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         
         self._metadata_band = QWidget()
+        self._metadata_band.setStyleSheet("margin-left: 6%;")
         self._metadata_layout = QHBoxLayout(self._metadata_band)
         self._metadata_layout.setContentsMargins(0, 0, 0, 0)
         
@@ -54,6 +55,7 @@ class AuditView(QWidget):
         header.addStretch(4)
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search BOM & Build Notes...")
+        self.search_input.setStyleSheet("margin-right: 6%;")
         self.search_input.textChanged.connect(self._on_search_changed)
         header.addWidget(self.search_input, 2)
         layout.addLayout(header)
@@ -241,7 +243,6 @@ class AuditView(QWidget):
             "customer_name": "Customer",
             "sales_order_number": "S/O",
             "lead_time_days": "LT",
-            "release_date": "Release",
         }
         for key, label in _METADATA_DISPLAY_LABELS.items():
             val = metadata.get(key, "—")
@@ -251,9 +252,13 @@ class AuditView(QWidget):
         process_val: Any | None = metadata.get("process")
 
         if clean_val:
-            self._metadata_layout.addWidget(QLabel(f"Process: {process_val} {clean_val}"))
+            lbl_process = QLabel(f"Process: {process_val} {clean_val}")
+            lbl_process.setStyleSheet("padding-left: 3%;")
+            self._metadata_layout.addWidget(lbl_process)
             
         rowc_val = metadata.get("rowc_ref")
         rowc_label = metadata.get("rowc_label")
         if rowc_val and rowc_label:
-            self._metadata_layout.addWidget(QLabel(f"{rowc_label} {rowc_val}"))
+            lbl_rowc = QLabel(f"{rowc_label} {rowc_val}")
+            lbl_rowc.setStyleSheet("padding-left: 3%;")
+            self._metadata_layout.addWidget(lbl_rowc)

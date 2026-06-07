@@ -86,10 +86,11 @@ class RuntimeCalcService:
         clamped_sides = max(1, min(2, inp.sides))
         
         base = (2 if inp.smt_placements > 1000 else 0) + (2 if inp.smt_unique_mpns > 115 else 0)
-        volume = (inp.quantity * inp.smt_placements * 0.012 / 60)
-        smt = float(math.ceil(volume + clamped_sides + base))
+        smt_volume = (inp.quantity * inp.smt_placements * 0.012 / 60)
+        smt = float(smt_volume + clamped_sides + base)
         
-        tht = float(math.ceil(((inp.tht_placements / 800) + (inp.quantity / 900)) * 8))
+        tht_volume: float = inp.tht_placements * inp.quantity * 0.15 / 60
+        tht = float(tht_volume + ((inp.tht_placements / 800) + (inp.quantity / 90)) * (2.25 if inp.tht_placements > 500 else 1.125))
         
         return (feeder, smt, tht)
 

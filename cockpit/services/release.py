@@ -82,15 +82,14 @@ class ReleaseService:
         doc.setDefaultFont(QFont("Calibri", 18))
         
         html_content = f"""
-        <h1>JOB RELEASE FORM</h1>
+        <h1>{html.escape(str(data.assembly_number or ''))}</h1>
         <table border="1" width="100%" cellspacing="0" cellpadding="5">
-            <tr><td><b>Assembly Number:</b> {html.escape(str(data.assembly_number or ''))}</td>
-                <td><b>Quantity:</b> {html.escape(str(data.quantity or ''))}</td></tr>
-            <tr><td><b>Lead Time:</b> {html.escape(str(data.lead_time_days or ''))} days</td>
-                <td><b>Type:</b> {html.escape(data.repeat)}</td></tr>
-            <tr><td><b>ITAR:</b> {html.escape(data.itar_display)}</td>
-                <td>{html.escape(data.class_display)}</td> </td></tr>
-            <tr><td><b>Process:</b> {html.escape(str(data.process or ''))} {html.escape(str(data.process_clean or ''))}</td></tr>
+            <tr><td><b>LT:</b> {html.escape(str(data.lead_time_days or ''))} days</td>
+                <td><b>QTY:</b> {html.escape(str(data.quantity or ''))}</td></tr>
+            <tr><td>{html.escape(data.repeat)}</td>
+                <td>{html.escape(data.class_display)}</td></tr>
+            <tr><td><b>Process:</b> {html.escape(str(data.process or ''))} {html.escape(str(data.process_clean or ''))}</td>
+                <td><b>ITAR:</b> {html.escape(data.itar_display)}</td></tr>
         </table>
         <br>
         <p><b>HOT JOB:</b> {html.escape(data.turn_note)}</p>

@@ -4,6 +4,8 @@ from PyQt6.QtWidgets import (
 )
 from cockpit.services.release import ReleaseFormData
 from cockpit.persistence.types import AuditStatus
+
+from PyQt6.QtCore import Qt, QDate
 from cockpit.layout.constants import PAGE_SIDE_LABELS
 
 class ReleaseDialog(QDialog):
@@ -36,7 +38,7 @@ class ReleaseDialog(QDialog):
         form.addRow("Lead Time (days):", self.lead_time_input)
         
         self.repeat_input = QLineEdit(initial_data.repeat)
-        form.addRow("Repeat:", self.repeat_input)
+        form.addRow("Type:", self.repeat_input)
         
         self.itar_input = QLineEdit(initial_data.itar_display)
         form.addRow("ITAR:", self.itar_input)
@@ -51,21 +53,24 @@ class ReleaseDialog(QDialog):
         form.addRow("Process:", self.process_input)
         
         # Manual fields
-        self.ship_date_input = QLineEdit()
+        from PyQt6.QtWidgets import QDateEdit
+        self.ship_date_input = QDateEdit()
+        self.ship_date_input.setCalendarPopup(True)
+        if initial_data.ship_date:
+            try:
+                self.ship_date_input.setDate(QDate.fromString(initial_data.ship_date, Qt.DateFormat.ISODate))
+            except Exception:
+                self.ship_date_input.setDate(QDate.currentDate())
+        else:
+            self.ship_date_input.setDate(QDate.currentDate())
+        self.turn_note_input = QLineEdit()
+        form.addRow("HOT JOB:", self.turn_note_input)
+
         form.addRow("Ship Date:", self.ship_date_input)
         
-        self.turn_note_input = QLineEdit()
-        form.addRow("Turn Note:", self.turn_note_input)
-        
-        self.email_notes_input = QLineEdit()
-        form.addRow("Email Notes:", self.email_notes_input)
-        
-        self.floor_notes_input = QLineEdit()
-        form.addRow("Floor Notes:", self.floor_notes_input)
-        
-        self.shortages_notes_input = QLineEdit()
-        form.addRow("Shortages Notes:", self.shortages_notes_input)
-        
+        self.setup_side_combo = QComboBox()
+        self.setup_side_combo.addItems(PAGE_SIDE_LABELS)
+        form.addRow("Setup First Side:", self.setup_side_combo)
         # PCB Clear composer
         self.pcb_date_input = QLineEdit()
         self.pcb_clear_check = QCheckBox("Is Clear")
@@ -73,17 +78,19 @@ class ReleaseDialog(QDialog):
         pcb_layout.addWidget(self.pcb_date_input)
         pcb_layout.addWidget(self.pcb_clear_check)
         form.addRow("PCB Clear Date:", pcb_layout)
-        
-        self.setup_side_combo = QComboBox()
-        self.setup_side_combo.addItems(PAGE_SIDE_LABELS)
-        form.addRow("Setup First Side:", self.setup_side_combo)
-        
+
+        self.shortages_notes_input = QLineEdit()
+        form.addRow("Shortages Notes:", self.shortages_notes_input)
+
         self.program_check = QCheckBox("Program in Kit")
         form.addRow("", self.program_check)
         
         self.folder_check = QCheckBox("Folder in Kit")
         form.addRow("", self.folder_check)
         
+        self.floor_notes_input = QLineEdit()
+        form.addRow("Floor Notes:", self.floor_notes_input)
+
         layout.addLayout(form)
         
         btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
@@ -109,9 +116,8 @@ class ReleaseDialog(QDialog):
             process_clean=self.clean_input.text(),
             class_display=self.class_input.text(),
             process=self.process_input.text(),
-            ship_date=self.ship_date_input.text(),
+            ship_date=self.ship_date_input.date().toString(Qt.DateFormat.ISODate),
             turn_note=self.turn_note_input.text(),
-            email_notes=self.email_notes_input.text(),
             floor_notes=self.floor_notes_input.text(),
             shortages_notes=self.shortages_notes_input.text(),
             pcb_clear=pcb_clear_str,

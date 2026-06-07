@@ -37,6 +37,11 @@ class ActiveAudit:
     traveler_metadata: dict[str, Any] | None
     created_at: datetime         # UTC, tz-aware
     updated_at: datetime         # UTC, tz-aware
+    general_notes: str | None
+    ship_date: str | None
+    feeder_setuptime: float | None
+    smt_runtime: float | None
+    tht_runtime: float | None
 
 
 @dataclass(frozen=True)

@@ -257,9 +257,17 @@ class Dashboard(QWidget):
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 new_data, new_status = dialog.get_result()
                 
-                # 1. Persist the workflow_status before print (per spec)
-                from cockpit.persistence.repositories.audits import AuditRepository
-                self._release_service.transition_status(self._view.audit_id, new_status)
+                # 1. Persist the workflow_status and ship_date before print (per spec)
+                from datetime import date
+                ship_date_obj = None
+                if new_data.ship_date:
+                    try:
+                        ship_date_obj = date.fromisoformat(new_data.ship_date)
+                    except ValueError:
+                        pass # Should not happen if UI enforces it, but fallback
+                from cockpit.persistence.types import AuditStatus
+                new_status_enum = AuditStatus(new_status)
+                self._release_service.persist_release(self._view.audit_id, new_status_enum, ship_date_obj)
                 self.reload() # update view with new status
                 
                 # 2. Print

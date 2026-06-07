@@ -37,6 +37,7 @@ class MainWindow(QMainWindow):
         completion_svc: CompletionService,
         layout_query_svc: LayoutQueryService,
         pdf_renderer: PdfRenderer,
+        holiday_svc,
         *,
         theme: Theme,
         settings: QSettings
@@ -46,6 +47,7 @@ class MainWindow(QMainWindow):
         self._app = app
         self._bootstrapped = bootstrapped_app
         self._audit_read_svc = audit_read_svc
+        self._holiday_svc = holiday_svc
         
         self.setWindowTitle("Local Audit & Routing Checklist Utility")
         self.resize(800, 600)
@@ -175,6 +177,9 @@ class MainWindow(QMainWindow):
         self.toast.show_success(summary)
 
     def _on_dashboard_exit(self) -> None:
+        self._reload_list()
+
+    def _reload_list(self) -> None:
         open_audits = self._audit_read_svc.list_open()
         if not open_audits:
             self._show_drop_area()

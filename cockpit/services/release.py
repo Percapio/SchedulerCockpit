@@ -1,5 +1,8 @@
 from dataclasses import dataclass
+from dataclasses import dataclass
 from typing import Dict, Optional
+from datetime import date
+from cockpit.persistence.types import AuditStatus
 from cockpit.services.views import ActiveAuditView
 from cockpit.persistence.repositories.audits import AuditRepository
 from PyQt6.QtPrintSupport import QPrinter
@@ -16,7 +19,6 @@ class ReleaseFormData:
     process: str | None
     ship_date: str
     turn_note: str
-    email_notes: str
     floor_notes: str
     shortages_notes: str
     pcb_clear: str
@@ -28,20 +30,20 @@ class ReleaseService:
     def __init__(self, audit_repo: AuditRepository):
         self._audit_repo = audit_repo
 
-    def transition_status(self, audit_id: int, new_status: str) -> None:
-        from cockpit.persistence.types import AuditStatus
-        status_enum = AuditStatus(new_status)
-        self._audit_repo.transition_status(audit_id, status_enum)
-
-    def derive_repeat(self, meta: dict) -> str:
-        if meta.get("assembly_type") == "NEW":
-            return "NEW"
-        parts = [
-            meta.get("rowc_label", ""),
-            meta.get("rowc_ref", ""),
-            meta.get("assembly_modifier", "")
-        ]
-        return " ".join(p for p in parts if p)
+    def persist_release(self, audit_id: int, workflow_status: AuditStatus, ship_date: date | None) -> None:
+        from cockpit.persistence.errors import AuditNotFound
+        from cockpit.persistence.clock import utcnow
+        
+        ship_str = ship_date.isoformat() if ship_date else None
+        now_iso = utcnow().isoformat()
+        
+        cur = self._audit_repo.conn.cursor()
+        cur.execute(
+            "UPDATE active_audits SET status = ?, ship_date = ?, updated_at = ? WHERE id = ?",
+            (workflow_status.value, ship_str, now_iso, audit_id)
+        )
+        if cur.rowcount == 0:
+            raise AuditNotFound(audit_id)
         
     def build_defaults(self, view: ActiveAuditView) -> ReleaseFormData:
         meta = view.traveler_metadata or {}
@@ -52,18 +54,18 @@ class ReleaseService:
         assembly_class = meta.get("assembly_class")
         class_display = f"Class {assembly_class}" if assembly_class is not None else ""
         
+        from cockpit.services.repeat import derive_repeat
         return ReleaseFormData(
             assembly_number=meta.get("assembly_number"),
             quantity=view.quantity,
             lead_time_days=meta.get("lead_time_days"),
-            repeat=self.derive_repeat(meta),
+            repeat=derive_repeat(meta),
             itar_display=itar_display,
             process_clean=meta.get("process_clean"),
             class_display=class_display,
             process=meta.get("process"),
             ship_date="",
             turn_note="",
-            email_notes="",
             floor_notes="",
             shortages_notes="",
             pcb_clear="",
@@ -77,7 +79,7 @@ class ReleaseService:
         import html
         
         doc = QTextDocument()
-        doc.setDefaultFont(QFont("Arial", 12))
+        doc.setDefaultFont(QFont("Calibri", 20))
         
         html_content = f"""
         <h1>JOB RELEASE FORM</h1>
@@ -85,22 +87,25 @@ class ReleaseService:
             <tr><td><b>Assembly Number:</b> {html.escape(str(data.assembly_number or ''))}</td>
                 <td><b>Quantity:</b> {html.escape(str(data.quantity or ''))}</td></tr>
             <tr><td><b>Lead Time:</b> {html.escape(str(data.lead_time_days or ''))} days</td>
-                <td><b>Repeat:</b> {html.escape(data.repeat)}</td></tr>
+                <td><b>Type:</b> {html.escape(data.repeat)}</td></tr>
             <tr><td><b>ITAR:</b> {html.escape(data.itar_display)}</td>
-                <td><b>Clean:</b> {html.escape(str(data.process_clean or ''))}</td></tr>
-            <tr><td><b>Class:</b> {html.escape(data.class_display)}</td>
-                <td><b>Process:</b> {html.escape(str(data.process or ''))}</td></tr>
+                <td>{html.escape(data.class_display)}</td> </td></tr>
+            <tr><td><b>Process:</b> {html.escape(str(data.process or ''))} {html.escape(str(data.process_clean or ''))}</td></tr>
         </table>
-        <h2>Manual Notes</h2>
+        <p></p>
+        <p><b>HOT JOB:</b> {html.escape(data.turn_note)}</p>
+        <p></p>
         <p><b>Ship Date:</b> {html.escape(data.ship_date)}</p>
-        <p><b>Turn Note:</b> {html.escape(data.turn_note)}</p>
-        <p><b>Email Notes:</b> {html.escape(data.email_notes)}</p>
-        <p><b>Floor Notes:</b> {html.escape(data.floor_notes)}</p>
-        <p><b>Shortages Notes:</b> {html.escape(data.shortages_notes)}</p>
-        <p><b>PCB Clear:</b> {html.escape(data.pcb_clear)}</p>
+        <p></p>
+        <p></p>
         <p><b>Setup First Side:</b> {html.escape(data.setup_first_side)}</p>
+        <p></p>
+        <p></p>
+        <p><b>PCB Clear:</b> {html.escape(data.pcb_clear)}</p>
+        <p><b>Shortages Notes:</b> {html.escape(data.shortages_notes)}</p>
         <p><b>Program In Kit:</b> {'Yes' if data.program_in_kit else 'No'}</p>
         <p><b>Folder In Kit:</b> {'Yes' if data.folder_in_kit else 'No'}</p>
+        <p><b>Floor Notes:</b> {html.escape(data.floor_notes)}</p>
         """
         doc.setHtml(html_content)
         

@@ -361,13 +361,129 @@ def migrate_to_v4(conn: sqlite3.Connection) -> None:
         cur.execute("ROLLBACK")
         raise
 
-def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> None:
+SCHEMA_V7_DDL_ACTIVE_AUDITS_1: str = "ALTER TABLE active_audits ADD COLUMN ship_date TEXT NULL"
+SCHEMA_V7_DDL_ACTIVE_AUDITS_2: str = "ALTER TABLE active_audits ADD COLUMN feeder_setuptime REAL NULL"
+SCHEMA_V7_DDL_ACTIVE_AUDITS_3: str = "ALTER TABLE active_audits ADD COLUMN smt_runtime REAL NULL"
+SCHEMA_V7_DDL_ACTIVE_AUDITS_4: str = "ALTER TABLE active_audits ADD COLUMN tht_runtime REAL NULL"
+SCHEMA_V7_DDL_HOLIDAYS: str = "CREATE TABLE holidays ( holiday_date TEXT PRIMARY KEY )"
+
+def migrate_to_v7(conn: sqlite3.Connection) -> bool:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=6)
+        
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=6)
+        
+    version = row["version"]
+    if version >= 7:
+        return False
+    if version < 6:
+        raise SchemaMismatch(found_version=version, expected_version=6)
+        
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        for ddl in [
+            SCHEMA_V7_DDL_ACTIVE_AUDITS_1,
+            SCHEMA_V7_DDL_ACTIVE_AUDITS_2,
+            SCHEMA_V7_DDL_ACTIVE_AUDITS_3,
+            SCHEMA_V7_DDL_ACTIVE_AUDITS_4,
+            SCHEMA_V7_DDL_HOLIDAYS
+        ]:
+            try:
+                cur.execute(ddl)
+            except sqlite3.OperationalError as e:
+                # ignore duplicate column errors if we are retrying a partial migration
+                if "duplicate column name" not in str(e) and "already exists" not in str(e):
+                    raise SchemaInitializationError(statement="v7 DDL", cause=e)
+                    
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 7, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception:
+        cur.execute("ROLLBACK")
+        raise
+
+def migrate_to_v8(conn: sqlite3.Connection) -> bool:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=7)
+        
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=7)
+        
+    version = row["version"]
+    if version >= 8:
+        return False
+    if version < 7:
+        raise SchemaMismatch(found_version=version, expected_version=7)
+        
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        # V8 migration: no DDL, just trigger backfill by bumping version.
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 8, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception:
+        cur.execute("ROLLBACK")
+        raise
+
+def migrate_to_v9(conn: sqlite3.Connection) -> bool:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=8)
+        
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=8)
+        
+    version = row["version"]
+    if version >= 9:
+        return False
+    if version < 8:
+        raise SchemaMismatch(found_version=version, expected_version=8)
+        
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        # V9 migration: no DDL, just trigger backfill by bumping version.
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 9, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception:
+        cur.execute("ROLLBACK")
+        raise
+
+def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     migrate_to_v1(conn)
     migrate_to_v2(conn)
     migrate_to_v3(conn, parser_registry)
     migrate_to_v4(conn)
     migrate_to_v5(conn)
     migrate_to_v6(conn)
+    v7_migrated = migrate_to_v7(conn)
+    v8_migrated = migrate_to_v8(conn)
+    v9_migrated = migrate_to_v9(conn)
+    return v7_migrated or v8_migrated or v9_migrated
 
 SCHEMA_V5_DDL_DROP_SHIP_DATE: str = """
 ALTER TABLE active_audits DROP COLUMN ship_date

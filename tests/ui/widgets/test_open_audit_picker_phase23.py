@@ -1,34 +1,13 @@
-"""Tests for OpenAuditPicker (Phase 23)."""
+"""Tests for OpenAuditPicker (Phase 23/28)."""
 
 import pytest
 from datetime import datetime, timezone, timedelta
 from PyQt6.QtWidgets import QPushButton, QLabel
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QModelIndex
 
 from cockpit.services.views import OpenAuditDigest
-from cockpit.ui.widgets.open_audit_picker import OpenAuditPicker, format_updated_stamp, PickerRow
-
-def test_format_updated_stamp_utc_to_pst():
-    # 2026-06-01 02:05:00 UTC is 2026-05-31 18:05:00 PST (6:05 PM)
-    moment = datetime(2026, 6, 1, 2, 5, 0, tzinfo=timezone.utc)
-    stamp = format_updated_stamp(moment)
-    assert stamp == "2026-05-31, 6:05 PM"
-
-def test_format_updated_stamp_midnight():
-    # 2026-05-31 08:30:00 UTC is 2026-05-31 00:30:00 PST (12:30 AM)
-    moment = datetime(2026, 5, 31, 8, 30, 0, tzinfo=timezone.utc)
-    stamp = format_updated_stamp(moment)
-    assert stamp == "2026-05-31, 12:30 AM"
-
-def test_format_updated_stamp_noon():
-    # 2026-05-31 20:00:00 UTC is 2026-05-31 12:00:00 PST (12:00 PM)
-    moment = datetime(2026, 5, 31, 20, 0, 0, tzinfo=timezone.utc)
-    stamp = format_updated_stamp(moment)
-    assert stamp == "2026-05-31, 12:00 PM"
-
-def test_format_updated_stamp_requires_tzinfo():
-    with pytest.raises(ValueError):
-        format_updated_stamp(datetime(2026, 5, 31, 12, 0, 0))
+from cockpit.persistence.types import AuditStatus
+from cockpit.ui.widgets.open_audit_picker import OpenAuditPicker, RowKind
 
 def test_OpenAuditPicker_font_scale_buttons(qtbot):
     picker = OpenAuditPicker()
@@ -64,20 +43,32 @@ def test_OpenAuditPicker_populate_and_click(qtbot):
         work_order_ref="WO-999",
         split_suffix="-B",
         quantity=500,
-        status="Not Clear",
-        updated_at=datetime(2026, 5, 31, 12, 0, 0, tzinfo=timezone.utc)
+        status=AuditStatus.NOT_CLEAR,
+        updated_at=datetime(2026, 5, 31, 12, 0, 0, tzinfo=timezone.utc),
+        date_ingested=datetime(2026, 5, 31, 10, 0, 0, tzinfo=timezone.utc),
+        ship_date=None,
+        lead_time_days=None,
+        repeat="NEW",
+        classification="Non-ITAR",
+        assembly_class=2,
+        process=None,
+        feeder_setuptime=None,
+        smt_runtime=None,
+        tht_runtime=None,
+        start_by=None
     )
     picker.populate([digest])
     
-    assert picker.list_widget.count() == 1
-    item = picker.list_widget.item(0)
-    row = picker.list_widget.itemWidget(item)
-    assert isinstance(row, PickerRow)
+    # We should have a group header and a data row
+    assert picker.model.rowCount() == 2
+    
+    # Find the data row index
+    data_idx = picker.model.index(1, 0)
+    assert picker.model.data(data_idx, Qt.ItemDataRole.UserRole)["kind"] == RowKind.DATA
     
     emitted = []
     picker.audit_selected.connect(emitted.append)
     
-    # Simulate row click
-    row.selected.emit(42)
+    # Simulate table click
+    picker.table_view.clicked.emit(data_idx)
     assert emitted == [42]
-    assert picker.list_widget.currentItem() == item

@@ -228,8 +228,10 @@ class AuditView(QWidget):
             self._metadata_layout.addWidget(QLabel(f"{label}: {val}"))
             
         clean_val = metadata.get("process_clean")
+        process_val: Any | None = metadata.get("process")
+
         if clean_val:
-            self._metadata_layout.addWidget(QLabel(f"CLEAN: {clean_val}"))
+            self._metadata_layout.addWidget(QLabel(f"Process: {process_val} {clean_val}"))
             
         rowc_val = metadata.get("rowc_ref")
         rowc_label = metadata.get("rowc_label")

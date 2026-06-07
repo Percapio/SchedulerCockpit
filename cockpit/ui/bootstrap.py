@@ -6,6 +6,7 @@ import sqlite3
 import sys
 import pathlib
 from dataclasses import dataclass
+from typing import Any
 
 from cockpit.persistence.connection import open_connection
 from cockpit.persistence.schema import migrate
@@ -48,6 +49,7 @@ class BootstrappedApp:
     layout_query_svc: LayoutQueryService
     release_svc: ReleaseService
     setup_bom_svc: SetupBomService
+    holiday_svc: Any  # Use Any to avoid circular imports or just import it at top
     pdf_renderer: PdfRenderer
     reconciliation_report: ReconciliationReport
 
@@ -132,12 +134,30 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
         coord_map=coord_map
     )
     
-    migrate(conn, parser_registry)
+    needs_backfill = migrate(conn, parser_registry)
     
     audit_repo = AuditRepository(conn, bom_component_repo, pdf_coord_repo)
     source_file_repo = SourceFileRepository(conn)
     tht_repo = ThtChecklistRepository(conn)
     notes_repo = BuildNotesChecklistRepository(conn)
+    
+    from cockpit.services.runtime_calc import RuntimeCalcService
+    runtime_calc_svc = RuntimeCalcService(audit_repo, source_file_repo, bom_component_repo, pdf_coord_repo)
+    
+    if needs_backfill:
+        logger.info("Starting runtime backfill")
+        # one-time backfill
+        try:
+            cur = conn.cursor()
+            cur.execute("SELECT id FROM active_audits")
+            for r in cur.fetchall():
+                audit_id = r["id"]
+                try:
+                    runtime_calc_svc.persist(audit_id)
+                except Exception as e:
+                    logger.error(f"Failed to backfill runtimes for audit {audit_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error during backfill: {e}")
     
     layout_query_svc = LayoutQueryService(
         source_file_repo=source_file_repo,
@@ -158,12 +178,17 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
         pdf_coord_repo=pdf_coord_repo,
         layout_parser=parser_registry.pdf_layout_parser,
         coord_map=coord_map,
-        file_storage_root=config.file_storage_root
+        file_storage_root=config.file_storage_root,
+        runtime_calc_svc=runtime_calc_svc
     )
     
-    audit_read_svc = AuditReadService(audit_repo)
+    from cockpit.services.holiday import HolidayRepository, HolidayService
+    holiday_repo = HolidayRepository(conn)
+    holiday_svc = HolidayService(holiday_repo)
+    
+    audit_read_svc = AuditReadService(audit_repo, holiday_svc=holiday_svc)
     checklist_svc = ChecklistService(conn, audit_repo, tht_repo, notes_repo, source_file_repo, bom_component_repo)
-    split_svc = AuditSplitService(conn, audit_repo)
+    split_svc = AuditSplitService(conn, audit_repo, runtime_calc_svc=runtime_calc_svc)
     
     storage_reaper = StorageReaper(source_file_repo)
     completion_svc = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)
@@ -196,6 +221,7 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
         layout_query_svc=layout_query_svc,
         release_svc=release_svc,
         setup_bom_svc=setup_bom_svc,
+        holiday_svc=holiday_svc,
         pdf_renderer=pdf_renderer,
         reconciliation_report=report
     )

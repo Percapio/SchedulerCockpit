@@ -16,9 +16,11 @@ class AuditSplitService:
         self,
         conn: sqlite3.Connection,
         audit_repo: AuditRepository,
+        runtime_calc_svc = None,
     ) -> None:
         self._conn = conn
         self._audit_repo = audit_repo
+        self._runtime_calc_svc = runtime_calc_svc
 
     def split(
         self,
@@ -57,9 +59,13 @@ class AuditSplitService:
             if source.split_suffix == "" and source_new_suffix is not None:
                 self._audit_repo.relabel_suffix(source.id, source_new_suffix)
 
-            self._audit_repo.clone_to_suffix(source.id, sibling_suffix, sibling_quantity, reason)
+            sibling = self._audit_repo.clone_to_suffix(source.id, sibling_suffix, sibling_quantity, reason)
             self._audit_repo.set_split_reason(source.id, reason)
             self._audit_repo.set_quantity(source.id, source.quantity - sibling_quantity)
+            
+            if self._runtime_calc_svc:
+                self._runtime_calc_svc.persist(source.id)
+                self._runtime_calc_svc.persist(sibling.id)
             
             cur.execute("RELEASE SAVEPOINT split")
         except Exception:

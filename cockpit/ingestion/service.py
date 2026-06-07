@@ -41,7 +41,8 @@ class IngestionService:
         pdf_coord_repo: PdfComponentCoordRepository,
         layout_parser: Any,
         coord_map: coordinate_map.TravelerCoordinateMap,
-        file_storage_root: pathlib.Path
+        file_storage_root: pathlib.Path,
+        runtime_calc_svc = None
     ) -> None:
         self.conn = conn
         self.audit_repo = audit_repo
@@ -53,6 +54,7 @@ class IngestionService:
         self.layout_parser = layout_parser
         self.coord_map = coord_map
         self.file_storage_root = file_storage_root
+        self._runtime_calc_svc = runtime_calc_svc
 
     def ingest(self, paths: Sequence[pathlib.Path], progress: Callable[[ProgressEvent], None] | None = None) -> ActiveAudit:
         """Ingest a dropped trio, atomically persist, and return the new audit."""
@@ -225,6 +227,9 @@ class IngestionService:
 
             _emit(ProgressStage.PERSISTED, {"tht_item_count": len(through_hole_drafts) if intent.bom_items else 0})
 
+            if self._runtime_calc_svc:
+                self._runtime_calc_svc.persist(audit.id)
+
             self.conn.execute("RELEASE SAVEPOINT ingest")
             return audit
             
@@ -319,6 +324,9 @@ class IngestionService:
                 ]
                 if pdf_drafts:
                     self.pdf_coord_repo.bulk_insert(pdf_drafts)
+
+            if self._runtime_calc_svc:
+                self._runtime_calc_svc.persist(audit.id)
 
             self.conn.execute("RELEASE SAVEPOINT add_pdf")
         except Exception:

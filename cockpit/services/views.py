@@ -188,6 +188,17 @@ class OpenAuditDigest:
     quantity: int
     status: AuditStatus
     updated_at: datetime
+    date_ingested: datetime
+    ship_date: date | None
+    lead_time_days: int | None
+    repeat: str
+    classification: str
+    assembly_class: int | None
+    process: str | None
+    feeder_setuptime: float | None
+    smt_runtime: float | None
+    tht_runtime: float | None
+    start_by: date | None
 
 
 import pathlib

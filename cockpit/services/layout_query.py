@@ -5,7 +5,7 @@ from cockpit.persistence.repositories.bom_components import AuditBomComponentRep
 from cockpit.persistence.repositories.pdf_coords import PdfComponentCoordRepository
 from cockpit.persistence.types import SourceFileCategory
 from cockpit.layout.renderer import PdfRenderer
-from cockpit.services.views import LayoutContext, ResolvedSelection, ResolutionKind, HighlightCoord, SelectionIntent, SelectionKind, RefDesLocation
+from cockpit.services.views import LayoutContext, ResolvedSelection, ResolutionKind, HighlightCoord, SelectionIntent, SelectionKind, RefDesLocation, PendingPdf
 from dataclasses import dataclass
 
 
@@ -31,30 +31,18 @@ class LayoutQueryService:
         self.bom_component_repo = bom_component_repo
         self.pdf_coord_repo = pdf_coord_repo
 
-    def load_for_audit(self, audit_id: int) -> LayoutContext:
-        """Return the canvas's context for one audit."""
+    def resolve_pdf_ref(self, audit_id: int) -> PendingPdf | None:
+        """Resolve the cheap, DB-derived PDF reference for an audit."""
         source_file = self.source_file_repo.find_by_audit_and_category(
             audit_id, SourceFileCategory.PDF
         )
 
         if source_file is None:
-            return LayoutContext(
-                audit_id=audit_id,
-                pdf_source_file_id=None,
-                pdf_path=None,
-                page_count=0,
-                page_dimensions=()
-            )
+            return None
 
-        pdf_path = source_file.local_storage_path
-        dimensions = self.pdf_renderer.get_page_dimensions(pdf_path)
-
-        return LayoutContext(
-            audit_id=audit_id,
-            pdf_source_file_id=source_file.id,
-            pdf_path=pdf_path,
-            page_count=len(dimensions),
-            page_dimensions=dimensions
+        return PendingPdf(
+            source_file_id=source_file.id,
+            path=source_file.local_storage_path
         )
 
     def list_pdf_coords_for_audit(self, audit_id: int) -> tuple[HighlightCoord, ...]:

@@ -1,7 +1,7 @@
 """Main window."""
 
 import pathlib
-from PyQt6.QtCore import Qt, QThread, QSettings
+from PyQt6.QtCore import Qt, QThread, QSettings, QTimer, QEvent
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox, QApplication
 
@@ -12,12 +12,15 @@ from cockpit.ui.widgets import (
     DropArea, ProgressView, Toast, ErrorDialog,
     OpenAuditPicker, AuditView
 )
-from cockpit.ui.workers import IngestionWorker, AuditSummary
+from cockpit.ui.widgets.dialogs import confirm_destructive
+from cockpit.ui.workers import IngestionWorker, AuditSummary, RenderWorker
 
 from cockpit.services.audit_read import AuditReadService
+from cockpit.persistence.types import AuditStatus
 from cockpit.services.checklist import ChecklistService
 from cockpit.services.split import AuditSplitService
-from cockpit.services.completion import CompletionService
+from cockpit.services.completion import CompletionService, CleanupFailedError
+from cockpit.persistence.errors import PersistenceError
 from cockpit.services.layout_query import LayoutQueryService
 from cockpit.layout.renderer import PdfRenderer
 from cockpit.ui.theme import Theme
@@ -72,8 +75,12 @@ class MainWindow(QMainWindow):
         
         self.picker = OpenAuditPicker()
         self.picker.audit_selected.connect(self._on_picker_audit_selected)
+        self.picker.complete_requested.connect(self._on_complete_requested)
+        self.picker.status_change_requested.connect(self._on_status_change_requested)
         self.picker.new_audit_requested.connect(self._on_picker_new_audit_requested)
         self.stacked.addWidget(self.picker)
+        
+        self._load_epoch = 0
         
         self._audit_view = AuditView(
             checklist_service=checklist_svc,
@@ -103,7 +110,41 @@ class MainWindow(QMainWindow):
         self.picker.font_scale_change_requested.connect(self._font_scale.request_delta)
         on_scale_changed(self._font_scale.current_pt())
         
+        self._render_thread = QThread()
+        self._render_worker = RenderWorker(pdf_renderer)
+        self._render_worker.moveToThread(self._render_thread)
+        
+        canvas = self._audit_view._layout_canvas
+        canvas.request_render.connect(self._render_worker._on_request, Qt.ConnectionType.QueuedConnection)
+        canvas.generation_bumped.connect(self._render_worker.note_latest_generation, Qt.ConnectionType.DirectConnection)
+        self._render_worker.render_ready.connect(canvas._on_render_ready, Qt.ConnectionType.QueuedConnection)
+        self._render_worker.render_error.connect(canvas._on_render_error, Qt.ConnectionType.QueuedConnection)
+        
+        canvas._worker_alive = True
+        self._render_thread.start()
+        
         self._resolve_initial_page()
+        
+        self._idle_timer = QTimer(self)
+        self._idle_timer.setSingleShot(True)
+        self._idle_timer.setInterval(60000)
+        self._idle_timer.timeout.connect(self._run_idle_maintenance)
+        self._app.installEventFilter(self)
+        self._idle_timer.start()
+        
+    def _run_idle_maintenance(self) -> None:
+        from cockpit.persistence.connection import run_idle_maintenance
+        run_idle_maintenance(self._bootstrapped.conn)
+
+    def eventFilter(self, obj, event) -> bool:
+        if event.type() in (
+            QEvent.Type.KeyPress, QEvent.Type.MouseMove,
+            QEvent.Type.MouseButtonPress, QEvent.Type.Wheel,
+            QEvent.Type.TouchBegin, QEvent.Type.TouchUpdate
+        ):
+            if hasattr(self, "_idle_timer"):
+                self._idle_timer.start()
+        return super().eventFilter(obj, event)
         
     def _show_drop_area(self) -> None:
         open_audits = self._audit_read_svc.list_open()
@@ -122,8 +163,44 @@ class MainWindow(QMainWindow):
             self.stacked.setCurrentWidget(self.picker)
             
     def _on_picker_audit_selected(self, audit_id: int) -> None:
-        self._audit_view.load(audit_id)
+        self._load_epoch += 1
+        epoch = self._load_epoch
+        self._audit_view.show_loading_placeholder()
         self.stacked.setCurrentWidget(self._audit_view)
+        
+        def do_load():
+            if epoch != self._load_epoch:
+                return
+            self._audit_view.load(audit_id)
+            
+        QTimer.singleShot(0, do_load)
+        
+    def _on_complete_requested(self, audit_id: int) -> None:
+        if not confirm_destructive(
+            title="Complete audit",
+            body="This permanently deletes the audit and its source files. This cannot be undone.",
+            confirm_label="Complete"
+        ):
+            return
+            
+        try:
+            self._bootstrapped.completion_svc.complete_and_cleanup(audit_id)
+        except (CleanupFailedError, PersistenceError) as e:
+            self._on_failed(FailurePayload.from_exception(e, "Completion failed"))
+        finally:
+            self._invalidate_audit_view_if_loaded(audit_id)
+            self._reload_list()
+            
+    def _on_status_change_requested(self, audit_id: int, target: AuditStatus) -> None:
+        try:
+            self._bootstrapped.audit_repo.transition_status(audit_id, target)
+        except PersistenceError as e:
+            self._on_failed(FailurePayload.from_exception(e, "Status transition failed"))
+            return
+        self._reload_list()
+        
+    def _invalidate_audit_view_if_loaded(self, audit_id: int) -> None:
+        self._audit_view.forget_audit(audit_id)
         
     def _on_picker_new_audit_requested(self) -> None:
         self._show_drop_area()
@@ -226,6 +303,14 @@ class MainWindow(QMainWindow):
             except Exception:
                 logger.exception('Exception caught in main_window')
                 pass
+                
+            self._audit_view._layout_canvas._worker_alive = False
+            if hasattr(self, "_render_thread") and self._render_thread is not None:
+                self._render_thread.quit()
+                self._render_thread.wait()
+                
+            from cockpit.persistence.connection import run_idle_maintenance
+            run_idle_maintenance(self._bootstrapped.conn)
             self._bootstrapped.conn.close()
             event.accept()
 

@@ -1,6 +1,6 @@
 # Cockpit — Manufacturing Audit Tool
 
-Cockpit is a local desktop app for electronics manufacturing. You drop three files onto it — an **Audit BOM** (what parts go on the board), a **Shop Traveler** (job routing info), and **Build Notes** (a Word doc with extra steps) — and it builds an interactive checklist that ties everything together. No server, no internet, just a window on your machine.
+Cockpit is a local desktop app for electronics manufacturing. You drop three files onto it — an **Audit BOM** (what parts go on the board), a **Shop Traveler** (job routing info), and **Build Notes** (a Word doc with extra steps) — and it builds an interactive checklist that ties everything together. No server, no internet, just a window on your machine.  Optional: Drag-and-drop a **Drawing** (PDF drawing) have the BOM match with the reference designators on the PDF for quick-view.
 
 ---
 
@@ -35,6 +35,7 @@ Cockpit.exe
 - **Gatekeeper check** — files are rejected if their names don't contain "Audit BOM" and "Traveler". Garbage in, hard stop out.
 - **Checklist generation** — through-hole parts from the BOM become verification checklist rows; Build Notes tables become step-by-step checklist items.
 - **Job splitting** — a job can be split into sibling work orders (e.g. `Job-A`, `Job-B`) with separate quantities.
+- **Quick actions from the job list** — right-click any job in the open-audit list to **Complete** it or change its **Status** (Shipping, THT, SMT, Ready-to-Run, ON HOLD, Not Clear) without opening it. Completing is destructive and asks for confirmation first.
 - **Cascade deletion** — when a job completes, all uploaded files and database records are permanently deleted. Files shared between split jobs are only deleted when every sibling is done.
 - **Local SQLite database** — all state lives in `local_audit.db` on disk. Nothing leaves the machine.
 
@@ -102,6 +103,10 @@ With the virtual environment active:
 ```powershell
 python cockpit_main.py
 ```
+
+### Logs
+
+At runtime Cockpit writes a rotating `log.txt` (with numbered backups such as `log.txt.1`) — one copy in the application data folder, and, when run from source, a second copy in the project root next to `cockpit_main.py`. These are local diagnostic files only; they are excluded from version control and can be deleted at any time.
 
 ---
 

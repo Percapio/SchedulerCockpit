@@ -118,6 +118,12 @@ class LayoutContext:
 
 
 @dataclass(frozen=True)
+class PendingPdf:
+    source_file_id: int
+    path: pathlib.Path
+
+
+@dataclass(frozen=True)
 class ChecklistRowView:
     key: ChecklistRowKey
     primary_label: str
@@ -191,7 +197,7 @@ class OpenAuditDigest:
     date_ingested: datetime
     ship_date: date | None
     lead_time_days: int | None
-    repeat: str
+    repeat: str | None
     classification: str
     assembly_class: int | None
     process: str | None

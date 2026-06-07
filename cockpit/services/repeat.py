@@ -10,15 +10,15 @@ def derive_repeat(meta: Dict[str, Any]) -> str:
         
     parts = []
     
-    rowc_label = str(meta.get("rowc_label", "")).strip()
+    rowc_label = str(meta.get("rowc_label") or "").strip()
     if rowc_label:
         parts.append(rowc_label)
         
-    rowc_ref = str(meta.get("rowc_ref", "")).strip()
+    rowc_ref = str(meta.get("rowc_ref") or "").strip()
     if rowc_ref:
         parts.append(rowc_ref)
         
-    modifier = str(meta.get("assembly_modifier", "")).strip()
+    modifier = str(meta.get("assembly_modifier") or "").strip()
     if modifier:
         parts.append(modifier)
         

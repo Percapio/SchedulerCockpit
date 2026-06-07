@@ -13,16 +13,24 @@ def _disconnect_and_delete(target: QObject) -> None:
     """
     if sip.isdeleted(target):
         return
-    print(f"    [purge] disconnecting {type(target)}")
     try:
         target.disconnect()
     except TypeError:
         logger.exception('Exception caught in qt_lifecycle')
         pass
 
-    print(f"    [purge] deleteLater on {type(target)}")
     target.deleteLater()
 
+
+def _post_order(root: QWidget) -> list[QWidget]:
+    result = []
+    def _traverse(w: QWidget):
+        for child in w.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly):
+            _traverse(child)
+        result.append(w)
+    for child in root.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly):
+        _traverse(child)
+    return result
 
 def purge_widget_subtree(root: QWidget) -> None:
     """
@@ -30,6 +38,11 @@ def purge_widget_subtree(root: QWidget) -> None:
     """
     if sip.isdeleted(root):
         return
+    for node in _post_order(root):
+        try:
+            node.disconnect()
+        except TypeError:
+            pass
     root.hide()
     root.deleteLater()
 

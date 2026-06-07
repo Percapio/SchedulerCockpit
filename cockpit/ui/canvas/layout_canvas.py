@@ -79,7 +79,8 @@ from cockpit.services.layout_query import LayoutQueryService
 from cockpit.layout.renderer import PdfRenderer
 from cockpit.ui.error_messages import FailurePayload
 from cockpit.ui.error_messages import render as render_error
-from cockpit.services.views import SelectionIntent, ResolvedSelection, SelectionKind, ResolutionKind, HighlightCoord
+from cockpit.services.views import SelectionIntent, ResolvedSelection, SelectionKind, ResolutionKind, HighlightCoord, LayoutContext, PendingPdf
+from cockpit.ui.workers.render_worker import RenderJob, RenderResult, RenderFailure
 from cockpit.persistence.errors import PersistenceError
 from cockpit.ui.canvas.page_switcher import PageSwitcher
 from cockpit.ui.canvas.font_scale_bar import FontScaleBar
@@ -108,6 +109,8 @@ class LayoutCanvas(QWidget):
     font_scale_change_requested = pyqtSignal(int)
     refdes_clicked = pyqtSignal(str)
     empty_clicked = pyqtSignal()
+    request_render = pyqtSignal(object)
+    generation_bumped = pyqtSignal(int)
 
     def __init__(
         self,
@@ -130,6 +133,9 @@ class LayoutCanvas(QWidget):
         self._current_scale = 1.0
         self._pixmap_cache: dict[int, tuple[int, QPixmap]] = {}
         self._coord_cache: dict[int, list[HighlightCoord]] = {}
+        self._worker_alive = False
+        self._pending_pdf = None
+        self._render_epoch = 0
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -185,10 +191,12 @@ class LayoutCanvas(QWidget):
         from cockpit.ui.widgets.empty_canvas import EmptyCanvasPlaceholder
         self._empty_placeholder = EmptyCanvasPlaceholder("No assembly drawing attached")
         self._error_placeholder = EmptyCanvasPlaceholder("")
-        
+        self._spinner_placeholder = EmptyCanvasPlaceholder("Loading assembly drawing...")
+
         self._stacked.addWidget(self._canvas_container)
         self._stacked.addWidget(self._empty_placeholder)
         self._stacked.addWidget(self._error_placeholder)
+        self._stacked.addWidget(self._spinner_placeholder)
         
         layout.addWidget(self._page_switcher)
         layout.addWidget(self._stacked)
@@ -196,7 +204,31 @@ class LayoutCanvas(QWidget):
         self._resize_debouncer = QTimer(self)
         self._resize_debouncer.setSingleShot(True)
         self._resize_debouncer.setInterval(200)
-        self._resize_debouncer.timeout.connect(self._render_current_page)
+        self._resize_debouncer.timeout.connect(self._on_resize_debounced)
+
+    def current_render_height(self) -> int:
+        return int(self._theme.canvas_zoom_render_multiplier() * self._graphics_view.viewport().height())
+
+    def _build_context(self, pending: PendingPdf, dims: tuple[tuple[float,float], ...]) -> LayoutContext:
+        return LayoutContext(
+            audit_id=self._current_audit_id,
+            pdf_source_file_id=pending.source_file_id,
+            pdf_path=pending.path,
+            page_count=len(dims),
+            page_dimensions=dims
+        )
+
+    def _submit_render(self, job: RenderJob) -> None:
+        if not getattr(self, "_worker_alive", False):
+            return
+        self.request_render.emit(job)
+
+    def _show_spinner(self) -> None:
+        self._stacked.setCurrentWidget(self._spinner_placeholder)
+
+    def _hide_spinner(self) -> None:
+        if self._stacked.currentWidget() == self._spinner_placeholder:
+            self._stacked.setCurrentWidget(self._canvas_container)
 
     def load(self, audit_id: int) -> None:
         self._pixmap_cache.clear()
@@ -209,124 +241,118 @@ class LayoutCanvas(QWidget):
             coords = self._layout_query_service.list_pdf_coords_for_audit(audit_id)
             for c in coords:
                 self._coord_cache.setdefault(c.page_index, []).append(c)
-                
-            context = self._layout_query_service.load_for_audit(audit_id)
-        except AuditNotFound:
-            logger.exception('Exception caught in layout_canvas')
-            raise
-        except MalformedPdfError as e:
-            logger.exception('Exception caught in layout_canvas')
-            # error_messages rendering equivalent (simplified here)
-            payload = FailurePayload(
-                exception_class="MalformedPdfError",
-                title="Could not load assembly drawing",
-                summary=str(e),
-                detail=[],
-                reason_code=e.reason
-            )
-            self._stacked.setCurrentWidget(self._error_placeholder)
-            self._error_placeholder.set_text(f"Could not load assembly drawing: {payload.summary}")
-            self.error_occurred.emit(payload)
-            return
+        except Exception:
+            logger.exception('Exception caught in layout_canvas coords')
             
-        self._current_context = context
+        self._current_audit_id = audit_id
+        pending = self._layout_query_service.resolve_pdf_ref(audit_id)
         
-        if context.pdf_path is None:
+        if pending is None:
+            self._current_context = LayoutContext(audit_id, None, None, 0, ())
             self._current_page_index = None
+            self._pending_pdf = None
             self._page_switcher.hide()
+            self._empty_placeholder.set_text("No assembly drawing attached")
             self._stacked.setCurrentWidget(self._empty_placeholder)
             return
-            
-        self._page_switcher.set_page_count(context.page_count)
-        self._current_page_index = 0
-        self._stacked.setCurrentWidget(self._canvas_container)
-        self._render_current_page()
 
-    def _render_current_page(self) -> None:
-        if self._current_context is None or self._current_context.pdf_path is None:
+        self._pending_pdf = pending
+        self._render_epoch += 1
+        gen = self._render_epoch
+        self.generation_bumped.emit(gen)
+        
+        self._show_spinner()
+        self._submit_render(RenderJob(gen, pending.path, (0,), self.current_render_height(), True))
+
+    def _on_render_ready(self, result: RenderResult) -> None:
+        if result.generation != self._render_epoch:
             return
-        if self._current_page_index is None:
-            return
-            
-        target_h = self._graphics_view.viewport().height()
-        if target_h <= 0:
-            self._pending_render = True
+        if result.page_dimensions is None and self._current_context is None:
             return
             
-        self._pending_render = False
-
-        m = self._theme.canvas_zoom_render_multiplier()
-        render_h = int(m * target_h)
-
-        cached = self._pixmap_cache.get(self._current_page_index)
-        if cached is not None and cached[0] == render_h:
-            pixmap = cached[1]
-            rendered_width = pixmap.width()
-            rendered_height = pixmap.height()
-        else:
-            try:
-                rendered = self._pdf_renderer.render_page_png(
-                    self._current_context.pdf_path,
-                    self._current_page_index,
-                    target_pixel_height=render_h,
-                )
-            except MalformedPdfError as e:
-                logger.exception('Exception caught in layout_canvas')
-                payload = FailurePayload(
-                    exception_class="MalformedPdfError",
-                    title="Could not render assembly drawing",
-                    summary=str(e),
-                    detail=[],
-                    reason_code=e.reason
-                )
-                self._stacked.setCurrentWidget(self._error_placeholder)
-                self._error_placeholder.set_text(f"Could not load assembly drawing: {payload.summary}")
-                self.error_occurred.emit(payload)
-                return
-                
-            pixmap = QPixmap()
-            ok = pixmap.loadFromData(rendered.png_bytes, format="PNG")
-            if not ok:
-                payload = FailurePayload(
-                    exception_class="QPixmapDecodeFailure",
-                    title="Could not display assembly drawing",
-                    summary="Rendered page bytes failed to decode as PNG.",
-                    detail=[("page_index", str(self._current_page_index)),
-                            ("byte_length", str(len(rendered.png_bytes))),
-                            ("pixel_width",  str(rendered.pixel_width)),
-                            ("pixel_height", str(rendered.pixel_height))],
-                    reason_code="PIXMAP_DECODE_FAILED",
-                )
-                self._stacked.setCurrentWidget(self._error_placeholder)
-                self._error_placeholder.set_text(f"Could not display assembly drawing: {payload.summary}")
-                self.error_occurred.emit(payload)
-                return
-                
-            self._pixmap_cache[self._current_page_index] = (render_h, pixmap)
-            rendered_width = rendered.pixel_width
-            rendered_height = rendered.pixel_height
-
-        # Restore to canvas if it was in error state before
-        if self._stacked.currentWidget() == self._error_placeholder:
+        if result.target_pixel_height != self.current_render_height():
+            if self._current_context is None:
+                self.load(self._current_audit_id)
+            else:
+                self._on_resize_debounced()
+            return
+            
+        if result.page_dimensions is not None:
+            self._current_context = self._build_context(self._pending_pdf, result.page_dimensions)
+            self._page_switcher.set_page_count(self._current_context.page_count)
+            self._current_page_index = 0
+            
+        for ri in result.images:
+            pixmap = QPixmap.fromImage(ri.image)
+            self._pixmap_cache[ri.page_index] = (result.target_pixel_height, pixmap)
+            
+        if self._current_page_index in [ri.page_index for ri in result.images]:
+            self._hide_spinner()
             self._stacked.setCurrentWidget(self._canvas_container)
+            
+            pixmap = self._pixmap_cache[self._current_page_index][1]
+            self._base_pixmap_item.setPixmap(QPixmap())
+            self._base_pixmap_item.setPixmap(pixmap)
+            self._base_pixmap_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
+            
+            self._scene.setSceneRect(0, 0, pixmap.width(), pixmap.height())
+            self._dim_item.setRect(self._scene.sceneRect())
+            self._graphics_view.fitInView(self._base_pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
+            self._current_scale = 1.0
+            self._update_pan_cursor()
+            
+            self._apply_selection()
+            
+            others = tuple(i for i in range(self._current_context.page_count)
+                           if i != self._current_page_index
+                           and (i not in self._pixmap_cache or self._pixmap_cache[i][0] != self.current_render_height()))
+            if others:
+                self._submit_render(RenderJob(self._render_epoch, self._pending_pdf.path, others, self.current_render_height(), False))
 
-        # Explicitly release the old pixmap memory before assigning the new one
-        self._base_pixmap_item.setPixmap(QPixmap())
-        
-        self._base_pixmap_item.setPixmap(pixmap)
-        self._base_pixmap_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-        
-        self._scene.setSceneRect(0, 0, rendered_width, rendered_height)
-        self._dim_item.setRect(self._scene.sceneRect())
-        self._graphics_view.fitInView(self._base_pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
-        self._current_scale = 1.0
-        self._update_pan_cursor()
-        
-        self._apply_selection()
+    def _on_render_error(self, failure: RenderFailure) -> None:
+        if failure.generation != self._render_epoch:
+            return
+            
+        if self._current_page_index in failure.page_indices:
+            self._hide_spinner()
+            self._error_placeholder.set_text(f"Could not load assembly drawing: {failure.payload.summary}")
+            self._stacked.setCurrentWidget(self._error_placeholder)
+            self.error_occurred.emit(failure.payload)
+        else:
+            logger.warning("background prefetch render failed for pages %s", failure.page_indices)
 
     def _on_page_changed(self, page_index: int) -> None:
         self._current_page_index = page_index
-        self._render_current_page()
+        cached = self._pixmap_cache.get(page_index)
+        
+        if cached is not None and cached[0] == self.current_render_height():
+            pixmap = cached[1]
+            self._base_pixmap_item.setPixmap(QPixmap())
+            self._base_pixmap_item.setPixmap(pixmap)
+            self._scene.setSceneRect(0, 0, pixmap.width(), pixmap.height())
+            self._dim_item.setRect(self._scene.sceneRect())
+            self._graphics_view.fitInView(self._base_pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
+            self._current_scale = 1.0
+            self._update_pan_cursor()
+            self._apply_selection()
+        else:
+            self._render_epoch += 1
+            gen = self._render_epoch
+            self.generation_bumped.emit(gen)
+            self._show_spinner()
+            if self._pending_pdf:
+                self._submit_render(RenderJob(gen, self._pending_pdf.path, (page_index,), self.current_render_height(), False))
+
+    def _on_resize_debounced(self) -> None:
+        if self._pending_pdf is None or self._stacked.currentWidget() != self._canvas_container:
+            return
+        self._pixmap_cache.clear()
+        self._render_epoch += 1
+        gen = self._render_epoch
+        self.generation_bumped.emit(gen)
+        self._show_spinner()
+        self._submit_render(RenderJob(gen, self._pending_pdf.path, (self._current_page_index,), self.current_render_height(), False))
+
 
     def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)

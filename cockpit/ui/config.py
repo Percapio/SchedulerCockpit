@@ -63,6 +63,9 @@ class AppConfig:
     log_path: pathlib.Path
     log_level: str
     probe_history: tuple[ProbeAttempt, ...]
+    sqlite_cache_kib: int = -16384
+    sqlite_mmap_bytes: int = 134_217_728
+    wal_autocheckpoint_pages: int = 1000
 
 
 @dataclass(frozen=True)

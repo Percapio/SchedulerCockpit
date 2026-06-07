@@ -79,7 +79,7 @@ class ReleaseService:
         import html
         
         doc = QTextDocument()
-        doc.setDefaultFont(QFont("Calibri", 20))
+        doc.setDefaultFont(QFont("Calibri", 18))
         
         html_content = f"""
         <h1>JOB RELEASE FORM</h1>
@@ -92,15 +92,12 @@ class ReleaseService:
                 <td>{html.escape(data.class_display)}</td> </td></tr>
             <tr><td><b>Process:</b> {html.escape(str(data.process or ''))} {html.escape(str(data.process_clean or ''))}</td></tr>
         </table>
-        <p></p>
+        <br>
         <p><b>HOT JOB:</b> {html.escape(data.turn_note)}</p>
-        <p></p>
         <p><b>Ship Date:</b> {html.escape(data.ship_date)}</p>
-        <p></p>
-        <p></p>
+        <br>
         <p><b>Setup First Side:</b> {html.escape(data.setup_first_side)}</p>
-        <p></p>
-        <p></p>
+        <br>
         <p><b>PCB Clear:</b> {html.escape(data.pcb_clear)}</p>
         <p><b>Shortages Notes:</b> {html.escape(data.shortages_notes)}</p>
         <p><b>Program In Kit:</b> {'Yes' if data.program_in_kit else 'No'}</p>

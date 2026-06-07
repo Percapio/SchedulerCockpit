@@ -17,7 +17,9 @@ from ..types import ActiveAudit, ActiveAuditDraft, AuditStatus, SourceFileCatego
 
 from .bom_components import AuditBomComponentRepository
 from .pdf_coords import PdfComponentCoordRepository
+import dataclasses
 
+_ACTIVE_AUDIT_FIELDS = frozenset(f.name for f in dataclasses.fields(ActiveAudit))
 
 class AuditRepository:
     def __init__(
@@ -97,9 +99,7 @@ class AuditRepository:
         if not row:
             return None
         
-        import dataclasses
-        valid_fields = {f.name for f in dataclasses.fields(ActiveAudit)}
-        filtered_row = {k: v for k, v in row.items() if k in valid_fields}
+        filtered_row = {k: v for k, v in row.items() if k in _ACTIVE_AUDIT_FIELDS}
         return ActiveAudit(**filtered_row)
 
     def find_by_id(self, audit_id: int) -> ActiveAudit | None:
@@ -109,9 +109,7 @@ class AuditRepository:
         if not row:
             return None
             
-        import dataclasses
-        valid_fields = {f.name for f in dataclasses.fields(ActiveAudit)}
-        filtered_row = {k: v for k, v in row.items() if k in valid_fields}
+        filtered_row = {k: v for k, v in row.items() if k in _ACTIVE_AUDIT_FIELDS}
         return ActiveAudit(**filtered_row)
 
     def transition_status(self, audit_id: int, target: AuditStatus) -> ActiveAudit:
@@ -169,9 +167,7 @@ class AuditRepository:
             ORDER BY part_number ASC, work_order_ref ASC, split_suffix ASC
             """
         )
-        import dataclasses
-        valid_fields = {f.name for f in dataclasses.fields(ActiveAudit)}
-        return [ActiveAudit(**{k: v for k, v in row.items() if k in valid_fields}) for row in cur.fetchall()]
+        return [ActiveAudit(**{k: v for k, v in row.items() if k in _ACTIVE_AUDIT_FIELDS}) for row in cur.fetchall()]
 
     def list_completed(self) -> list[ActiveAudit]:
         # Completed audits are hard-deleted, so this always returns empty.

@@ -91,3 +91,46 @@ class PdfRenderer:
             raise MalformedPdfError(path, "PDF_RENDER_FAILED", {"cause": str(e)}) from e
         finally:
             doc.close()
+
+    def render_pages_png(
+        self,
+        path: pathlib.Path,
+        page_indices: list[int],
+        target_pixel_height: int,
+    ) -> list[RenderedPage]:
+        """Rasterize multiple pages to PNG bytes at a target pixel height."""
+        if target_pixel_height <= 0:
+            raise InvalidArgumentError("target_pixel_height", target_pixel_height, "Must be positive")
+
+        try:
+            doc = fitz.open(str(path))
+        except Exception as e:
+            raise MalformedPdfError(path, "PDF_OPEN_FAILED", {"cause": str(e)}) from e
+
+        try:
+            page_count = len(doc)
+            results = []
+            for page_index in page_indices:
+                if page_index < 0 or page_index >= page_count:
+                    raise InvalidArgumentError("page_index", page_index, f"Must be between 0 and {page_count - 1}")
+                    
+                page = doc[page_index]
+                scale = target_pixel_height / page.rect.height
+                mat = fitz.Matrix(scale, scale)
+                
+                pix = page.get_pixmap(matrix=mat, alpha=False)
+                png_bytes = pix.tobytes("png")
+                
+                results.append(RenderedPage(
+                    page_index=page_index,
+                    png_bytes=png_bytes,
+                    pixel_width=pix.width,
+                    pixel_height=pix.height
+                ))
+            return results
+        except InvalidArgumentError:
+            raise
+        except Exception as e:
+            raise MalformedPdfError(path, "PDF_RENDER_FAILED", {"cause": str(e)}) from e
+        finally:
+            doc.close()

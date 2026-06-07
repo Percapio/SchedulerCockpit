@@ -42,6 +42,7 @@ class BootstrappedApp:
     config: AppConfig
     conn: sqlite3.Connection
     ingestion_service: IngestionService
+    audit_repo: AuditRepository
     audit_read_svc: AuditReadService
     checklist_svc: ChecklistService
     split_svc: AuditSplitService
@@ -109,7 +110,12 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     logging.getLogger("cockpit").info("Application data root: %s (Probe history: %s)", config.app_data_root.parent, ", ".join(probe_summary))
     logging.getLogger("cockpit").info("Bootstrapping Cockpit application...")
     
-    conn = open_connection(config.db_path)
+    conn = open_connection(
+        config.db_path,
+        cache_size_kib=config.sqlite_cache_kib,
+        mmap_size_bytes=config.sqlite_mmap_bytes,
+        wal_autocheckpoint_pages=config.wal_autocheckpoint_pages
+    )
     
     bom_component_repo = AuditBomComponentRepository(conn)
     pdf_coord_repo = PdfComponentCoordRepository(conn)
@@ -214,6 +220,7 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
         config=config,
         conn=conn,
         ingestion_service=ingestion_service,
+        audit_repo=audit_repo,
         audit_read_svc=audit_read_svc,
         checklist_svc=checklist_svc,
         split_svc=split_svc,

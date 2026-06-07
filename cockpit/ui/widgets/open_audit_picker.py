@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta, date
 from typing import Sequence, Any, List
 from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView, QHeaderView, QStyledItemDelegate
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView, QHeaderView, QStyledItemDelegate, QMenu
 )
 
 from cockpit.persistence.types import AuditStatus
@@ -25,14 +25,7 @@ class AuditListModel(QAbstractTableModel):
         "FSU (hrs)", "SMT (hrs)", "THT (hrs)", "Date Ingested"
     ]
     
-    GROUP_ORDER = [
-        AuditStatus.SHIPPING,
-        AuditStatus.THT,
-        AuditStatus.SMT,
-        AuditStatus.READY_TO_RUN,
-        AuditStatus.ON_HOLD,
-        AuditStatus.NOT_CLEAR
-    ]
+    GROUP_ORDER = AuditStatus.ordered()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -134,7 +127,7 @@ class AuditListModel(QAbstractTableModel):
             if col == 9: return d.process or ""
             if col == 10: return f"{d.feeder_setuptime:.1f}" if d.feeder_setuptime is not None else ""
             if col == 11: return f"{d.smt_runtime:.1f}" if d.smt_runtime is not None else ""
-            if col == 12: return f"{d.tht_runtime:.1f}" if d.tht_runtime is not None else ""
+            if col == 12: return f"{d.tht_runtime * 12:.1f}" if d.tht_runtime is not None else ""
             if col == 13:
                 if not d.date_ingested: return ""
                 local = d.date_ingested.astimezone(PST)
@@ -172,6 +165,8 @@ class GroupHeaderDelegate(QStyledItemDelegate):
 
 class OpenAuditPicker(QWidget):
     audit_selected = pyqtSignal(int)
+    complete_requested = pyqtSignal(int)
+    status_change_requested = pyqtSignal(int, AuditStatus)
     new_audit_requested = pyqtSignal()
     font_scale_change_requested = pyqtSignal(int)
 
@@ -195,6 +190,8 @@ class OpenAuditPicker(QWidget):
         
         layout.addWidget(self.table_view)
         self._last_digests = []
+        
+        self._install_context_menu()
 
     def build_title_row(self) -> QHBoxLayout:
         title = QLabel("Select an Audit")
@@ -222,6 +219,7 @@ class OpenAuditPicker(QWidget):
 
     def populate(self, digests: Sequence[OpenAuditDigest]) -> None:
         self._last_digests = list(digests)
+        self.table_view.clearSpans()
         self.model.rebuild(self._last_digests)
         self.table_view.scrollToTop()
         
@@ -237,6 +235,7 @@ class OpenAuditPicker(QWidget):
         else:
             self.model.set_sort(logical_index, True)
             
+        self.table_view.clearSpans()
         for i in range(self.model.rowCount()):
             idx = self.model.index(i, 0)
             row_data = idx.data(Qt.ItemDataRole.UserRole)
@@ -263,3 +262,34 @@ class OpenAuditPicker(QWidget):
             app_win._reload_list()
         else:
             logger.error("Holidays: holiday service unavailable on top-level window %r", app_win)
+
+    def _install_context_menu(self) -> None:
+        self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table_view.customContextMenuRequested.connect(self._on_context_menu_requested)
+
+    def _on_context_menu_requested(self, position) -> None:
+        index = self.table_view.indexAt(position)
+        if not index.isValid():
+            return
+            
+        row_data = index.data(Qt.ItemDataRole.UserRole)
+        if not row_data or row_data.get("kind") != RowKind.DATA:
+            return
+            
+        digest: OpenAuditDigest = row_data["digest"]
+
+        menu = QMenu()
+        complete_action = menu.addAction("Complete")
+        complete_action.triggered.connect(lambda _, a_id=digest.audit_id: self.complete_requested.emit(a_id))
+
+        status_menu = menu.addMenu("Status")
+        for st in AuditStatus.ordered():
+            action = status_menu.addAction(st.value)
+            action.setCheckable(True)
+            if st == digest.status:
+                action.setChecked(True)
+                action.setEnabled(False)
+            else:
+                action.triggered.connect(lambda _, a_id=digest.audit_id, status=st: self.status_change_requested.emit(a_id, status))
+                
+        menu.exec(self.table_view.viewport().mapToGlobal(position))

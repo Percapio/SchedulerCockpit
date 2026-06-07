@@ -37,7 +37,16 @@ def hydrating_row_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
     return d
 
 
-def open_connection(db_path: pathlib.Path) -> sqlite3.Connection:
+import logging
+
+logger = logging.getLogger(__name__)
+
+def open_connection(
+    db_path: pathlib.Path,
+    cache_size_kib: int = -16384,
+    mmap_size_bytes: int = 134217728,
+    wal_autocheckpoint_pages: int = 1000
+) -> sqlite3.Connection:
     """
     Produce a SQLite connection with the invariants the access layer depends on.
     """
@@ -56,8 +65,23 @@ def open_connection(db_path: pathlib.Path) -> sqlite3.Connection:
         conn.execute("PRAGMA foreign_keys = ON;")
         conn.execute("PRAGMA journal_mode = WAL;")
         conn.execute("PRAGMA synchronous = NORMAL;")
+        conn.execute(f"PRAGMA cache_size = {cache_size_kib};")
+        conn.execute(f"PRAGMA mmap_size = {mmap_size_bytes};")
+        conn.execute("PRAGMA temp_store = MEMORY;")
+        conn.execute(f"PRAGMA wal_autocheckpoint = {wal_autocheckpoint_pages};")
         
         conn.row_factory = hydrating_row_factory
         return conn
     except sqlite3.Error as e:
         raise PersistenceUnavailable(db_path, e)
+
+
+def run_idle_maintenance(conn: sqlite3.Connection) -> None:
+    """
+    Opportunistic maintenance; safe to call when no transaction is open.
+    """
+    try:
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.execute("PRAGMA optimize")
+    except sqlite3.Error as e:
+        logger.warning("idle maintenance skipped", exc_info=e)

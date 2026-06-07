@@ -132,6 +132,9 @@ class AuditView(QWidget):
 
     def load(self, audit_id: int) -> None:
         """Load the audit identified by audit_id into all panes."""
+        self._dashboard.setEnabled(True)
+        self._layout_canvas.setEnabled(True)
+        self._bom_panel.setEnabled(True)
         self._coordinator.on_audit_loaded()
         self._dashboard.load(audit_id)
         self._bom_panel.load(audit_id)
@@ -139,12 +142,29 @@ class AuditView(QWidget):
 
     def reload(self) -> None:
         """Explicit reload of the audit into all panes."""
+        self._dashboard.setEnabled(True)
+        self._layout_canvas.setEnabled(True)
+        self._bom_panel.setEnabled(True)
         self._dashboard.reload()
         # the dashboard handles saving/loading view state. 
         # For layout_canvas and bom_panel, we also need to reload.
         if self._dashboard._current_audit_id is not None:
             self._bom_panel.load(self._dashboard._current_audit_id)
         self._layout_canvas.reload()
+        
+    def forget_audit(self, audit_id: int) -> None:
+        """Clear the cached view if it matches the given audit_id."""
+        if self._dashboard._current_audit_id == audit_id:
+            self._dashboard._current_audit_id = None
+            self._dashboard._view = None
+            
+    def show_loading_placeholder(self) -> None:
+        """Show a loading placeholder while a deferred load is pending."""
+        self._dashboard.setEnabled(False)
+        self._layout_canvas.setEnabled(False)
+        self._bom_panel.setEnabled(False)
+        # Proper styling or overlay could be added, but simple disable works as placeholder
+        # and it will be re-enabled during the actual load() or reload().
 
     def showEvent(self, event) -> None:
         super().showEvent(event)

@@ -20,6 +20,38 @@ import sqlite3
 
 logger = logging.getLogger(__name__)
 
+class RefDesIndexCache:
+    def __init__(self, service: 'ChecklistService'):
+        self._by_source_file: dict[int, dict[str, tuple[int, tuple[str, ...]]]] = {}
+        self._service = service
+
+    def get(self, source_file_id: int | None) -> dict[str, tuple[int, tuple[str, ...]]]:
+        if source_file_id is None:
+            return {}
+        if source_file_id not in self._by_source_file:
+            self._by_source_file[source_file_id] = self._service.build_tht_refdes_index(source_file_id)
+        return self._by_source_file[source_file_id]
+
+    def invalidate(self, source_file_id: int) -> None:
+        self._by_source_file.pop(source_file_id, None)
+
+    def clear(self) -> None:
+        self._by_source_file.clear()
+
+class BomSourceFileMemo:
+    def __init__(self, source_file_repo: SourceFileRepository):
+        self._by_audit: dict[int, int | None] = {}
+        self._source_file_repo = source_file_repo
+
+    def bom_source_file_id_for(self, audit_id: int) -> int | None:
+        if audit_id not in self._by_audit:
+            bom_sf = self._source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.BOM)
+            self._by_audit[audit_id] = bom_sf.id if bom_sf else None
+        return self._by_audit[audit_id]
+
+    def clear(self) -> None:
+        self._by_audit.clear()
+
 class ChecklistService:
     def __init__(
         self,
@@ -36,6 +68,8 @@ class ChecklistService:
         self._notes_repo = notes_repo
         self._source_file_repo = source_file_repo
         self._bom_component_repo = bom_component_repo
+        self._refdes_index_cache = RefDesIndexCache(self)
+        self._bom_source_file_memo = BomSourceFileMemo(self._source_file_repo)
 
     def build_tht_refdes_index(self, bom_sf_id: int | None) -> dict[str, tuple[int, tuple[str, ...]]]:
         if bom_sf_id is None:
@@ -64,8 +98,17 @@ class ChecklistService:
         if audit is None:
             raise AuditNotFound(audit_id)
 
-        bom_sf = self._source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.BOM)
-        tht_index = self.build_tht_refdes_index(bom_sf.id if bom_sf else None)
+        self._refdes_index_cache.clear()
+        self._bom_source_file_memo.clear()
+
+        source_files = self._source_file_repo.list_for_audit(audit_id)
+        bom_sf = next((sf for sf in source_files if sf.file_category == SourceFileCategory.BOM.value), None)
+        has_pdf = any(sf.file_category == SourceFileCategory.PDF.value for sf in source_files)
+        
+        bom_sf_id = bom_sf.id if bom_sf else None
+        self._bom_source_file_memo._by_audit[audit_id] = bom_sf_id
+
+        tht_index = self._refdes_index_cache.get(bom_sf_id)
 
         tht_rows_db = self._tht_repo.list_for_audit(audit_id)
         notes_rows_db = self._notes_repo.list_for_audit(audit_id)
@@ -99,8 +142,6 @@ class ChecklistService:
             ) for r in notes_rows_db
         ]
 
-        has_pdf = self._source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF) is not None
-
         tht_placement_count: int = sum(len(ref_des_list) for _, ref_des_list in tht_index.values())
 
         return ActiveAuditView(
@@ -126,8 +167,8 @@ class ChecklistService:
         if row_key.kind == ChecklistRowKind.THT:
             r = self._tht_repo.set_verification(row_key.item_id, is_verified)
             
-            bom_sf = self._source_file_repo.find_by_audit_and_category(r.audit_id, SourceFileCategory.BOM)
-            tht_index = self.build_tht_refdes_index(bom_sf.id if bom_sf else None)
+            bom_sf_id = self._bom_source_file_memo.bom_source_file_id_for(r.audit_id)
+            tht_index = self._refdes_index_cache.get(bom_sf_id)
             idx_data = tht_index.get(r.component_mpn)
             
             return ChecklistRowView(

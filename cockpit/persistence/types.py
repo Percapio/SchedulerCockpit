@@ -14,6 +14,17 @@ class AuditStatus(StrEnum):
     ON_HOLD = "ON HOLD"
     NOT_CLEAR = "Not Clear"
 
+    @classmethod
+    def ordered(cls) -> list['AuditStatus']:
+        return [
+            cls.SHIPPING,
+            cls.THT,
+            cls.SMT,
+            cls.READY_TO_RUN,
+            cls.ON_HOLD,
+            cls.NOT_CLEAR
+        ]
+
 
 class SourceFileCategory(StrEnum):
     BOM = "BOM"

@@ -13,6 +13,7 @@ class ReleaseFormData:
     quantity: int | None
     lead_time_days: int | None
     repeat: str
+    assembly_modifier: str | None
     itar_display: str
     process_clean: str | None
     class_display: str
@@ -55,8 +56,10 @@ class ReleaseService:
         class_display = f"Class {assembly_class}" if assembly_class is not None else ""
         
         from cockpit.services.repeat import derive_repeat
+        ship_date_seed: str = view.ship_date or ""
         return ReleaseFormData(
             assembly_number=meta.get("assembly_number"),
+            assembly_modifier=meta.get("assembly_modifier"),
             quantity=view.quantity,
             lead_time_days=meta.get("lead_time_days"),
             repeat=derive_repeat(meta),
@@ -64,7 +67,7 @@ class ReleaseService:
             process_clean=meta.get("process_clean"),
             class_display=class_display,
             process=meta.get("process"),
-            ship_date="",
+            ship_date=ship_date_seed,
             turn_note="",
             floor_notes="",
             shortages_notes="",
@@ -81,8 +84,24 @@ class ReleaseService:
         doc = QTextDocument()
         doc.setDefaultFont(QFont("Calibri", 18))
         
+        optional_rows: list[str] = []
+        def append_if(rows_list: list[str], value: str, label: str) -> None:
+            if value:
+                rows_list.append(f"<p><b>{label}:</b> {html.escape(value)}</p>")
+
+        append_if(optional_rows, data.turn_note, "HOT JOB")
+        append_if(optional_rows, data.pcb_clear, "PCB Clear Date")
+        append_if(optional_rows, data.shortages_notes, "Shortages Notes")
+
+        optional_block: str = "".join(optional_rows)
+
+        # Concat assembly_number and assembly_modifier for display
+        assembly_display = str(data.assembly_number or "")
+        if data.assembly_modifier:
+            assembly_display += f" {data.assembly_modifier}"
+
         html_content = f"""
-        <h1>{html.escape(str(data.assembly_number or ''))}</h1>
+        <h1>{html.escape(assembly_display)}</h1>
         <table border="1" width="100%" cellspacing="0" cellpadding="5">
             <tr><td><b>LT:</b> {html.escape(str(data.lead_time_days or ''))} days</td>
                 <td><b>QTY:</b> {html.escape(str(data.quantity or ''))}</td></tr>
@@ -92,15 +111,12 @@ class ReleaseService:
                 <td><b>ITAR:</b> {html.escape(data.itar_display)}</td></tr>
         </table>
         <br>
-        <p><b>HOT JOB:</b> {html.escape(data.turn_note)}</p>
         <p><b>Ship Date:</b> {html.escape(data.ship_date)}</p>
+        <p><b>Setup 1st (Top/Bot):</b> {html.escape(data.setup_first_side)}</p>
         <br>
-        <p><b>Setup First Side:</b> {html.escape(data.setup_first_side)}</p>
-        <br>
-        <p><b>PCB Clear:</b> {html.escape(data.pcb_clear)}</p>
-        <p><b>Shortages Notes:</b> {html.escape(data.shortages_notes)}</p>
-        <p><b>Program In Kit:</b> {'Yes' if data.program_in_kit else 'No'}</p>
-        <p><b>Folder In Kit:</b> {'Yes' if data.folder_in_kit else 'No'}</p>
+        {optional_block}
+        <p><b>Program In Kit:</b> {'Yes' if data.program_in_kit else ''}</p>
+        <p><b>Folder In Kit:</b> {'Yes' if data.folder_in_kit else ''}</p>
         <p><b>Floor Notes:</b> {html.escape(data.floor_notes)}</p>
         """
         doc.setHtml(html_content)

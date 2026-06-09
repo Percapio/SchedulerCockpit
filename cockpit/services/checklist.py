@@ -157,6 +157,7 @@ class ChecklistService:
             tht_placement_count=tht_placement_count,
             tht_rows=tht_views,
             notes_rows=notes_views,
+            ship_date=audit.ship_date,
         )
 
     def set_verification(

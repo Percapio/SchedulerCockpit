@@ -147,6 +147,7 @@ class ActiveAuditView:
     tht_placement_count: int = 0
     tht_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
     notes_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
+    ship_date: str | None = None
 
     @property
     def total_rows(self) -> int:

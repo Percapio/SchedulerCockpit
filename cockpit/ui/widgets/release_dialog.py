@@ -63,21 +63,29 @@ class ReleaseDialog(QDialog):
                 self.ship_date_input.setDate(QDate.currentDate())
         else:
             self.ship_date_input.setDate(QDate.currentDate())
+        
+        self.ship_date_blank_check = QCheckBox("Blank")
+        self.ship_date_blank_check.stateChanged.connect(
+            lambda state: self.ship_date_input.setEnabled(not state)
+        )
+        if not initial_data.ship_date:
+            self.ship_date_blank_check.setChecked(True)
+            self.ship_date_input.setEnabled(False)
+
         self.turn_note_input = QLineEdit()
         form.addRow("HOT JOB:", self.turn_note_input)
 
-        form.addRow("Ship Date:", self.ship_date_input)
+        ship_date_layout = QHBoxLayout()
+        ship_date_layout.addWidget(self.ship_date_input)
+        ship_date_layout.addWidget(self.ship_date_blank_check)
+        form.addRow("Ship Date:", ship_date_layout)
         
         self.setup_side_combo = QComboBox()
         self.setup_side_combo.addItems(PAGE_SIDE_LABELS)
         form.addRow("1st Setup Side:", self.setup_side_combo)
         # PCB Clear composer
         self.pcb_date_input = QLineEdit()
-        self.pcb_clear_check = QCheckBox("Is Clear")
-        pcb_layout = QHBoxLayout()
-        pcb_layout.addWidget(self.pcb_date_input)
-        pcb_layout.addWidget(self.pcb_clear_check)
-        form.addRow("PCB Clear Date:", pcb_layout)
+        form.addRow("PCB Clear Date:", self.pcb_date_input)
 
         self.shortages_notes_input = QLineEdit()
         form.addRow("Shortages Notes:", self.shortages_notes_input)
@@ -103,20 +111,21 @@ class ReleaseDialog(QDialog):
             try: return int(s)
             except ValueError: return None
 
-        pcb_clear_str = f"{self.pcb_date_input.text()} is {'clear' if self.pcb_clear_check.isChecked() else 'not clear'}"
-        if not self.pcb_date_input.text():
-            pcb_clear_str = ""
+        pcb_clear_str = self.pcb_date_input.text()
+
+        ship_date_str = "" if self.ship_date_blank_check.isChecked() else self.ship_date_input.date().toString(Qt.DateFormat.ISODate)
 
         data = ReleaseFormData(
             assembly_number=self.assembly_input.text(),
             quantity=parse_int(self.qty_input.text()),
             lead_time_days=parse_int(self.lead_time_input.text()),
             repeat=self.repeat_input.text(),
+            assembly_modifier=self.initial_data.assembly_modifier,
             itar_display=self.itar_input.text(),
             process_clean=self.clean_input.text(),
             class_display=self.class_input.text(),
             process=self.process_input.text(),
-            ship_date=self.ship_date_input.date().toString(Qt.DateFormat.ISODate),
+            ship_date=ship_date_str,
             turn_note=self.turn_note_input.text(),
             floor_notes=self.floor_notes_input.text(),
             shortages_notes=self.shortages_notes_input.text(),

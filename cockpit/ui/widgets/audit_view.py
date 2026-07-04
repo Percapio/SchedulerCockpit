@@ -23,6 +23,7 @@ class AuditView(QWidget):
     exit_requested = pyqtSignal()
     error_occurred = pyqtSignal(object)  # FailurePayload
     font_scale_change_requested = pyqtSignal(int)
+    settings_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -58,6 +59,13 @@ class AuditView(QWidget):
         self.search_input.setStyleSheet("margin-right: 6%;")
         self.search_input.textChanged.connect(self._on_search_changed)
         header.addWidget(self.search_input, 2)
+
+        from PyQt6.QtWidgets import QPushButton
+        self.settings_btn = QPushButton("Settings...")
+        self.settings_btn.setStyleSheet("margin-right: 6%;")
+        self.settings_btn.clicked.connect(self.settings_requested.emit)
+        header.addWidget(self.settings_btn)
+
         layout.addLayout(header)
         
         self._splitter = QSplitter(Qt.Orientation.Horizontal)

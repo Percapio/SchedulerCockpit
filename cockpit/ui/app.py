@@ -14,7 +14,7 @@ from cockpit.ui.config import resolve_config, resolve_app_data_root, AppConfigEr
 from .bootstrap import bootstrap
 from .main_window import MainWindow
 from .theme import ThemeLoader, Theme, ConfigurationError
-from .crash_reporter import install_crash_reporter, LocalFileCrashSink, StderrCrashSink
+from .crash_reporter import install_crash_reporter, LocalFileCrashSink, StderrCrashSink, GuiDialogCrashSink
 from .data_migration import migrate_to_versioned_layout
 from .runtime import bundled_resource
 from cockpit._build_info import get_build_info
@@ -91,14 +91,13 @@ def main() -> None:
     bootstrapped = bootstrap(config)
 
     app = QApplication(sys.argv)
-    
+
     # Load new theme infrastructure
     try:
         theme = ThemeLoader.load(
             bundled_resource("ui/theme.json"),
             bundled_resource("ui/theme.schema.json")
         )
-        app.setStyleSheet(theme.qss())
     except ConfigurationError as e:
         logging.getLogger(__name__).exception("Suppressed ConfigurationError in <main>")
         sys.stderr.write(f"ConfigurationError: {e}\n")
@@ -107,10 +106,27 @@ def main() -> None:
 
     settings = QSettings(str(config.app_data_root / "settings.ini"), QSettings.Format.IniFormat)
 
+    # Phase 32 (2.4/2.5): stylesheet = schema theme + preset/font overrides
+    from cockpit.ui.ui_prefs import StyleController
+    style_controller = StyleController(app, theme, settings)
+    app.setStyleSheet(style_controller.compose())
+
+    # Phase 32 (3.2): unhandled exceptions also surface in a detailed dialog
+    install_crash_reporter(
+        crash_dir=config.file_storage_root.parent / "crash_reports",
+        build_info=build_info,
+        sinks=(
+            LocalFileCrashSink(config.file_storage_root.parent / "crash_reports"),
+            StderrCrashSink(),
+            GuiDialogCrashSink()
+        )
+    )
+
     window = MainWindow(
         theme=theme,
         app=app,
         settings=settings,
+        style_controller=style_controller,
         bootstrapped_app=bootstrapped,
         audit_read_svc=bootstrapped.audit_read_svc,
         checklist_svc=bootstrapped.checklist_svc,

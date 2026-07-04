@@ -43,7 +43,8 @@ class MainWindow(QMainWindow):
         holiday_svc,
         *,
         theme: Theme,
-        settings: QSettings
+        settings: QSettings,
+        style_controller=None
     ) -> None:
         super().__init__()
         self._theme = theme
@@ -77,6 +78,7 @@ class MainWindow(QMainWindow):
         self.picker.audit_selected.connect(self._on_picker_audit_selected)
         self.picker.complete_requested.connect(self._on_complete_requested)
         self.picker.status_change_requested.connect(self._on_status_change_requested)
+        self.picker.ship_date_change_requested.connect(self._on_ship_date_change_requested)
         self.picker.new_audit_requested.connect(self._on_picker_new_audit_requested)
         self.stacked.addWidget(self.picker)
         
@@ -98,8 +100,19 @@ class MainWindow(QMainWindow):
         self.stacked.addWidget(self._audit_view)
         
         self.toast = Toast(self)
-        
-        self._font_scale = FontScaleController(app, theme, settings)
+
+        self._style_controller = style_controller
+        composer = style_controller.compose if style_controller is not None else None
+        self._font_scale = FontScaleController(app, theme, settings, composer=composer)
+        self._settings = settings
+
+        # Phase 32 (2.4): Settings entry points from both views
+        self.picker.settings_requested.connect(self._on_settings_requested)
+        self._audit_view.settings_requested.connect(self._on_settings_requested)
+        if style_controller is not None:
+            style_controller.changed.connect(self._on_style_changed)
+            # Apply the persisted font scale + preset overrides at startup.
+            self._font_scale.reapply()
         
         def on_scale_changed(pt: int) -> None:
             pct = int(round(pt / self._font_scale._bounds.default_pt * 100))
@@ -132,6 +145,24 @@ class MainWindow(QMainWindow):
         self._app.installEventFilter(self)
         self._idle_timer.start()
         
+    def _on_settings_requested(self) -> None:
+        if self._style_controller is None:
+            return
+        from cockpit.ui.widgets.settings_dialog import SettingsDialog
+        dialog = SettingsDialog(
+            self._style_controller,
+            self._font_scale,
+            self._bootstrapped.config,
+            self
+        )
+        dialog.exec()
+
+    def _on_style_changed(self) -> None:
+        # Preset/font change: regenerate stylesheet at the current scale and
+        # repaint the list so semantic column colors pick up the new palette.
+        self._font_scale.reapply()
+        self.picker.table_view.viewport().update()
+
     def _run_idle_maintenance(self) -> None:
         from cockpit.persistence.connection import run_idle_maintenance
         run_idle_maintenance(self._bootstrapped.conn)
@@ -199,6 +230,14 @@ class MainWindow(QMainWindow):
             return
         self._reload_list()
         
+    def _on_ship_date_change_requested(self, audit_id: int, ship_date) -> None:
+        try:
+            self._bootstrapped.audit_repo.set_ship_date(audit_id, ship_date)
+        except PersistenceError as e:
+            self._on_failed(FailurePayload.from_exception(e, "Ship date update failed"))
+            return
+        self._reload_list()
+
     def _invalidate_audit_view_if_loaded(self, audit_id: int) -> None:
         self._audit_view.forget_audit(audit_id)
         
@@ -233,8 +272,10 @@ class MainWindow(QMainWindow):
         self._thread.finished.connect(self._worker.deleteLater)
         self._thread.finished.connect(self._thread.deleteLater)
         self._thread.finished.connect(self._on_worker_finished)
-        
-        self._thread.start()
+
+        # Phase 32 (3.1): run the CPU-bound ingest at low priority so the
+        # UI thread keeps getting scheduled (GIL starvation mitigation).
+        self._thread.start(QThread.Priority.LowPriority)
 
     def _on_cancel_requested(self) -> None:
         if self._worker:

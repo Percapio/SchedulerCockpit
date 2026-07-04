@@ -4,6 +4,7 @@ import logging
 import pathlib
 import shutil
 import sqlite3
+import time
 from typing import Sequence, Callable, Any
 
 from cockpit.persistence.repositories.audits import AuditRepository
@@ -59,7 +60,19 @@ class IngestionService:
     def ingest(self, paths: Sequence[pathlib.Path], progress: Callable[[ProgressEvent], None] | None = None) -> ActiveAudit:
         """Ingest a dropped trio, atomically persist, and return the new audit."""
         
+        # Phase 32 (3.1): per-stage timing instrumentation so freezes on heavy
+        # BOMs can be attributed to a concrete pipeline stage from the log.
+        t_start = time.perf_counter()
+        t_prev = t_start
+
         def _emit(stage: ProgressStage, detail: dict[str, Any] | None = None) -> None:
+            nonlocal t_prev
+            now = time.perf_counter()
+            logger.info(
+                "ingest stage %s reached at +%.3fs (stage took %.3fs)",
+                stage.value, now - t_start, now - t_prev
+            )
+            t_prev = now
             if progress is not None:
                 progress(ProgressEvent(stage=stage, detail=detail))
 

@@ -49,8 +49,9 @@ class ReleaseService:
     def build_defaults(self, view: ActiveAuditView) -> ReleaseFormData:
         meta = view.traveler_metadata or {}
         
-        itar_classification = meta.get("itar_classification", "")
-        itar_display = "ITAR" if str(itar_classification).strip().upper() == "YES" else ""
+        from cockpit.services.itar import is_itar
+
+        itar_display = "ITAR" if is_itar(meta) else ""
         
         assembly_class = meta.get("assembly_class")
         class_display = f"Class {assembly_class}" if assembly_class is not None else ""

@@ -1,3 +1,5 @@
+from typing import Callable
+
 from PyQt6.QtCore import QObject, pyqtSignal, QSettings
 from PyQt6.QtWidgets import QApplication
 
@@ -17,11 +19,20 @@ class FontScaleController(QObject):
 
     scale_changed = pyqtSignal(int)
 
-    def __init__(self, app: QApplication, theme: Theme, settings: QSettings) -> None:
+    def __init__(
+        self,
+        app: QApplication,
+        theme: Theme,
+        settings: QSettings,
+        composer: Callable[[int], str] | None = None,
+    ) -> None:
         super().__init__()
         self._app = app
         self._theme = theme
         self._settings = settings
+        # Phase 32 (2.4): optional stylesheet composer so preset/font overrides
+        # survive font-scale changes. Defaults to the plain theme stylesheet.
+        self._composer = composer or theme.qss
         self._bounds = theme.font_scale_bounds()
 
         val = self._settings.value("audit_view/font_scale_pt")
@@ -60,4 +71,8 @@ class FontScaleController(QObject):
         self._current_pt = new_pt
         self._settings.setValue("audit_view/font_scale_pt", new_pt)
         self.scale_changed.emit(new_pt)
-        QTimer.singleShot(0, lambda: self._app.setStyleSheet(self._theme.qss(new_pt)))
+        QTimer.singleShot(0, lambda: self._app.setStyleSheet(self._composer(new_pt)))
+
+    def reapply(self) -> None:
+        """Regenerate the stylesheet at the current scale (e.g. preset change)."""
+        self._app.setStyleSheet(self._composer(self._current_pt))

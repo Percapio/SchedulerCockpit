@@ -135,6 +135,19 @@ class AuditRepository:
 
         return self.find_by_id(audit_id)  # type: ignore
 
+    def set_ship_date(self, audit_id: int, ship_date) -> None:
+        """Set or clear (None) the ship date. Accepts datetime.date or None."""
+        ship_str = ship_date.isoformat() if ship_date is not None else None
+
+        now_iso = utcnow().isoformat()
+        cur = self.conn.cursor()
+        cur.execute(
+            "UPDATE active_audits SET ship_date = ?, updated_at = ? WHERE id = ?",
+            (ship_str, now_iso, audit_id)
+        )
+        if cur.rowcount == 0:
+            raise AuditNotFound(audit_id)
+
     def set_split_reason(self, audit_id: int, reason: str) -> None:
         if not reason or not reason.strip():
             raise InvalidArgumentError("reason", reason, "Cannot be blank")

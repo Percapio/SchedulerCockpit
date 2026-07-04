@@ -1,6 +1,8 @@
 """ECO/Build Notes parser."""
 
 import pathlib
+import re
+
 import docx
 
 from ..errors import MalformedEcoError
@@ -8,6 +10,16 @@ from .results import EcoItem, EcoResult
 
 
 CANONICAL_XRAY_HEADER = ["Find#", "PartNum", "Count", "Ref_Des", "Description"]
+
+# Phase 32 (3.4): some Build Notes already carry hardcoded numeric bullets
+# ("1.", "2)") which duplicate the checklist's native "{row_sequence}." label.
+_LEADING_BULLET_RE = re.compile(r"^\s*\d+\s*[.)]\s+")
+
+
+def _strip_leading_bullet(text: str) -> str:
+    """Strip a hardcoded leading numeric bullet; keep text that is only a bullet."""
+    stripped = _LEADING_BULLET_RE.sub("", text, count=1)
+    return stripped if stripped else text
 
 
 def parse(path: pathlib.Path) -> EcoResult:
@@ -81,6 +93,7 @@ def parse(path: pathlib.Path) -> EcoResult:
 
                 # Join remaining cells with ' / '
                 original_text = " / ".join(c for c in cell_texts if c)
+                original_text = _strip_leading_bullet(original_text)
                 if original_text:
                     items.append(EcoItem(
                         row_sequence=row_sequence,

@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta, date
 from typing import Sequence, Any, List
 from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView, QHeaderView, QStyledItemDelegate, QMenu
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView, QHeaderView, QStyledItemDelegate, QMenu, QLineEdit
 )
 
 from cockpit.persistence.types import AuditStatus
@@ -111,6 +111,13 @@ class AuditListModel(QAbstractTableModel):
             if row_data["kind"] == RowKind.DATA:
                 return Qt.AlignmentFlag.AlignCenter
 
+        # Phase 32 (2.5): semantic highlighting for B#, QTY, Process columns.
+        if role == Qt.ItemDataRole.ForegroundRole and row_data["kind"] == RowKind.DATA:
+            from cockpit.ui import facelift
+            color = facelift.list_column_color(index.column())
+            if color is not None:
+                return color
+
         if role == Qt.ItemDataRole.DisplayRole:
             d: OpenAuditDigest = row_data["digest"]
             col = index.column()
@@ -167,8 +174,10 @@ class OpenAuditPicker(QWidget):
     audit_selected = pyqtSignal(int)
     complete_requested = pyqtSignal(int)
     status_change_requested = pyqtSignal(int, AuditStatus)
+    ship_date_change_requested = pyqtSignal(int, object)  # (audit_id, date | None)
     new_audit_requested = pyqtSignal()
     font_scale_change_requested = pyqtSignal(int)
+    settings_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -207,7 +216,13 @@ class OpenAuditPicker(QWidget):
         minus.clicked.connect(lambda: self.font_scale_change_requested.emit(-1))
         plus = QPushButton("A+")
         plus.clicked.connect(lambda: self.font_scale_change_requested.emit(1))
-        
+
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Search...")
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.setFixedWidth(220)
+        self.search_edit.textChanged.connect(self._on_search_text_changed)
+
         layout = QHBoxLayout()
         layout.addWidget(title)
         layout.addStretch()
@@ -215,32 +230,75 @@ class OpenAuditPicker(QWidget):
         layout.addWidget(self.holidays_btn)
         layout.addWidget(minus)
         layout.addWidget(plus)
+
+        self.settings_btn = QPushButton("Settings...")
+        self.settings_btn.clicked.connect(self.settings_requested.emit)
+        layout.addWidget(self.settings_btn)
+
+        layout.addWidget(self.search_edit)
         return layout
 
     def populate(self, digests: Sequence[OpenAuditDigest]) -> None:
         self._last_digests = list(digests)
         self.table_view.clearSpans()
-        self.model.rebuild(self._last_digests)
+        self.model.rebuild(self._filtered_digests())
         self.table_view.scrollToTop()
-        
+        self._apply_group_header_spans()
+
+    def _apply_group_header_spans(self) -> None:
         for i in range(self.model.rowCount()):
             idx = self.model.index(i, 0)
             row_data = idx.data(Qt.ItemDataRole.UserRole)
             if row_data and row_data["kind"] == RowKind.GROUP_HEADER:
                 self.table_view.setSpan(i, 0, 1, self.model.columnCount())
+
+    # --- Global search (Phase 32, 2.3) ---
+
+    def _searchable_text(self, d: OpenAuditDigest) -> str:
+        """Concatenation of every visible List View column, mirroring the model's display."""
+        parts = [
+            str(d.start_by) if d.start_by else "",
+            str(d.ship_date) if d.ship_date else "",
+            str(d.part_number),
+            f"{d.work_order_ref}{d.split_suffix}",
+            str(d.lead_time_days) if d.lead_time_days is not None else "",
+            str(d.quantity),
+            str(d.repeat),
+            str(d.classification),
+            str(d.assembly_class) if d.assembly_class is not None else "",
+            d.process or "",
+            f"{d.feeder_setuptime:.1f}" if d.feeder_setuptime is not None else "",
+            f"{d.smt_runtime:.1f}" if d.smt_runtime is not None else "",
+            f"{d.tht_runtime:.1f}" if d.tht_runtime is not None else "",
+            f"{d.date_ingested.astimezone(PST):%Y-%m-%d}" if d.date_ingested else "",
+        ]
+        return " ".join(parts).casefold()
+
+    def _filtered_digests(self) -> list:
+        needle = self.search_edit.text().strip().casefold() if hasattr(self, "search_edit") else ""
+        if not needle:
+            return list(self._last_digests)
+        return [d for d in self._last_digests if needle in self._searchable_text(d)]
+
+    def _on_search_text_changed(self, _text: str) -> None:
+        self.table_view.clearSpans()
+        self.model.rebuild(self._filtered_digests())
+        self._apply_group_header_spans()
+
+    def hideEvent(self, event) -> None:
+        # UX: search resets whenever the user leaves the List View.
+        if hasattr(self, "search_edit") and self.search_edit.text():
+            self.search_edit.clear()
+        super().hideEvent(event)
 
     def _on_header_clicked(self, logical_index: int) -> None:
         if self.model._sort_col == logical_index:
             self.model.set_sort(logical_index, not self.model._sort_asc)
         else:
             self.model.set_sort(logical_index, True)
-            
+
         self.table_view.clearSpans()
-        for i in range(self.model.rowCount()):
-            idx = self.model.index(i, 0)
-            row_data = idx.data(Qt.ItemDataRole.UserRole)
-            if row_data and row_data["kind"] == RowKind.GROUP_HEADER:
-                self.table_view.setSpan(i, 0, 1, self.model.columnCount())
+        self._apply_group_header_spans()
 
     def _on_table_clicked(self, index: QModelIndex) -> None:
         if not index.isValid():
@@ -291,5 +349,14 @@ class OpenAuditPicker(QWidget):
                 action.setEnabled(False)
             else:
                 action.triggered.connect(lambda _, a_id=digest.audit_id, status=st: self.status_change_requested.emit(a_id, status))
-                
+
+        ship_date_action = menu.addAction("Ship Date...")
+        ship_date_action.triggered.connect(lambda _, d=digest: self._on_ship_date_action(d))
+
         menu.exec(self.table_view.viewport().mapToGlobal(position))
+
+    def _on_ship_date_action(self, digest: OpenAuditDigest) -> None:
+        from cockpit.ui.widgets.dialogs import ShipDateDialog
+        dialog = ShipDateDialog(digest.ship_date, self)
+        if dialog.exec():
+            self.ship_date_change_requested.emit(digest.audit_id, dialog.selected_date())

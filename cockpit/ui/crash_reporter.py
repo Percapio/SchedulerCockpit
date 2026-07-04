@@ -78,6 +78,46 @@ class StderrCrashSink:
         sys.stderr.write(msg)
 
 
+class GuiDialogCrashSink:
+    """Phase 32 (3.2): surface unhandled exceptions in a detailed error dialog.
+
+    Only fires on the main (GUI) thread while a QApplication exists; file and
+    stderr sinks remain the record of truth on worker threads.
+    """
+
+    def emit(self, report: CrashReport) -> None:
+        if threading.current_thread() is not threading.main_thread():
+            return
+        try:
+            from PyQt6.QtWidgets import QApplication
+            if QApplication.instance() is None:
+                return
+
+            from cockpit.ui.error_messages import FailurePayload
+            from cockpit.ui.widgets.error_dialog import ErrorDialog
+
+            tb_text = "".join(report.traceback_lines)
+            payload = FailurePayload(
+                exception_class=report.exception_class,
+                title="Unexpected error",
+                summary=(
+                    "An unexpected error occurred. The operation may not have "
+                    "completed. Details below have also been written to the "
+                    "crash log — use Settings > Export Diagnostics/Logs to "
+                    "package them for the development team."
+                ),
+                detail=[
+                    ("Error", report.exception_message),
+                    ("Thread", report.thread_name),
+                    ("Traceback", tb_text),
+                ],
+                reason_code=report.reason_code,
+            )
+            ErrorDialog(payload, None).exec()
+        except Exception:
+            sys.stderr.write("GuiDialogCrashSink failed to display dialog.\n")
+
+
 _installed_chain = None
 
 

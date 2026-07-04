@@ -4,6 +4,7 @@ from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
 
 from cockpit.services.views import ActiveAuditView
+from cockpit.services.itar import is_itar
 
 
 class IdentityHeader(QWidget):
@@ -46,8 +47,7 @@ class IdentityHeader(QWidget):
         sales_order = metadata.get("sales_order_number", view.work_order_ref)
         self.title_lbl.setText(f"{view.part_number}{suffix}")
         
-        itar_val = metadata.get("itar_classification")
-        if itar_val == "ITAR":
+        if is_itar(metadata):
             self.itar_lbl.setText("[ITAR]")
             self.itar_lbl.show()
         else:
@@ -55,3 +55,4 @@ class IdentityHeader(QWidget):
             
         self.qty_lbl.setText(f"Qty: {view.quantity}")
         self.status_lbl.setText(f"Status: {view.status}")
+

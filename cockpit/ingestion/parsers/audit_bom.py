@@ -2,8 +2,18 @@
 
 import pathlib
 import re
+import time
+import zipfile
+
 import openpyxl
 from typing import Any
+
+try:
+    # openpyxl >= 3.1: word-level formatting survives as rich-text runs
+    from openpyxl.cell.rich_text import CellRichText, TextBlock
+except ImportError:  # pragma: no cover - legacy openpyxl fallback
+    CellRichText = None
+    TextBlock = None
 
 from ..errors import MalformedBomError
 from ..filename_rules import derive_part_number_from_filename
@@ -82,6 +92,72 @@ def coerce_find_number(raw: Any, path: pathlib.Path, mpn: str) -> int:
         raise MalformedBomError(path, "INVALID_FIND_NUMBER", {"mpn": mpn, "raw": raw})
 
 
+def _workbook_has_strike_runs(path: pathlib.Path) -> bool:
+    """Cheap pre-check: does any string carry run-level strikethrough?
+
+    Word-level strikethrough lives in rich-text runs as <rPr><strike/>,
+    either in xl/sharedStrings.xml (Excel-authored files) or inline in the
+    worksheet XML. openpyxl's read-only mode flattens rich text to plain
+    str, so files that contain strike runs must be loaded in normal mode;
+    every other file keeps the fast, memory-light read-only path. A raw
+    byte scan of the decompressed XML is far cheaper than a full parse.
+    """
+    try:
+        with zipfile.ZipFile(str(path)) as zf:
+            names = [n for n in zf.namelist()
+                     if n == "xl/sharedStrings.xml"
+                     or (n.startswith("xl/worksheets/") and n.endswith(".xml"))]
+            for name in names:
+                if b"<strike" in zf.read(name):
+                    return True
+        return False
+    except Exception:
+        return False
+
+
+def _cell_font_strike(cell: Any) -> bool:
+    """Whole-cell strikethrough, tolerant of read-only/empty cells."""
+    try:
+        font = cell.font
+    except AttributeError:
+        return False
+    return bool(font is not None and getattr(font, "strike", False))
+
+
+def _visible_cell_text(cell: Any) -> str | None:
+    """Return cell text with struck-through words removed (Phase 32, 2.1).
+
+    Word-level strikethrough arrives as rich-text runs (workbook must be
+    loaded with rich_text=True); whole-cell strikethrough arrives via the
+    cell font. A fully struck cell yields "" — only the text is dropped,
+    the row itself survives.
+    """
+    value = cell.value
+    if value is None:
+        return None
+
+    if CellRichText is not None and isinstance(value, CellRichText):
+        cell_struck = _cell_font_strike(cell)
+        parts = []
+        for run in value:
+            if TextBlock is not None and isinstance(run, TextBlock):
+                font = run.font
+                if font is not None and getattr(font, "strike", None):
+                    continue
+                parts.append(run.text or "")
+            else:
+                # Unformatted runs inherit the cell-level font.
+                if cell_struck:
+                    continue
+                parts.append(str(run))
+        return "".join(parts)
+
+    if _cell_font_strike(cell):
+        return ""
+
+    return str(value)
+
+
 def _split_ref_des(raw: str | None) -> tuple[str, ...]:
     if not raw:
         return ()
@@ -103,8 +179,17 @@ def parse(path: pathlib.Path) -> BomResult:
     declared_part_number = derive_part_number_from_filename(path)
 
     try:
-        # data_only=True to get values, not formulas
-        wb = openpyxl.load_workbook(filename=str(path), data_only=True, read_only=True)
+        # data_only=True to get values, not formulas.
+        # rich_text=True (openpyxl >= 3.1) so word-level strikethrough is
+        # visible. Read-only mode flattens rich text, so workbooks that
+        # actually contain strike runs are loaded in normal mode instead
+        # (detected via a cheap sharedStrings.xml scan).
+        load_kwargs = dict(filename=str(path), data_only=True, read_only=True)
+        if CellRichText is not None:
+            load_kwargs["rich_text"] = True
+            if _workbook_has_strike_runs(path):
+                load_kwargs["read_only"] = False
+        wb = openpyxl.load_workbook(**load_kwargs)
     except Exception as e:
         raise MalformedBomError(path, "UNREADABLE_WORKBOOK", {"error": str(e)})
 
@@ -133,11 +218,18 @@ def parse(path: pathlib.Path) -> BomResult:
         seen_mpns = set()
         duplicate_mpns = set()
         
-        for row in ws.iter_rows(min_row=2, values_only=True):
+        for row_cells in ws.iter_rows(min_row=2):
             raw_row_count += 1
+
+            # Phase 32 (3.1): CPU-bound parsing on a worker thread can starve
+            # the UI thread of the GIL on heavy BOMs; yield periodically.
+            if raw_row_count % 200 == 0:
+                time.sleep(0)
+
+            row = [c.value for c in row_cells]
             if len(row) < 10:
                 continue
-                
+
             flag = row[9]  # 0-indexed, so 9 is the 10th column ("SMT/THT")
             if flag is None:
                 continue
@@ -163,8 +255,10 @@ def parse(path: pathlib.Path) -> BomResult:
                 
             find_number = coerce_find_number(row[0], path, part_number)
                 
-            description = str(row[8]) if len(row) > 8 and row[8] is not None else None
-            ref_des_raw = str(row[6]) if len(row) > 6 and row[6] is not None else None
+            # Phase 32 (2.1): strikethrough-aware extraction for Ref_Des and
+            # Description; struck words are silently dropped.
+            description = _visible_cell_text(row_cells[8]) if len(row_cells) > 8 else None
+            ref_des_raw = _visible_cell_text(row_cells[6]) if len(row_cells) > 6 else None
             
             try:
                 ref_des_list = _split_ref_des(ref_des_raw)

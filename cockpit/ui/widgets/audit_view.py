@@ -56,6 +56,7 @@ class AuditView(QWidget):
         header.addStretch(4)
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search BOM & Build Notes...")
+        self.search_input.setClearButtonEnabled(True)
         self.search_input.setStyleSheet("margin-right: 6%;")
         self.search_input.textChanged.connect(self._on_search_changed)
         header.addWidget(self.search_input, 2)
@@ -176,6 +177,11 @@ class AuditView(QWidget):
         # Proper styling or overlay could be added, but simple disable works as placeholder
         # and it will be re-enabled during the actual load() or reload().
 
+    def hideEvent(self, event) -> None:
+        if self.search_input.text():
+            self.search_input.clear()
+        super().hideEvent(event)
+
     def showEvent(self, event) -> None:
         super().showEvent(event)
         if self._first_show:
@@ -260,9 +266,14 @@ class AuditView(QWidget):
         process_val: Any | None = metadata.get("process")
 
         if clean_val:
-            lbl_process = QLabel(f"Process: {process_val} {clean_val}")
-            lbl_process.setStyleSheet("padding-left: 3%;")
-            self._metadata_layout.addWidget(lbl_process)
+            lbl_process_prefix = QLabel("Process:")
+            lbl_process_prefix.setStyleSheet("padding-left: 3%;")
+            self._metadata_layout.addWidget(lbl_process_prefix)
+            
+            val_text = f"{process_val if process_val else ''} {clean_val}".strip()
+            lbl_process_value = QLabel(val_text)
+            lbl_process_value.setProperty("class", "hdr-process")
+            self._metadata_layout.addWidget(lbl_process_value)
             
         rowc_val = metadata.get("rowc_ref")
         rowc_label = metadata.get("rowc_label")

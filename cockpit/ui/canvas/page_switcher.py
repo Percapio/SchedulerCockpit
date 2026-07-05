@@ -54,6 +54,10 @@ class PageSwitcher(QWidget):
         self.buttons[index].setChecked(True)
         self._current_index = index
         
+        self.buttons[index].setProperty("indicator", False)
+        self.buttons[index].style().unpolish(self.buttons[index])
+        self.buttons[index].style().polish(self.buttons[index])
+        
         self.page_changed.emit(index)
 
     def set_other_page_indicator(self, visible: bool) -> None:

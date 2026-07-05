@@ -14,7 +14,7 @@
     { "field_key": "process",                "anchor_cell": "A12", "anchor_text": "PROCESS:",   "value_offset": [0, 1], "value_type": "string",  "required": false },
     { "field_key": "assembly_class",         "anchor_cell": "I7",  "anchor_text": "CLASS:",     "value_offset": [0, 2], "value_type": "integer", "required": false },
     { "field_key": "rowc_ref",               "anchor_cell": "F11", "anchor_text": ["ROWC:", "RONC:"], "value_offset": [0, 1], "value_type": "string", "required": false, "label_field": "rowc_label" },
-    { "field_key": "itar_classification",    "anchor_cell": "A3",  "anchor_text": "CLASSIFICATION:", "value_offset": [0, 1], "value_type": "string", "required": false },
+    { "field_key": "itar_classification",    "anchor_cell": "A3",  "anchor_text": ["ITAR:", "CLASSIFICATION:"], "value_offset": [0, 1], "value_type": "string", "required": false },
     { "field_key": "process_clean",          "anchor_cell": "A12", "anchor_text": "PROCESS:", "value_offset": [0, 5], "value_type": "string", "required": false }
   ],
   "identity_mapping": {

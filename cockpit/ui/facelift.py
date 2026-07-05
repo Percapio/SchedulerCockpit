@@ -31,6 +31,7 @@ class Palette:
     part_number: str
     quantity: str
     process: str
+    attention: str          # neon orange — ITAR text + cross-page tab cue
 
 
 _PALETTES = {
@@ -46,6 +47,7 @@ _PALETTES = {
         part_number="#59D7FF",
         quantity="#7EE787",
         process="#D2A8FF",
+        attention="#FFA033",
     ),
     LIGHT: Palette(
         window="#F4F5F7",
@@ -59,6 +61,7 @@ _PALETTES = {
         part_number="#0277BD",
         quantity="#2E7D32",
         process="#6A1B9A",
+        attention="#E65100",
     ),
 }
 
@@ -90,6 +93,12 @@ def list_column_color(column: int):
         return None
     from PyQt6.QtGui import QColor
     return QColor(getattr(palette(), role))
+
+
+def attention_color():
+    """QColor for ITAR cells and high-visibility painted elements."""
+    from PyQt6.QtGui import QColor
+    return QColor(palette().attention)
 
 
 def compose_override_qss(preset: str, font_family: str | None = None) -> str:
@@ -228,5 +237,20 @@ QLabel[class="refdes-chip"] {{
     border: 1px solid {p.accent};
 }}
 QLabel[class="refdes-chip"]:hover {{ background-color: {p.accent}; color: {p.window}; }}
+
+/* Audit-View header semantic colors (Patch 02, 2.4) — value labels only */
+QLabel[class~="hdr-part-number"] {{ color: {p.part_number}; font-weight: bold; }}
+QLabel[class~="hdr-qty"]         {{ color: {p.quantity};   font-weight: bold; }}
+QLabel[class~="hdr-process"]     {{ color: {p.process};    font-weight: bold; }}
+
+/* ITAR indicator (Patch 02, 2.4) — plain orange text, both views */
+QLabel[class~="itar-badge"]      {{ color: {p.attention};  font-weight: bold; }}
+
+/* Image tabs (Patch 02, 2.2) — constant 2px border avoids layout shift.
+   :checked is listed LAST so the active (yellow) state wins any equal-specificity
+   tie with [indicator] during the transient handled in §3.5. */
+PageSwitcher QPushButton                     {{ border: 2px solid {p.border}; }}
+PageSwitcher QPushButton[indicator="true"]   {{ border: 2px solid {p.attention}; }}
+PageSwitcher QPushButton:checked             {{ border: 2px solid {SELECTION_BORDER}; }}
 """)
     return "\n".join(lines)

@@ -206,6 +206,7 @@ class OpenAuditDigest:
     smt_runtime: float | None
     tht_runtime: float | None
     start_by: date | None
+    is_itar: bool = False
 
 
 import pathlib

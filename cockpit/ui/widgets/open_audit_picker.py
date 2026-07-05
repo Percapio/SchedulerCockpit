@@ -114,6 +114,10 @@ class AuditListModel(QAbstractTableModel):
         # Phase 32 (2.5): semantic highlighting for B#, QTY, Process columns.
         if role == Qt.ItemDataRole.ForegroundRole and row_data["kind"] == RowKind.DATA:
             from cockpit.ui import facelift
+            d: OpenAuditDigest = row_data["digest"]
+            if index.column() == 7 and d.is_itar:
+                return facelift.attention_color()
+            
             color = facelift.list_column_color(index.column())
             if color is not None:
                 return color

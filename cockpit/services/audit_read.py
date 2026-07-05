@@ -7,7 +7,7 @@ from cockpit.services.views import OpenAuditDigest
 from datetime import date, timedelta
 import math
 from cockpit.services.repeat import derive_repeat
-from cockpit.services.itar import classification_display
+from cockpit.services.itar import classification_display, is_itar
 
 def start_by(ship_date: date | None, total_runtime_hours: float | None, holidays: set[date]) -> date | None:
     if ship_date is None or total_runtime_hours is None:
@@ -42,6 +42,7 @@ class AuditReadService:
             meta = a.traveler_metadata or {}
             
             classification = classification_display(meta)
+            is_itar_flag = is_itar(meta)
             
             ship_date_obj = None
             if a.ship_date:
@@ -74,7 +75,8 @@ class AuditReadService:
                 feeder_setuptime=a.feeder_setuptime,
                 smt_runtime=a.smt_runtime,
                 tht_runtime=a.tht_runtime,
-                start_by=start_by_val
+                start_by=start_by_val,
+                is_itar=is_itar_flag
             ))
 
         return digests

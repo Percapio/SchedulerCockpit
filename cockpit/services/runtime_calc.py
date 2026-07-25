@@ -21,6 +21,7 @@ class RuntimeInputs:
     sides: int
     is_class_3: bool = False
     is_clean_process: bool = False
+    ops_per_board_min: Optional[float] = None
 
 @dataclass(frozen=True)
 class RecomputeSummary:
@@ -34,7 +35,7 @@ class RuntimeResults:
     tht: float
     aoi: float
     shipping: float
-    ops: float = 0.0
+    ops: Optional[float] = None
 
 def compute_tht(inputs: RuntimeInputs, constants: RuntimeConstants) -> float:
     tht_volume_hours = inputs.tht_placements * inputs.quantity * constants.tht_placement_time_min / 60
@@ -44,10 +45,19 @@ def compute_tht(inputs: RuntimeInputs, constants: RuntimeConstants) -> float:
 
 def compute_aoi(inputs: RuntimeInputs, constants: RuntimeConstants) -> float:
     clamped_sides = max(1, min(2, inputs.sides))
-    inspection_hours = (inputs.smt_placements * clamped_sides * inputs.quantity
-                        * constants.aoi_inspection_time_hr)
+    inspection_minutes = (inputs.smt_placements * clamped_sides * inputs.quantity
+                          * constants.aoi_inspection_time_min)
+    inspection_hours = inspection_minutes / 60.0
     class_3_factor = constants.class_3_multiplier_aoi if inputs.is_class_3 else 1.0
     return float(math.ceil(inspection_hours * class_3_factor))
+
+def compute_ops(inputs: RuntimeInputs, constants: RuntimeConstants) -> Optional[float]:
+    if inputs.ops_per_board_min is None:
+        return None
+    clean_factor = constants.clean_process_multiplier_ops if inputs.is_clean_process else 1.0
+    ops_minutes = inputs.ops_per_board_min * inputs.quantity
+    ops_hours = ops_minutes / 60.0
+    return float(math.ceil(ops_hours * clean_factor))
 
 def compute_shipping(inputs: RuntimeInputs, constants: RuntimeConstants) -> float:
     if constants.shipping_boards_per_hour > 0:
@@ -66,7 +76,7 @@ def compute(inputs: RuntimeInputs, constants: RuntimeConstants) -> RuntimeResult
 
     tht = compute_tht(inputs, constants)
     aoi = compute_aoi(inputs, constants)
-    ops = 0.0
+    ops = compute_ops(inputs, constants)
     shipping = compute_shipping(inputs, constants)
 
     return RuntimeResults(feeder=feeder, smt=smt, tht=tht, aoi=aoi, shipping=shipping, ops=ops)
@@ -125,6 +135,7 @@ class RuntimeCalcService:
             sides=sides,
             is_class_3=audit.is_class_3,
             is_clean_process=audit.is_clean_process,
+            ops_per_board_min=audit.ops_per_board_min,
         )
 
     def recompute_all(self) -> RecomputeSummary:

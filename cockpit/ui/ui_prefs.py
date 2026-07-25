@@ -102,7 +102,7 @@ def export_diagnostics(config, target_zip: pathlib.Path) -> list[str]:
 _RUNTIME_KEYS = {
     "smt_placement_time_min":        "runtime_calc/smt_placement_time_min",
     "tht_placement_time_min":        "runtime_calc/tht_placement_time_min",
-    "aoi_inspection_time_hr":        "runtime_calc/aoi_inspection_time_hr",
+    "aoi_inspection_time_min":       "runtime_calc/aoi_inspection_time_min",
     "class_3_multiplier_aoi":        "runtime_calc/class_3_multiplier_aoi",
     "class_3_multiplier_tht":        "runtime_calc/class_3_multiplier_tht",
     "clean_process_multiplier_tht":  "runtime_calc/clean_process_multiplier_tht",

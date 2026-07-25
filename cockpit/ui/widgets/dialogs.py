@@ -2,7 +2,8 @@ from datetime import date
 
 from PyQt6.QtCore import QDate
 from PyQt6.QtWidgets import (
-    QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QDateEdit, QLabel
+    QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QDateEdit, QLabel,
+    QDoubleSpinBox
 )
 
 
@@ -77,3 +78,59 @@ def confirm_destructive(title: str, body: str, confirm_label: str) -> bool:
     msg.exec()
     
     return msg.clickedButton() == confirm_btn
+
+
+class OpsPerBoardDialog(QDialog):
+    """Pick an OPS per board time, or explicitly clear it.
+
+    Usage:
+        dlg = OpsPerBoardDialog(current, parent)
+        if dlg.exec():
+            new_value = dlg.result_value()  # float | None
+    """
+
+    def __init__(self, current: float | None = None, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("OPS per Board")
+        self.setModal(True)
+        self._cleared = False
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(QLabel("Enter OPS time per board:"))
+
+        self.spin_box = QDoubleSpinBox()
+        self.spin_box.setSuffix(" min/board")
+        self.spin_box.setRange(0.0, 240.0)
+        self.spin_box.setDecimals(2)
+        self.spin_box.setValue(current if current is not None else 0.0)
+        layout.addWidget(self.spin_box)
+
+        buttons = QHBoxLayout()
+        ok_btn = QPushButton("Save")
+        ok_btn.setDefault(True)
+        ok_btn.clicked.connect(self.accept)
+
+        clear_btn = QPushButton("Clear")
+        clear_btn.setToolTip("Clear OPS per board (reset to blank)")
+        clear_btn.clicked.connect(self._on_clear)
+
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(self.reject)
+
+        buttons.addWidget(ok_btn)
+        buttons.addWidget(clear_btn)
+        buttons.addStretch()
+        buttons.addWidget(cancel_btn)
+        layout.addLayout(buttons)
+
+    def _on_clear(self) -> None:
+        self._cleared = True
+        self.accept()
+
+    def was_cleared(self) -> bool:
+        return self._cleared
+
+    def result_value(self) -> float | None:
+        if self._cleared:
+            return None
+        return float(self.spin_box.value())

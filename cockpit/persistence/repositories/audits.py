@@ -1,6 +1,7 @@
 """Audit repository implementation."""
 
 import json
+import math
 import re
 import sqlite3
 from typing import Any
@@ -148,6 +149,18 @@ class AuditRepository:
         cur.execute(
             "UPDATE active_audits SET ship_date = ?, updated_at = ? WHERE id = ?",
             (ship_str, now_iso, audit_id)
+        )
+        if cur.rowcount == 0:
+            raise AuditNotFound(audit_id)
+
+    def set_ops_per_board_min(self, audit_id: int, value: float | None) -> None:
+        if value is not None and (not math.isfinite(value) or value < 0):
+            raise InvalidArgumentError("value", value, "Must be None or finite >= 0")
+        now_iso = utcnow().isoformat()
+        cur = self.conn.cursor()
+        cur.execute(
+            "UPDATE active_audits SET ops_per_board_min = ?, updated_at = ? WHERE id = ?",
+            (value, now_iso, audit_id)
         )
         if cur.rowcount == 0:
             raise AuditNotFound(audit_id)

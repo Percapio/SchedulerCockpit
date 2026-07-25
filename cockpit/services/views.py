@@ -148,6 +148,7 @@ class ActiveAuditView:
     tht_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
     notes_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
     ship_date: str | None = None
+    ops_per_board_min: float | None = None
 
     @property
     def total_rows(self) -> int:
@@ -209,6 +210,7 @@ class OpenAuditDigest:
     ops_runtime: float | None
     shipping_runtime: float | None
     start_by: date | None
+    ops_per_board_min: float | None = None
     is_itar: bool = False
 
 

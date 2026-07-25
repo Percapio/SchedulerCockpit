@@ -158,6 +158,7 @@ class ChecklistService:
             tht_rows=tht_views,
             notes_rows=notes_views,
             ship_date=audit.ship_date,
+            ops_per_board_min=audit.ops_per_board_min,
         )
 
     def set_verification(

@@ -32,7 +32,7 @@ class FieldSpec:
 _RUNTIME_FIELD_SPECS: tuple[tuple[str, FieldSpec], ...] = (
     ("smt_placement_time_min",       FieldSpec("SMT placement time",             0.001,  1.0,    0.001,  3, " min")),
     ("tht_placement_time_min",       FieldSpec("THT placement time",             0.01,   5.0,    0.01,   2, " min")),
-    ("aoi_inspection_time_hr",       FieldSpec("AOI inspection time",            0.0001, 0.01,   0.0001, 4, " hr")),
+    ("aoi_inspection_time_min",      FieldSpec("AOI inspection time",            0.0001, 0.01,   0.0001, 4, " min")),
     ("class_3_multiplier_aoi",       FieldSpec("Class 3 multiplier (AOI)",       1.0,    3.0,    0.05,   2, "×")),
     ("class_3_multiplier_tht",       FieldSpec("Class 3 multiplier (THT)",       1.0,    3.0,    0.05,   2, "×")),
     ("clean_process_multiplier_tht", FieldSpec("Clean-process multiplier (THT)", 1.0,    3.0,    0.05,   2, "×")),

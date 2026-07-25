@@ -84,6 +84,7 @@ class AuditReadService:
                 ops_runtime=a.ops_runtime,
                 shipping_runtime=a.shipping_runtime,
                 start_by=start_by_val,
+                ops_per_board_min=a.ops_per_board_min,
                 is_itar=is_itar_flag
             ))
 

@@ -2,7 +2,7 @@ import pytest
 import math
 from datetime import date, timedelta
 from cockpit.services.runtime_calc import (
-    RuntimeInputs, RuntimeResults, compute, compute_tht, compute_aoi, compute_shipping
+    RuntimeInputs, RuntimeResults, compute, compute_tht, compute_aoi, compute_shipping, compute_ops
 )
 from cockpit.services.runtime_constants import RuntimeConstants
 from cockpit.services.audit_read import start_by
@@ -30,26 +30,49 @@ def test_compute_tht():
 def test_compute_aoi():
     constants = RuntimeConstants.defaults()
     inputs = RuntimeInputs(
-        smt_placements=100, smt_unique_mpns=10, tht_placements=50, quantity=100, sides=3,
+        smt_placements=750, smt_unique_mpns=10, tht_placements=50, quantity=200, sides=3,
         is_class_3=False, is_clean_process=False
     )
     aoi_base = compute_aoi(inputs, constants)
     # sides clamped to 2
-    # inspection_hours = 100 * 2 * 100 * 0.0004 = 8.0
-    # math.ceil(8.0) = 8
-    assert aoi_base == 8.0
+    # inspection_minutes = 750 * 2 * 200 * 0.0004 = 120.0
+    # inspection_hours = 120.0 / 60 = 2.0
+    # math.ceil(2.0) = 2.0
+    assert aoi_base == 2.0
     
     # Negative sides clamped to 1
     inputs.sides = -1
     aoi_neg = compute_aoi(inputs, constants)
-    # 100 * 1 * 100 * 0.0004 = 4.0
-    assert aoi_neg == 4.0
+    # 750 * 1 * 200 * 0.0004 = 60.0 min = 1.0 hr -> ceil = 1.0
+    assert aoi_neg == 1.0
 
     # Class 3 multiplier
     inputs.is_class_3 = True
     aoi_class_3 = compute_aoi(inputs, constants)
-    # ceil(4.0 * 1.2) = ceil(4.8) = 5
-    assert aoi_class_3 == 5.0
+    # ceil(1.0 * 1.2) = ceil(1.2) = 2.0
+    assert aoi_class_3 == 2.0
+
+def test_compute_ops():
+    constants = RuntimeConstants.defaults()
+    inputs = RuntimeInputs(
+        smt_placements=100, smt_unique_mpns=10, tht_placements=50, quantity=100, sides=1,
+        ops_per_board_min=None
+    )
+    assert compute_ops(inputs, constants) is None
+
+    inputs.ops_per_board_min = 0.0
+    assert compute_ops(inputs, constants) == 0.0
+
+    # 1.5 min/board * 100 boards = 150 min = 2.5 hr -> ceil(2.5) = 3.0
+    inputs.ops_per_board_min = 1.5
+    assert compute_ops(inputs, constants) == 3.0
+
+    # Clean process multiplier
+    custom_const = RuntimeConstants(clean_process_multiplier_ops=1.1)
+    inputs.is_clean_process = True
+    inputs.ops_per_board_min = 1.2  # 1.2 * 100 = 120 min = 2.0 hr
+    assert compute_ops(inputs, constants) == 2.0  # base with multiplier=1.0
+    assert compute_ops(inputs, custom_const) == 3.0  # 2.0 hr * 1.1 = 2.2 hr -> ceil = 3.0
 
 def test_compute_shipping():
     constants = RuntimeConstants.defaults()
@@ -80,7 +103,8 @@ def test_compute_all():
     assert results.tht == compute_tht(inputs, constants)
     assert results.aoi == compute_aoi(inputs, constants)
     assert results.shipping == compute_shipping(inputs, constants)
-    assert results.ops == 0.0
+    assert results.ops is None
+    assert results.ops == compute_ops(inputs, constants)
     
 def test_start_by():
     d = date(2026, 7, 24) # Friday

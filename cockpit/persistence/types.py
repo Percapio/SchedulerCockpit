@@ -58,6 +58,7 @@ class ActiveAudit:
     shipping_runtime: float | None
     is_class_3: bool
     is_clean_process: bool
+    ops_per_board_min: float | None = None
 
 
 @dataclass(frozen=True)

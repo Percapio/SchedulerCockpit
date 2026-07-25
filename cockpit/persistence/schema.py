@@ -543,6 +543,8 @@ def migrate_to_v10(conn: sqlite3.Connection) -> bool:
         cur.execute("ROLLBACK")
         raise
 
+SCHEMA_V11_DDL_OPS_PER_BOARD: str = "ALTER TABLE active_audits ADD COLUMN ops_per_board_min REAL NULL"
+
 def migrate_to_v11(conn: sqlite3.Connection) -> bool:
     cur = conn.cursor()
     try:
@@ -562,6 +564,11 @@ def migrate_to_v11(conn: sqlite3.Connection) -> bool:
         
     cur.execute("BEGIN IMMEDIATE")
     try:
+        try:
+            cur.execute(SCHEMA_V11_DDL_OPS_PER_BOARD)
+        except sqlite3.OperationalError as add_column_error:
+            if "duplicate column name" not in str(add_column_error):
+                raise SchemaInitializationError(statement="v11 DDL", cause=add_column_error)
         now_iso = utcnow().isoformat()
         cur.execute(
             "UPDATE schema_version SET version = 11, applied_at = ? WHERE singleton_guard = 1",

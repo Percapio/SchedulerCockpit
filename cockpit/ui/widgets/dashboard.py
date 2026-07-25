@@ -33,6 +33,7 @@ class Dashboard(QWidget):
     error_occurred = pyqtSignal(object)
     reload_requested = pyqtSignal(int)
     metadata_changed = pyqtSignal(dict)
+    ops_per_board_change_requested = pyqtSignal(int, object)  # (audit_id, float | None)
     
     tht_body_clicked = pyqtSignal(object)
     tht_mpn_clicked = pyqtSignal(object)
@@ -155,6 +156,9 @@ class Dashboard(QWidget):
         
         setup_action = self.actions_menu.addAction("Setup…")
         setup_action.triggered.connect(self._on_setup_clicked)
+        
+        ops_action = self.actions_menu.addAction("OPS per board…")
+        ops_action.triggered.connect(self._on_ops_per_board_clicked)
 
     def flush_audit_notes(self) -> None:
         pass
@@ -304,6 +308,14 @@ class Dashboard(QWidget):
         except Exception as e:
             logger.exception('Exception caught in dashboard setup')
             self.error_occurred.emit(render(e))
+
+    def _on_ops_per_board_clicked(self) -> None:
+        if self._view is None:
+            return
+        from cockpit.ui.widgets.dialogs import OpsPerBoardDialog
+        dialog = OpsPerBoardDialog(self._view.ops_per_board_min, self)
+        if dialog.exec():
+            self.ops_per_board_change_requested.emit(self._view.audit_id, dialog.result_value())
 
     def _on_complete_clicked(self) -> None:
         if self._current_audit_id is None:

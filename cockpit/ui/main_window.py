@@ -80,6 +80,7 @@ class MainWindow(QMainWindow):
         self.picker.complete_requested.connect(self._on_complete_requested)
         self.picker.status_change_requested.connect(self._on_status_change_requested)
         self.picker.ship_date_change_requested.connect(self._on_ship_date_change_requested)
+        self.picker.ops_per_board_change_requested.connect(self._on_ops_per_board_change_requested)
         self.picker.new_audit_requested.connect(self._on_picker_new_audit_requested)
         self.stacked.addWidget(self.picker)
         
@@ -98,6 +99,7 @@ class MainWindow(QMainWindow):
         )
         self._audit_view.exit_requested.connect(self._on_dashboard_exit)
         self._audit_view.error_occurred.connect(self._on_failed)
+        self._audit_view.ops_per_board_change_requested.connect(self._on_ops_per_board_change_requested)
         self.stacked.addWidget(self._audit_view)
         
         self.toast = Toast(self)
@@ -264,6 +266,16 @@ class MainWindow(QMainWindow):
         except PersistenceError as e:
             self._on_failed(FailurePayload.from_exception(e, "Ship date update failed"))
             return
+        self._reload_list()
+
+    def _on_ops_per_board_change_requested(self, audit_id: int, value: float | None) -> None:
+        try:
+            self._bootstrapped.audit_repo.set_ops_per_board_min(audit_id, value)
+            self._bootstrapped.runtime_calc_svc.persist(audit_id)
+        except PersistenceError as e:
+            self._on_failed(FailurePayload.from_exception(e, "OPS update failed"))
+            return
+        self._invalidate_audit_view_if_loaded(audit_id)
         self._reload_list()
 
     def _invalidate_audit_view_if_loaded(self, audit_id: int) -> None:

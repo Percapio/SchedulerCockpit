@@ -186,6 +186,7 @@ class OpenAuditPicker(QWidget):
     complete_requested = pyqtSignal(int)
     status_change_requested = pyqtSignal(int, AuditStatus)
     ship_date_change_requested = pyqtSignal(int, object)  # (audit_id, date | None)
+    ops_per_board_change_requested = pyqtSignal(int, object)  # (audit_id, float | None)
     new_audit_requested = pyqtSignal()
     font_scale_change_requested = pyqtSignal(int)
     settings_requested = pyqtSignal()
@@ -367,6 +368,9 @@ class OpenAuditPicker(QWidget):
         ship_date_action = menu.addAction("Ship Date...")
         ship_date_action.triggered.connect(lambda _, d=digest: self._on_ship_date_action(d))
 
+        ops_action = menu.addAction("OPS per board…")
+        ops_action.triggered.connect(lambda _, d=digest: self._on_ops_action(d))
+
         menu.exec(self.table_view.viewport().mapToGlobal(position))
 
     def _on_ship_date_action(self, digest: OpenAuditDigest) -> None:
@@ -374,3 +378,9 @@ class OpenAuditPicker(QWidget):
         dialog = ShipDateDialog(digest.ship_date, self)
         if dialog.exec():
             self.ship_date_change_requested.emit(digest.audit_id, dialog.selected_date())
+
+    def _on_ops_action(self, digest: OpenAuditDigest) -> None:
+        from cockpit.ui.widgets.dialogs import OpsPerBoardDialog
+        dialog = OpsPerBoardDialog(digest.ops_per_board_min, self)
+        if dialog.exec():
+            self.ops_per_board_change_requested.emit(digest.audit_id, dialog.result_value())

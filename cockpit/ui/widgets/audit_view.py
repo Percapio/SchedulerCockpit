@@ -24,6 +24,7 @@ class AuditView(QWidget):
     error_occurred = pyqtSignal(object)  # FailurePayload
     font_scale_change_requested = pyqtSignal(int)
     settings_requested = pyqtSignal()
+    ops_per_board_change_requested = pyqtSignal(int, object)  # (audit_id, float | None)
 
     def __init__(
         self,
@@ -117,6 +118,7 @@ class AuditView(QWidget):
         self._dashboard.error_occurred.connect(self.error_occurred.emit)
         self._dashboard.metadata_changed.connect(self._on_metadata_changed)
         self._dashboard.reload_requested.connect(self.load)
+        self._dashboard.ops_per_board_change_requested.connect(self.ops_per_board_change_requested.emit)
         self._layout_canvas.error_occurred.connect(self.error_occurred.emit)
         self._layout_canvas.font_scale_change_requested.connect(self.font_scale_change_requested.emit)
         self._bom_panel.error_occurred.connect(self.error_occurred.emit)

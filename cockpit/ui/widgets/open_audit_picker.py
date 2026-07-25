@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone, timedelta, date
 from typing import Sequence, Any, List
+from enum import IntEnum
 from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView, QHeaderView, QStyledItemDelegate, QMenu, QLineEdit
@@ -14,16 +15,51 @@ from cockpit.ui.widgets.holiday_dialog import HolidayDialog
 
 PST = timezone(timedelta(hours=-8))
 
+class Column(IntEnum):
+    START_BY = 0
+    SHIP_DATE = 1
+    PART_NUMBER = 2
+    WORK_ORDER_REF = 3
+    LEAD_TIME = 4
+    QUANTITY = 5
+    REPEAT = 6
+    CLASSIFICATION = 7
+    ASSEMBLY_CLASS = 8
+    PROCESS = 9
+    FSU = 10
+    SMT = 11
+    THT = 12
+    AOI = 13
+    OPS = 14
+    SHIP = 15
+    DATE_INGESTED = 16
+    LABEL = 17
+    PHOTOS = 18
+
+_CHECKBOX_COLUMNS = frozenset({Column.LABEL, Column.PHOTOS})
+_STATUS_STAGE_COLUMN = {
+    AuditStatus.FSU: Column.FSU,
+    AuditStatus.SMT: Column.SMT,
+    AuditStatus.THT: Column.THT,
+    AuditStatus.AOI: Column.AOI,
+    AuditStatus.OPS: Column.OPS,
+    AuditStatus.SHIPPING: Column.SHIP,
+}
+
 class RowKind:
     DATA = "data"
     GROUP_HEADER = "group_header"
 
 class AuditListModel(QAbstractTableModel):
+    label_toggle_requested = pyqtSignal(int, bool)
+    photos_toggle_requested = pyqtSignal(int, bool)
+
     COLUMNS = [
         "Start-By Date", "Ship Date", "B#", "S/O", "LT",
         "QTY", "Type", "Classification", "Class", "Process",
         "FSU (hrs)", "SMT (hrs)", "THT (hrs)", 
-        "AOI (hrs)", "OPS (hrs)", "SHIP (hrs)", "Date Ingested"
+        "AOI (hrs)", "OPS (hrs)", "SHIP (hrs)", "Date Ingested",
+        "Label", "Photos"
     ]
     
     GROUP_ORDER = AuditStatus.ordered()
@@ -89,7 +125,20 @@ class AuditListModel(QAbstractTableModel):
         if col == 14: return (d.ops_runtime is not None, d.ops_runtime)
         if col == 15: return (d.shipping_runtime is not None, d.shipping_runtime)
         if col == 16: return (d.date_ingested is not None, d.date_ingested)
+        if col == 17: return d.is_labeled
+        if col == 18: return d.are_photos_uploaded
         return 0
+
+    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+        if not index.isValid():
+            return Qt.ItemFlag.NoItemFlags
+        row_data = self._rows[index.row()]
+        if row_data["kind"] == RowKind.GROUP_HEADER:
+            return Qt.ItemFlag.ItemIsEnabled
+        col = index.column()
+        if col in _CHECKBOX_COLUMNS:
+            return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
+        return super().flags(index)
 
     def rowCount(self, parent=QModelIndex()) -> int:
         return len(self._rows)
@@ -115,10 +164,19 @@ class AuditListModel(QAbstractTableModel):
             if row_data["kind"] == RowKind.DATA:
                 return Qt.AlignmentFlag.AlignCenter
 
+        if role == Qt.ItemDataRole.CheckStateRole:
+            if row_data["kind"] == RowKind.DATA and index.column() in _CHECKBOX_COLUMNS:
+                d: OpenAuditDigest = row_data["digest"]
+                val = d.is_labeled if index.column() == Column.LABEL else d.are_photos_uploaded
+                return Qt.CheckState.Checked if val else Qt.CheckState.Unchecked
+            return None
+
         # Phase 32 (2.5): semantic highlighting for B#, QTY, Process columns.
         if role == Qt.ItemDataRole.ForegroundRole and row_data["kind"] == RowKind.DATA:
             from cockpit.ui import facelift
             d: OpenAuditDigest = row_data["digest"]
+            if index.column() == _STATUS_STAGE_COLUMN.get(d.status):
+                return facelift.attention_color()
             if index.column() == 7 and d.is_itar:
                 return facelift.attention_color()
             
@@ -127,6 +185,8 @@ class AuditListModel(QAbstractTableModel):
                 return color
 
         if role == Qt.ItemDataRole.DisplayRole:
+            if index.column() in _CHECKBOX_COLUMNS:
+                return None
             d: OpenAuditDigest = row_data["digest"]
             col = index.column()
             
@@ -152,6 +212,22 @@ class AuditListModel(QAbstractTableModel):
                 return f"{local:%Y-%m-%d}"
 
         return None
+
+    def setData(self, index: QModelIndex, value: Any, role: int = Qt.ItemDataRole.EditRole) -> bool:
+        if not index.isValid():
+            return False
+        row_data = self._rows[index.row()]
+        if row_data["kind"] != RowKind.DATA:
+            return False
+        if role == Qt.ItemDataRole.CheckStateRole and index.column() in _CHECKBOX_COLUMNS:
+            d: OpenAuditDigest = row_data["digest"]
+            checked = (value == Qt.CheckState.Checked.value or value == Qt.CheckState.Checked or value == 2 or value is True)
+            if index.column() == Column.LABEL:
+                self.label_toggle_requested.emit(d.audit_id, checked)
+            else:
+                self.photos_toggle_requested.emit(d.audit_id, checked)
+            return True
+        return super().setData(index, value, role)
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         if orientation == Qt.Orientation.Horizontal:
@@ -190,6 +266,8 @@ class OpenAuditPicker(QWidget):
     new_audit_requested = pyqtSignal()
     font_scale_change_requested = pyqtSignal(int)
     settings_requested = pyqtSignal()
+    label_toggle_requested = pyqtSignal(int, bool)
+    photos_toggle_requested = pyqtSignal(int, bool)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -207,6 +285,8 @@ class OpenAuditPicker(QWidget):
         self.table_view.setItemDelegate(GroupHeaderDelegate(self.table_view))
         
         self.model = AuditListModel(self)
+        self.model.label_toggle_requested.connect(self.label_toggle_requested.emit)
+        self.model.photos_toggle_requested.connect(self.photos_toggle_requested.emit)
         self.table_view.setModel(self.model)
         
         layout.addWidget(self.table_view)
@@ -286,6 +366,8 @@ class OpenAuditPicker(QWidget):
             f"{d.ops_runtime:.1f}" if d.ops_runtime is not None else "",
             f"{d.shipping_runtime:.1f}" if d.shipping_runtime is not None else "",
             f"{d.date_ingested.astimezone(PST):%Y-%m-%d}" if d.date_ingested else "",
+            "labeled" if d.is_labeled else "",
+            "photos" if d.are_photos_uploaded else "",
         ]
         return " ".join(parts).casefold()
 
@@ -316,7 +398,7 @@ class OpenAuditPicker(QWidget):
         self._apply_group_header_spans()
 
     def _on_table_clicked(self, index: QModelIndex) -> None:
-        if not index.isValid():
+        if not index.isValid() or index.column() in _CHECKBOX_COLUMNS:
             return
             
         row_data = index.data(Qt.ItemDataRole.UserRole)

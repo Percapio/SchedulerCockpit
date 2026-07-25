@@ -81,6 +81,8 @@ class MainWindow(QMainWindow):
         self.picker.status_change_requested.connect(self._on_status_change_requested)
         self.picker.ship_date_change_requested.connect(self._on_ship_date_change_requested)
         self.picker.ops_per_board_change_requested.connect(self._on_ops_per_board_change_requested)
+        self.picker.label_toggle_requested.connect(self._on_label_toggle_requested)
+        self.picker.photos_toggle_requested.connect(self._on_photos_toggle_requested)
         self.picker.new_audit_requested.connect(self._on_picker_new_audit_requested)
         self.stacked.addWidget(self.picker)
         
@@ -276,6 +278,22 @@ class MainWindow(QMainWindow):
             self._on_failed(FailurePayload.from_exception(e, "OPS update failed"))
             return
         self._invalidate_audit_view_if_loaded(audit_id)
+        self._reload_list()
+
+    def _on_label_toggle_requested(self, audit_id: int, value: bool) -> None:
+        try:
+            self._bootstrapped.audit_repo.set_is_labeled(audit_id, value)
+        except PersistenceError as e:
+            self._on_failed(FailurePayload.from_exception(e, "Label update failed"))
+            return
+        self._reload_list()
+
+    def _on_photos_toggle_requested(self, audit_id: int, value: bool) -> None:
+        try:
+            self._bootstrapped.audit_repo.set_are_photos_uploaded(audit_id, value)
+        except PersistenceError as e:
+            self._on_failed(FailurePayload.from_exception(e, "Photos update failed"))
+            return
         self._reload_list()
 
     def _invalidate_audit_view_if_loaded(self, audit_id: int) -> None:

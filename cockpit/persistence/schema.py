@@ -558,6 +558,10 @@ def migrate_to_v11(conn: sqlite3.Connection) -> bool:
         
     current_version = row["version"]
     if current_version >= 11:
+        try:
+            cur.execute(SCHEMA_V11_DDL_OPS_PER_BOARD)
+        except sqlite3.OperationalError:
+            pass
         return False
     if current_version < 10:
         raise SchemaMismatch(found_version=current_version, expected_version=10)
@@ -594,6 +598,8 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     v9_migrated = migrate_to_v9(conn)
     migrate_to_v10(conn)
     v11_migrated = migrate_to_v11(conn)
+    migrate_to_v12(conn)
+    migrate_to_v13(conn)
     return v7_migrated or v8_migrated or v9_migrated or v11_migrated
 
 SCHEMA_V5_DDL_DROP_SHIP_DATE: str = """
@@ -721,3 +727,196 @@ def migrate_to_v6(conn: sqlite3.Connection) -> None:
             logger.error("Failed to restore foreign_keys in v6 migration finally block.")
             from .errors import PersistenceError
             raise PersistenceError("Database state corrupted: failed to re-enable foreign keys")
+
+
+STATUS_CHECK_V12: str = (
+    "('Shipping','THT','SMT','FSU','AOI','OPS','ON HOLD','Not Clear')"
+)
+
+SCHEMA_V12_DDL_NEW_TABLE: str = f"""
+CREATE TABLE active_audits_v12 (
+    id INTEGER PRIMARY KEY,
+    part_number TEXT NOT NULL,
+    schedule_job_id INTEGER,
+    work_order_ref TEXT NOT NULL,
+    split_suffix TEXT NOT NULL DEFAULT '',
+    quantity INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Not Clear' CHECK(status IN {STATUS_CHECK_V12}),
+    split_reason TEXT,
+    traveler_metadata TEXT,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    general_notes TEXT NULL,
+    ship_date TEXT NULL,
+    feeder_setuptime REAL NULL,
+    smt_runtime REAL NULL,
+    tht_runtime REAL NULL,
+    aoi_runtime REAL NULL,
+    ops_runtime REAL NULL,
+    shipping_runtime REAL NULL,
+    is_class_3 INTEGER NOT NULL DEFAULT 0,
+    is_clean_process INTEGER NOT NULL DEFAULT 0,
+    ops_per_board_min REAL NULL,
+    is_labeled INTEGER NOT NULL DEFAULT 0,
+    are_photos_uploaded INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(part_number, work_order_ref, split_suffix)
+);
+"""
+
+SCHEMA_V12_DML_COPY: str = """
+INSERT INTO active_audits_v12 (
+    id, part_number, schedule_job_id, work_order_ref, split_suffix, quantity,
+    status, split_reason, traveler_metadata, created_at, updated_at, general_notes,
+    ship_date, feeder_setuptime, smt_runtime, tht_runtime, aoi_runtime, ops_runtime,
+    shipping_runtime, is_class_3, is_clean_process, ops_per_board_min,
+    is_labeled, are_photos_uploaded
+)
+SELECT
+    id, part_number, schedule_job_id, work_order_ref, split_suffix, quantity,
+    CASE WHEN status = 'Ready-to-Run' THEN 'Not Clear' ELSE status END,
+    split_reason, traveler_metadata, created_at, updated_at, general_notes,
+    ship_date, feeder_setuptime, smt_runtime, tht_runtime, aoi_runtime, ops_runtime,
+    shipping_runtime, is_class_3, is_clean_process, ops_per_board_min,
+    0, 0
+FROM active_audits;
+"""
+
+
+def migrate_to_v12(conn: sqlite3.Connection) -> bool:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=11)
+
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=11)
+
+    current_version = row["version"]
+    if current_version >= 12:
+        return False
+    if current_version < 11:
+        raise SchemaMismatch(found_version=current_version, expected_version=11)
+
+    cur.execute("PRAGMA foreign_keys = OFF")
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        for col_def in [
+            "aoi_runtime REAL NULL",
+            "ops_runtime REAL NULL",
+            "shipping_runtime REAL NULL",
+            "is_class_3 INTEGER NOT NULL DEFAULT 0",
+            "is_clean_process INTEGER NOT NULL DEFAULT 0",
+            "ops_per_board_min REAL NULL",
+        ]:
+            try:
+                cur.execute(f"ALTER TABLE active_audits ADD COLUMN {col_def}")
+            except sqlite3.OperationalError:
+                pass
+        try:
+            cur.execute(SCHEMA_V12_DDL_NEW_TABLE)
+            cur.execute(SCHEMA_V12_DML_COPY)
+            cur.execute("DROP TABLE active_audits")
+            cur.execute("ALTER TABLE active_audits_v12 RENAME TO active_audits")
+            cur.execute("PRAGMA foreign_key_check")
+            violations = cur.fetchall()
+            if violations:
+                raise SchemaInitializationError(
+                    statement="v12 foreign_key_check",
+                    cause=RuntimeError(f"Foreign key violations found: {violations}")
+                )
+        except sqlite3.Error as e:
+            raise SchemaInitializationError(statement="v12 migration", cause=e)
+
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 12, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+        except Exception as e:
+            logger.error("Failed to restore foreign_keys in v12 migration finally block.")
+            raise PersistenceError("Database state corrupted: failed to re-enable foreign keys") from e
+
+
+FILE_CATEGORY_CHECK_V13: str = "('BOM','Traveler','Notes','PDF','SecondaryPDF')"
+
+SCHEMA_V13_DDL_NEW_TABLE: str = f"""
+CREATE TABLE source_files_v13 (
+    id INTEGER PRIMARY KEY,
+    audit_id INTEGER NOT NULL,
+    file_category TEXT NOT NULL CHECK(file_category IN {FILE_CATEGORY_CHECK_V13}),
+    original_filename TEXT NOT NULL,
+    local_storage_path TEXT NOT NULL,
+    file_hash TEXT NOT NULL,
+    ingested_at DATETIME NOT NULL,
+    FOREIGN KEY(audit_id) REFERENCES active_audits(id) ON DELETE CASCADE
+);
+"""
+
+SCHEMA_V13_DML_COPY: str = """
+INSERT INTO source_files_v13 SELECT * FROM source_files;
+"""
+
+
+def migrate_to_v13(conn: sqlite3.Connection) -> bool:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=12)
+
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=12)
+
+    current_version = row["version"]
+    if current_version >= 13:
+        return False
+    if current_version < 12:
+        raise SchemaMismatch(found_version=current_version, expected_version=12)
+
+    cur.execute("PRAGMA foreign_keys = OFF")
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        try:
+            cur.execute(SCHEMA_V13_DDL_NEW_TABLE)
+            cur.execute(SCHEMA_V13_DML_COPY)
+            cur.execute("DROP TABLE source_files")
+            cur.execute("ALTER TABLE source_files_v13 RENAME TO source_files")
+            cur.execute("CREATE INDEX IF NOT EXISTS ix_source_files_audit ON source_files(audit_id)")
+            cur.execute("CREATE INDEX IF NOT EXISTS ix_source_files_hash ON source_files(file_hash)")
+            cur.execute("PRAGMA foreign_key_check")
+            violations = cur.fetchall()
+            if violations:
+                raise SchemaInitializationError(
+                    statement="v13 foreign_key_check",
+                    cause=RuntimeError(f"Foreign key violations found: {violations}")
+                )
+        except sqlite3.Error as e:
+            raise SchemaInitializationError(statement="v13 migration", cause=e)
+
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 13, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+        except Exception as e:
+            logger.error("Failed to restore foreign_keys in v13 migration finally block.")
+            raise PersistenceError("Database state corrupted: failed to re-enable foreign keys") from e

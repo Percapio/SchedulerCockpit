@@ -85,7 +85,9 @@ class AuditReadService:
                 shipping_runtime=a.shipping_runtime,
                 start_by=start_by_val,
                 ops_per_board_min=a.ops_per_board_min,
-                is_itar=is_itar_flag
+                is_itar=is_itar_flag,
+                is_labeled=a.is_labeled,
+                are_photos_uploaded=a.are_photos_uploaded,
             ))
 
         return digests

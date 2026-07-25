@@ -20,7 +20,7 @@ def theme():
             "hint_label_text": {"rgb": "#000000"},
             "hint_label_border": {"rgb": "#000000"}
         },
-        "zoom": {"min_scale": 1.0, "max_scale": 8.0, "step": 1.25},
+        "zoom": {"min_scale": 1.0, "max_scale": 8.0, "step": 1.25, "render_multiplier": 2.0},
         "pen_width": {"highlight_pen": 3},
         "z_order": {"base_pixmap": 0.0, "dim": 1.0, "highlight": 2.0},
         "scalar": {"highlight_scale": 2.0},
@@ -244,4 +244,52 @@ def test_double_click_resets_zoom(canvas, qtbot):
     
     assert canvas._current_scale == 1.0
     assert canvas._graphics_view.dragMode() == canvas._graphics_view.DragMode.NoDrag
+
+def test_reference_mode_disables_selection_and_clicks(canvas, qtbot):
+    from PyQt6.QtGui import QMouseEvent
+    from PyQt6.QtCore import QPointF, Qt
+    from cockpit.services.views import SelectionIntent, SelectionKind, ResolutionKind, ResolvedSelection, HighlightCoord
+
+    canvas._active_source = "secondary"
+    canvas._current_context = LayoutContext(
+        audit_id=1, pdf_source_file_id=2, pdf_path=pathlib.Path("fake.pdf"), page_count=1, page_dimensions=((1000.0, 1000.0),), is_reference=True
+    )
+
+    # set_selection should ignore non-clear intents in reference mode
+    intent = SelectionIntent("MPN1", SelectionKind.BOM_MPN)
+    canvas.set_selection(intent)
+    assert canvas._last_intent is None
+
+    # Mouse clicks should be ignored in reference mode
+    clicked = False
+    canvas.refdes_clicked.connect(lambda x: setattr(canvas, "_clicked", True))
+    canvas.empty_clicked.connect(lambda: setattr(canvas, "_clicked", True))
+    
+    event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(10, 10), QPointF(10, 10), Qt.MouseButton.LeftButton, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+    canvas._on_graphics_view_mouse_press(event)
+    assert not getattr(canvas, "_clicked", False)
+
+def test_toggle_pdf_source(canvas, qtbot):
+    from cockpit.services.views import PendingPdf
+    from unittest.mock import Mock
+
+    primary = PendingPdf(1, pathlib.Path("primary.pdf"))
+    secondary = PendingPdf(2, pathlib.Path("secondary.pdf"))
+    
+    canvas._current_audit_id = 1
+    canvas._primary_pending = primary
+    canvas._secondary_pending = secondary
+    canvas._active_source = "primary"
+    canvas._refresh_toggle_enablement()
+
+    assert not canvas._pdf_toggle_btn.isHidden()
+    assert canvas._pdf_toggle_btn.text() == "View Reference"
+
+    # Mock submit render to prevent actual thread work
+    canvas._submit_render = Mock()
+    canvas._on_toggle_pdf_source()
+
+    assert canvas._active_source == "secondary"
+    assert canvas._pdf_toggle_btn.text() == "View Primary"
+    assert canvas._build_context(canvas._secondary_pending, ((1000.0, 1000.0),)).is_reference is True
 

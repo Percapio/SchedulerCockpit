@@ -45,6 +45,20 @@ class LayoutQueryService:
             path=source_file.local_storage_path
         )
 
+    def resolve_secondary_pdf_ref(self, audit_id: int) -> PendingPdf | None:
+        """Resolve the secondary PDF reference for an audit."""
+        source_file = self.source_file_repo.find_by_audit_and_category(
+            audit_id, SourceFileCategory.SECONDARY_PDF
+        )
+
+        if source_file is None:
+            return None
+
+        return PendingPdf(
+            source_file_id=source_file.id,
+            path=source_file.local_storage_path
+        )
+
     def list_pdf_coords_for_audit(self, audit_id: int) -> tuple[HighlightCoord, ...]:
         pdf_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
         if pdf_sf is None:

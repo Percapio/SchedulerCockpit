@@ -29,13 +29,16 @@ class AddDrawingDialog(QDialog):
         ingestion_service: IngestionService,
         audit_id: int,
         parent: QWidget | None = None,
+        *,
+        secondary: bool = False,
     ) -> None:
         super().__init__(parent)
         self._ingestion_service = ingestion_service
         self._audit_id = audit_id
+        self._secondary = secondary
         
         self.setWindowModality(Qt.WindowModality.ApplicationModal)
-        self.setWindowTitle("Add Drawing")
+        self.setWindowTitle("Add Secondary Drawing" if secondary else "Add Drawing")
         self.setAcceptDrops(True)
         self.resize(400, 300)
         
@@ -79,7 +82,10 @@ class AddDrawingDialog(QDialog):
         dropped_path = Path(url.toLocalFile())
         
         try:
-            self._ingestion_service.add_pdf_to_audit(self._audit_id, dropped_path)
+            if self._secondary:
+                self._ingestion_service.add_secondary_pdf_to_audit(self._audit_id, dropped_path)
+            else:
+                self._ingestion_service.add_pdf_to_audit(self._audit_id, dropped_path)
             self.accept()
         except IngestionError as exc:
             logger.exception('Exception caught in add_drawing_dialog')

@@ -19,7 +19,7 @@ def hydrating_row_factory(cursor: sqlite3.Cursor, row: tuple) -> dict:
             d[name] = None
             continue
             
-        if name in ("is_verified", "is_class_3", "is_clean_process"):
+        if name in ("is_verified", "is_class_3", "is_clean_process", "is_labeled", "are_photos_uploaded"):
             d[name] = bool(val)
         elif name.endswith("_at"):
             # SQLite stores dates as ISO 8601 strings

@@ -19,7 +19,14 @@ class MockIngestionService:
             raise IngestionError(pdf_path, "Bad PDF", {})
         if self.raise_persistence_error:
             raise PersistenceError("DB locked")
-        self.called_with = (audit_id, pdf_path)
+        self.called_with = ("primary", audit_id, pdf_path)
+
+    def add_secondary_pdf_to_audit(self, audit_id, pdf_path):
+        if self.raise_ingestion_error:
+            raise IngestionError(pdf_path, "Bad PDF", {})
+        if self.raise_persistence_error:
+            raise PersistenceError("DB locked")
+        self.called_with = ("secondary", audit_id, pdf_path)
 
 
 class MockMimeData(QMimeData):
@@ -96,7 +103,24 @@ def test_drop_event_success(qtbot):
     with qtbot.waitSignal(dialog.accepted):
         dialog.dropEvent(event)
         
-    assert service.called_with == (42, Path("test.pdf"))
+    assert service.called_with == ("primary", 42, Path("test.pdf"))
+    assert dialog.windowTitle() == "Add Drawing"
+
+
+def test_drop_event_secondary_success(qtbot):
+    service = MockIngestionService()
+    dialog = AddDrawingDialog(service, 42, secondary=True)
+    qtbot.addWidget(dialog)
+    
+    assert dialog.windowTitle() == "Add Secondary Drawing"
+    
+    mime = MockMimeData([QUrl.fromLocalFile("sec.pdf")])
+    event = MockDropEvent(mime)
+    
+    with qtbot.waitSignal(dialog.accepted):
+        dialog.dropEvent(event)
+        
+    assert service.called_with == ("secondary", 42, Path("sec.pdf"))
 
 
 def test_drop_event_ingestion_error(qtbot):

@@ -99,6 +99,9 @@ class LayoutContext:
     pdf_path: pathlib.Path | None
     page_count: int
     page_dimensions: tuple[tuple[float, float], ...]
+    secondary_pdf_source_file_id: int | None = None
+    secondary_pdf_path: pathlib.Path | None = None
+    is_reference: bool = False
 
     def __post_init__(self) -> None:
         if self.pdf_path is None:
@@ -111,10 +114,21 @@ class LayoutContext:
         else:
             if self.pdf_source_file_id is None:
                 raise ValueError("pdf_source_file_id must not be None when pdf_path is not None")
-            if self.page_count not in {1, 2}:
-                raise ValueError("page_count must be 1 or 2 when pdf_path is not None")
+            if self.is_reference:
+                if self.page_count < 1:
+                    raise ValueError("page_count must be at least 1 when is_reference is True")
+            else:
+                if self.page_count not in {1, 2}:
+                    raise ValueError("page_count must be 1 or 2 when pdf_path is not None")
             if len(self.page_dimensions) != self.page_count:
                 raise ValueError("len(page_dimensions) must equal page_count")
+
+        if self.secondary_pdf_path is None:
+            if self.secondary_pdf_source_file_id is not None:
+                raise ValueError("secondary_pdf_source_file_id must be None when secondary_pdf_path is None")
+        else:
+            if self.secondary_pdf_source_file_id is None:
+                raise ValueError("secondary_pdf_source_file_id must not be None when secondary_pdf_path is not None")
 
 
 @dataclass(frozen=True)
@@ -149,6 +163,9 @@ class ActiveAuditView:
     notes_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
     ship_date: str | None = None
     ops_per_board_min: float | None = None
+    has_secondary_pdf: bool = False
+    is_labeled: bool = False
+    are_photos_uploaded: bool = False
 
     @property
     def total_rows(self) -> int:
@@ -212,6 +229,8 @@ class OpenAuditDigest:
     start_by: date | None
     ops_per_board_min: float | None = None
     is_itar: bool = False
+    is_labeled: bool = False
+    are_photos_uploaded: bool = False
 
 
 import pathlib

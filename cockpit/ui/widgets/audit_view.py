@@ -264,6 +264,14 @@ class AuditView(QWidget):
             val = metadata.get(key, "—")
             self._metadata_layout.addWidget(QLabel(f"{label}: {val}"))
             
+        ac_raw = metadata.get("assembly_class")
+        if ac_raw is not None:
+            try:
+                ac_num = int(ac_raw)
+                self._metadata_layout.addWidget(QLabel(f"Class {ac_num}"))
+            except (ValueError, TypeError):
+                pass
+            
         clean_val = metadata.get("process_clean")
         process_val: Any | None = metadata.get("process")
 

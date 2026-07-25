@@ -352,3 +352,54 @@ class IngestionService:
                     except Exception:
                         pass
             raise
+
+    def add_secondary_pdf_to_audit(
+        self,
+        audit_id: int,
+        pdf_path: pathlib.Path,
+    ) -> None:
+        """Add or replace the secondary PDF attached to an existing audit."""
+        from ..persistence.errors import AuditNotFound
+        
+        audit = self.audit_repo.find_by_id(audit_id)
+        if not audit:
+            raise AuditNotFound(audit_id)
+
+        pdf_hash = hashing.sha256_hex(pdf_path)
+        
+        audit_dir = self.file_storage_root / audit.part_number / "unsplit" / "secondary"
+        try:
+            audit_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            raise FileStorageError(audit_dir, audit_dir, e)
+
+        stored_pdf = audit_dir / f"{pdf_hash}{pdf_path.suffix}"
+        copied = False
+        try:
+            if not stored_pdf.exists():
+                shutil.copy2(pdf_path, stored_pdf)
+                copied = True
+        except Exception as e:
+            raise FileStorageError(pdf_path, stored_pdf, e)
+
+        self.conn.execute("SAVEPOINT add_secondary_pdf")
+        try:
+            prior_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.SECONDARY_PDF)
+            if prior_sf:
+                self.conn.execute("DELETE FROM source_files WHERE id = ?", (prior_sf.id,))
+                
+            self.source_file_repo.register(SourceFileDraft(
+                audit_id=audit.id, file_category=SourceFileCategory.SECONDARY_PDF,
+                original_filename=pdf_path.name, local_storage_path=stored_pdf, file_hash=pdf_hash
+            ))
+            self.conn.execute("RELEASE SAVEPOINT add_secondary_pdf")
+        except Exception:
+            self.conn.execute("ROLLBACK TO SAVEPOINT add_secondary_pdf")
+            self.conn.execute("RELEASE SAVEPOINT add_secondary_pdf")
+            if copied:
+                if self.source_file_repo.reference_count(pdf_hash) == 0:
+                    try:
+                        stored_pdf.unlink()
+                    except Exception:
+                        pass
+            raise

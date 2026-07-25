@@ -104,6 +104,7 @@ class ChecklistService:
         source_files = self._source_file_repo.list_for_audit(audit_id)
         bom_sf = next((sf for sf in source_files if sf.file_category == SourceFileCategory.BOM.value), None)
         has_pdf = any(sf.file_category == SourceFileCategory.PDF.value for sf in source_files)
+        has_secondary_pdf = any(sf.file_category == SourceFileCategory.SECONDARY_PDF.value for sf in source_files)
         
         bom_sf_id = bom_sf.id if bom_sf else None
         self._bom_source_file_memo._by_audit[audit_id] = bom_sf_id
@@ -159,6 +160,9 @@ class ChecklistService:
             notes_rows=notes_views,
             ship_date=audit.ship_date,
             ops_per_board_min=audit.ops_per_board_min,
+            has_secondary_pdf=has_secondary_pdf,
+            is_labeled=audit.is_labeled,
+            are_photos_uploaded=audit.are_photos_uploaded,
         )
 
     def set_verification(

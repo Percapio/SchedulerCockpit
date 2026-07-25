@@ -10,7 +10,9 @@ class AuditStatus(StrEnum):
     SHIPPING = "Shipping"
     THT = "THT"
     SMT = "SMT"
-    READY_TO_RUN = "Ready-to-Run"
+    FSU = "FSU"
+    AOI = "AOI"
+    OPS = "OPS"
     ON_HOLD = "ON HOLD"
     NOT_CLEAR = "Not Clear"
 
@@ -18,9 +20,11 @@ class AuditStatus(StrEnum):
     def ordered(cls) -> list['AuditStatus']:
         return [
             cls.SHIPPING,
+            cls.OPS,
             cls.THT,
+            cls.AOI,
             cls.SMT,
-            cls.READY_TO_RUN,
+            cls.FSU,
             cls.ON_HOLD,
             cls.NOT_CLEAR
         ]
@@ -31,6 +35,7 @@ class SourceFileCategory(StrEnum):
     TRAVELER = "Traveler"
     NOTES = "Notes"
     PDF = "PDF"
+    SECONDARY_PDF = "SecondaryPDF"
 
 
 # ---------- row types (returned by repositories) ----------
@@ -59,6 +64,8 @@ class ActiveAudit:
     is_class_3: bool
     is_clean_process: bool
     ops_per_board_min: float | None = None
+    is_labeled: bool = False
+    are_photos_uploaded: bool = False
 
 
 @dataclass(frozen=True)

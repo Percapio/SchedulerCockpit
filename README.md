@@ -35,7 +35,8 @@ Cockpit.exe
 - **Gatekeeper check** — files are rejected if their names don't contain "Audit BOM" and "Traveler". Garbage in, hard stop out.
 - **Checklist generation** — through-hole parts from the BOM become verification checklist rows; Build Notes tables become step-by-step checklist items.
 - **Job splitting** — a job can be split into sibling work orders (e.g. `Job-A`, `Job-B`) with separate quantities.
-- **Quick actions from the job list** — right-click any job in the open-audit list to **Complete** it or change its **Status** (Shipping, THT, SMT, Ready-to-Run, ON HOLD, Not Clear) without opening it. Completing is destructive and asks for confirmation first.
+- **Quick actions from the job list** — right-click any job in the open-audit list to **Complete** it, change its **Status** (Shipping, OPS, THT, AOI, SMT, FSU, ON HOLD, Not Clear), or toggle **Label** and **Photos** verification checkboxes directly without opening the job. Completing is destructive and asks for confirmation first.
+- **Secondary drawing support** — attach a secondary assembly drawing PDF to any audit and toggle between Primary and Reference mode directly on the canvas.
 - **Cascade deletion** — when a job completes, all uploaded files and database records are permanently deleted. Files shared between split jobs are only deleted when every sibling is done.
 - **Local SQLite database** — all state lives in `local_audit.db` on disk. Nothing leaves the machine.
 

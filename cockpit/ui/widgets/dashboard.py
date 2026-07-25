@@ -148,6 +148,9 @@ class Dashboard(QWidget):
         add_drawing_action = self.actions_menu.addAction("Replace" if self._view.has_pdf else "Add Drawing")
         add_drawing_action.triggered.connect(self._on_add_drawing_clicked)
         
+        add_sec_action = self.actions_menu.addAction("Replace Secondary Drawing" if self._view.has_secondary_pdf else "Add Secondary Drawing")
+        add_sec_action.triggered.connect(self._on_add_secondary_drawing_clicked)
+        
         split_action = self.actions_menu.addAction("Split")
         split_action.triggered.connect(self._on_split_clicked)
         
@@ -244,6 +247,15 @@ class Dashboard(QWidget):
         from PyQt6.QtWidgets import QDialog
         from cockpit.ui.widgets.add_drawing_dialog import AddDrawingDialog
         dialog = AddDrawingDialog(self._ingestion_service, self._view.audit_id, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.reload_requested.emit(self._view.audit_id)
+
+    def _on_add_secondary_drawing_clicked(self) -> None:
+        if self._view is None:
+            return
+        from PyQt6.QtWidgets import QDialog
+        from cockpit.ui.widgets.add_drawing_dialog import AddDrawingDialog
+        dialog = AddDrawingDialog(self._ingestion_service, self._view.audit_id, self, secondary=True)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.reload_requested.emit(self._view.audit_id)
 

@@ -3,7 +3,7 @@
 from PyQt6.QtCore import pyqtSignal, Qt, QTimer
 from PyQt6.QtGui import QPixmap, QResizeEvent, QShowEvent
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QLabel, QGraphicsLineItem, QGraphicsItem, QGraphicsRectItem
+    QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QLabel, QGraphicsLineItem, QGraphicsItem, QGraphicsRectItem, QPushButton
 )
 from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QWheelEvent, QMouseEvent
 from PyQt6.QtCore import QRectF, QPointF
@@ -135,6 +135,9 @@ class LayoutCanvas(QWidget):
         self._coord_cache: dict[int, list[HighlightCoord]] = {}
         self._worker_alive = False
         self._pending_pdf = None
+        self._primary_pending: PendingPdf | None = None
+        self._secondary_pending: PendingPdf | None = None
+        self._active_source: str = "primary"
         self._render_epoch = 0
 
         layout = QVBoxLayout(self)
@@ -180,6 +183,10 @@ class LayoutCanvas(QWidget):
         footer_layout = QHBoxLayout()
         footer_layout.setContentsMargins(4, 4, 4, 4)
         footer_layout.addStretch(1)
+        self._pdf_toggle_btn = QPushButton("View Reference", self._canvas_container)
+        self._pdf_toggle_btn.setVisible(False)
+        self._pdf_toggle_btn.clicked.connect(self._on_toggle_pdf_source)
+        footer_layout.addWidget(self._pdf_toggle_btn)
         footer_layout.addWidget(self._font_scale_bar)
         
         canvas_layout.addLayout(footer_layout)
@@ -215,7 +222,8 @@ class LayoutCanvas(QWidget):
             pdf_source_file_id=pending.source_file_id,
             pdf_path=pending.path,
             page_count=len(dims),
-            page_dimensions=dims
+            page_dimensions=dims,
+            is_reference=(getattr(self, "_active_source", "primary") == "secondary")
         )
 
     def _submit_render(self, job: RenderJob) -> None:
@@ -237,18 +245,17 @@ class LayoutCanvas(QWidget):
         self._apply_selection(clear=True)
         self._coord_cache.clear()
         
-        try:
-            coords = self._layout_query_service.list_pdf_coords_for_audit(audit_id)
-            for c in coords:
-                self._coord_cache.setdefault(c.page_index, []).append(c)
-        except Exception:
-            logger.exception('Exception caught in layout_canvas coords')
-            
         self._current_audit_id = audit_id
-        pending = self._layout_query_service.resolve_pdf_ref(audit_id)
-        
+        self._primary_pending = self._layout_query_service.resolve_pdf_ref(audit_id)
+        self._secondary_pending = getattr(self._layout_query_service, "resolve_secondary_pdf_ref", lambda aid: None)(audit_id)
+        self._active_source = "primary"
+        self._refresh_toggle_enablement()
+        self._render_source("primary", page_index=0)
+
+    def _render_source(self, source: str, page_index: int) -> None:
+        pending = self._primary_pending if source == "primary" else self._secondary_pending
         if pending is None:
-            self._current_context = LayoutContext(audit_id, None, None, 0, ())
+            self._current_context = LayoutContext(self._current_audit_id, None, None, 0, (), is_reference=(source == "secondary"))
             self._current_page_index = None
             self._pending_pdf = None
             self._page_switcher.hide()
@@ -256,13 +263,37 @@ class LayoutCanvas(QWidget):
             self._stacked.setCurrentWidget(self._empty_placeholder)
             return
 
+        self._coord_cache.clear()
+        if source == "primary":
+            try:
+                coords = self._layout_query_service.list_pdf_coords_for_audit(self._current_audit_id)
+                for c in coords:
+                    self._coord_cache.setdefault(c.page_index, []).append(c)
+            except Exception:
+                logger.exception('Exception caught in layout_canvas coords')
+        self._apply_selection(clear=True)
         self._pending_pdf = pending
         self._render_epoch += 1
         gen = self._render_epoch
         self.generation_bumped.emit(gen)
-        
         self._show_spinner()
-        self._submit_render(RenderJob(gen, pending.path, (0,), self.current_render_height(), True))
+        self._submit_render(RenderJob(gen, pending.path, (page_index,), self.current_render_height(), True))
+
+    def _on_toggle_pdf_source(self) -> None:
+        if self._active_source == "primary":
+            if self._secondary_pending is None:
+                return
+            self._active_source = "secondary"
+        else:
+            self._active_source = "primary"
+        self._pixmap_cache.clear()
+        self._current_page_index = 0
+        self._render_source(self._active_source, page_index=0)
+        self._refresh_toggle_enablement()
+
+    def _refresh_toggle_enablement(self) -> None:
+        self._pdf_toggle_btn.setVisible(self._secondary_pending is not None)
+        self._pdf_toggle_btn.setText("View Reference" if self._active_source == "primary" else "View Primary")
 
     def _on_render_ready(self, result: RenderResult) -> None:
         if result.generation != self._render_epoch:
@@ -425,6 +456,8 @@ class LayoutCanvas(QWidget):
         super().mouseDoubleClickEvent(event)
 
     def _on_graphics_view_mouse_press(self, event: QMouseEvent) -> None:
+        if getattr(self, "_active_source", "primary") == "secondary":
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             if self._current_context is None or self._current_page_index is None:
                 return
@@ -462,6 +495,8 @@ class LayoutCanvas(QWidget):
             self._graphics_view.setDragMode(QGraphicsView.DragMode.NoDrag)
 
     def set_selection(self, intent: SelectionIntent) -> None:
+        if getattr(self, "_active_source", "primary") == "secondary" and intent.kind != SelectionKind.CLEAR:
+            return
         if intent.kind == SelectionKind.CLEAR:
             self._last_intent = None
             self._last_resolved = None
@@ -538,6 +573,8 @@ class LayoutCanvas(QWidget):
         return f"{prefix}: {n} of {n} footprints highlighted"
 
     def _apply_selection(self, clear: bool = False) -> None:
+        if getattr(self, "_active_source", "primary") == "secondary":
+            clear = True
         resolved = self._last_resolved
         if clear or resolved is None:
             self._dim_item.setVisible(False)

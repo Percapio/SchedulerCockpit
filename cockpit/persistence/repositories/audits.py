@@ -165,6 +165,26 @@ class AuditRepository:
         if cur.rowcount == 0:
             raise AuditNotFound(audit_id)
 
+    def set_is_labeled(self, audit_id: int, value: bool) -> None:
+        now_iso = utcnow().isoformat()
+        cur = self.conn.cursor()
+        cur.execute(
+            "UPDATE active_audits SET is_labeled = ?, updated_at = ? WHERE id = ?",
+            (1 if value else 0, now_iso, audit_id)
+        )
+        if cur.rowcount == 0:
+            raise AuditNotFound(audit_id)
+
+    def set_are_photos_uploaded(self, audit_id: int, value: bool) -> None:
+        now_iso = utcnow().isoformat()
+        cur = self.conn.cursor()
+        cur.execute(
+            "UPDATE active_audits SET are_photos_uploaded = ?, updated_at = ? WHERE id = ?",
+            (1 if value else 0, now_iso, audit_id)
+        )
+        if cur.rowcount == 0:
+            raise AuditNotFound(audit_id)
+
     def set_split_reason(self, audit_id: int, reason: str) -> None:
         if not reason or not reason.strip():
             raise InvalidArgumentError("reason", reason, "Cannot be blank")

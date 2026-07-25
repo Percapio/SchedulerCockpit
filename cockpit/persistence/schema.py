@@ -543,6 +543,37 @@ def migrate_to_v10(conn: sqlite3.Connection) -> bool:
         cur.execute("ROLLBACK")
         raise
 
+def migrate_to_v11(conn: sqlite3.Connection) -> bool:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=10)
+        
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=10)
+        
+    current_version = row["version"]
+    if current_version >= 11:
+        return False
+    if current_version < 10:
+        raise SchemaMismatch(found_version=current_version, expected_version=10)
+        
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 11, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+
+
 
 def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     migrate_to_v1(conn)
@@ -555,7 +586,8 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     v8_migrated = migrate_to_v8(conn)
     v9_migrated = migrate_to_v9(conn)
     migrate_to_v10(conn)
-    return v7_migrated or v8_migrated or v9_migrated
+    v11_migrated = migrate_to_v11(conn)
+    return v7_migrated or v8_migrated or v9_migrated or v11_migrated
 
 SCHEMA_V5_DDL_DROP_SHIP_DATE: str = """
 ALTER TABLE active_audits DROP COLUMN ship_date

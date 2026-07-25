@@ -6,7 +6,8 @@ import sqlite3
 import sys
 import pathlib
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
+from cockpit.services.runtime_constants import RuntimeConstants
 
 from cockpit.persistence.connection import open_connection
 from cockpit.persistence.schema import migrate
@@ -55,7 +56,10 @@ class BootstrappedApp:
     reconciliation_report: ReconciliationReport
 
 
-def bootstrap(config: AppConfig) -> BootstrappedApp:
+def bootstrap(
+    config: AppConfig,
+    constants_provider: Callable[[], RuntimeConstants] = RuntimeConstants.defaults
+) -> BootstrappedApp:
     """Wire the full object graph for one application session."""
     
     # Configure logging
@@ -148,7 +152,10 @@ def bootstrap(config: AppConfig) -> BootstrappedApp:
     notes_repo = BuildNotesChecklistRepository(conn)
     
     from cockpit.services.runtime_calc import RuntimeCalcService
-    runtime_calc_svc = RuntimeCalcService(audit_repo, source_file_repo, bom_component_repo, pdf_coord_repo)
+    runtime_calc_svc = RuntimeCalcService(
+        audit_repo, source_file_repo, bom_component_repo, pdf_coord_repo,
+        constants_provider=constants_provider
+    )
     
     if needs_backfill:
         logger.info("Starting runtime backfill")

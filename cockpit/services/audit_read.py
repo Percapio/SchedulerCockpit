@@ -53,7 +53,12 @@ class AuditReadService:
                     
             total_runtime = None
             if a.feeder_setuptime is not None and a.smt_runtime is not None and a.tht_runtime is not None:
-                total_runtime = a.feeder_setuptime + a.smt_runtime + a.tht_runtime
+                total_runtime = (
+                    a.feeder_setuptime + a.smt_runtime + a.tht_runtime
+                    + (a.aoi_runtime or 0.0)
+                    + (a.ops_runtime or 0.0)
+                    + (a.shipping_runtime or 0.0)
+                )
                 
             start_by_val = start_by(ship_date_obj, total_runtime, holidays)
             

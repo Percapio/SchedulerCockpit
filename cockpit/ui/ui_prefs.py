@@ -3,12 +3,15 @@
 import logging
 import pathlib
 import zipfile
+import math
+from typing import Any
 
 from PyQt6.QtCore import QObject, QSettings, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 from cockpit.ui import facelift
 from cockpit.ui.theme import Theme
+from cockpit.services.runtime_constants import RuntimeConstants
 
 logger = logging.getLogger(__name__)
 
@@ -94,3 +97,64 @@ def export_diagnostics(config, target_zip: pathlib.Path) -> list[str]:
                 logger.warning("Diagnostics export: could not read %s", path)
 
     return archived
+
+
+_RUNTIME_KEYS = {
+    "smt_placement_time_min":        "runtime_calc/smt_placement_time_min",
+    "tht_placement_time_min":        "runtime_calc/tht_placement_time_min",
+    "aoi_inspection_time_hr":        "runtime_calc/aoi_inspection_time_hr",
+    "class_3_multiplier_aoi":        "runtime_calc/class_3_multiplier_aoi",
+    "class_3_multiplier_tht":        "runtime_calc/class_3_multiplier_tht",
+    "clean_process_multiplier_tht":  "runtime_calc/clean_process_multiplier_tht",
+    "clean_process_multiplier_ops":  "runtime_calc/clean_process_multiplier_ops",
+    "shipping_flat_hours":           "runtime_calc/shipping_flat_hours",
+    "shipping_boards_per_hour":      "runtime_calc/shipping_boards_per_hour",
+}
+
+def _coerce_nonnegative_float(raw: Any, default: float) -> float:
+    if raw is None:
+        return default
+    try:
+        parsed = float(raw)
+    except (TypeError, ValueError):
+        logger.warning("runtime_calc setting %r not a float; using default %s", raw, default)
+        return default
+    if not math.isfinite(parsed) or parsed < 0:
+        logger.warning("runtime_calc setting %s out of range; using default %s", parsed, default)
+        return default
+    return parsed
+
+class RuntimeCalcSettingsController(QObject):
+    changed = pyqtSignal()
+
+    def __init__(self, settings: QSettings) -> None:
+        super().__init__()
+        self._settings = settings
+
+    def constants(self) -> RuntimeConstants:
+        base = RuntimeConstants.defaults()
+        resolved = {}
+        for field_name, key in _RUNTIME_KEYS.items():
+            try:
+                raw_value = self._settings.value(key)
+            except Exception:
+                logger.warning("runtime_calc setting %s unreadable; using default", key, exc_info=True)
+                raw_value = None
+            resolved[field_name] = _coerce_nonnegative_float(raw_value, getattr(base, field_name))
+        return RuntimeConstants(**resolved)
+
+    def set_value(self, field_name: str, value: float) -> None:
+        key = _RUNTIME_KEYS[field_name]
+        default = getattr(RuntimeConstants.defaults(), field_name)
+        if not (isinstance(value, (int, float)) and math.isfinite(value) and value >= 0):
+            return
+        try:
+            stored_raw = self._settings.value(key)
+        except Exception:
+            stored_raw = None
+        current = _coerce_nonnegative_float(stored_raw, default)
+        if float(value) == current:
+            return
+        self._settings.setValue(key, float(value))
+        self.changed.emit()
+

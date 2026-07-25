@@ -88,7 +88,12 @@ def main() -> None:
         sinks=(LocalFileCrashSink(config.file_storage_root.parent / "crash_reports"), StderrCrashSink())
     )
     
-    bootstrapped = bootstrap(config)
+    settings = QSettings(str(config.app_data_root / "settings.ini"), QSettings.Format.IniFormat)
+
+    from cockpit.ui.ui_prefs import StyleController, RuntimeCalcSettingsController
+    runtime_settings_controller = RuntimeCalcSettingsController(settings)
+
+    bootstrapped = bootstrap(config, constants_provider=runtime_settings_controller.constants)
 
     app = QApplication(sys.argv)
 
@@ -104,10 +109,7 @@ def main() -> None:
         # Exit or show error dialog (for now just print to stderr)
         sys.exit(2)
 
-    settings = QSettings(str(config.app_data_root / "settings.ini"), QSettings.Format.IniFormat)
-
     # Phase 32 (2.4/2.5): stylesheet = schema theme + preset/font overrides
-    from cockpit.ui.ui_prefs import StyleController
     style_controller = StyleController(app, theme, settings)
     app.setStyleSheet(style_controller.compose())
 

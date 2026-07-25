@@ -1,17 +1,35 @@
 """Open audit picker."""
 
+import logging
 from datetime import datetime, timezone, timedelta, date
 from typing import Sequence, Any, List
 from enum import IntEnum
-from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex, QSortFilterProxyModel
+from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex, QSortFilterProxyModel, QSettings, QByteArray, QRect, QEvent, QTimer
+from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView, QHeaderView, QStyledItemDelegate, QMenu, QLineEdit
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView, QHeaderView, QStyledItemDelegate, QMenu, QLineEdit,
+    QStyle, QStyleOptionViewItem, QStyleOptionButton, QApplication
 )
 
 from cockpit.persistence.types import AuditStatus
 from cockpit.services.views import OpenAuditDigest
 from cockpit.ui.widgets.toast import Toast  # Phase 3
 from cockpit.ui.widgets.holiday_dialog import HolidayDialog
+
+logger = logging.getLogger(__name__)
+
+_HEADER_STATE_KEY = "audit_list/header_state"
+
+def _format_list_date(value: date | None) -> str:
+    return "" if value is None else f"{value:%b} {value.day}"
+
+def _centered_square(cell: QRect, extent: int) -> QRect:
+    return QRect(
+        cell.x() + (cell.width() - extent) // 2,
+        cell.y() + (cell.height() - extent) // 2,
+        extent,
+        extent
+    )
 
 PST = timezone(timedelta(hours=-8))
 
@@ -45,6 +63,14 @@ _STATUS_STAGE_COLUMN = {
     AuditStatus.OPS: Column.OPS,
     AuditStatus.SHIPPING: Column.SHIP,
 }
+_DEFAULT_COLUMN_WIDTHS: dict[Column, int] = {
+    Column.START_BY: 90, Column.SHIP_DATE: 90, Column.PART_NUMBER: 120, Column.WORK_ORDER_REF: 80,
+    Column.LEAD_TIME: 50, Column.QUANTITY: 55, Column.REPEAT: 70, Column.CLASSIFICATION: 110,
+    Column.ASSEMBLY_CLASS: 55, Column.PROCESS: 90, Column.FSU: 70, Column.SMT: 70, Column.THT: 70,
+    Column.AOI: 70, Column.OPS: 70, Column.SHIP: 70, Column.DATE_INGESTED: 100,
+    Column.LABEL: 55, Column.PHOTOS: 60,
+}
+_DATE_COLUMNS = frozenset({Column.START_BY, Column.SHIP_DATE})
 
 class RowKind:
     DATA = "data"
@@ -171,10 +197,29 @@ class AuditListModel(QAbstractTableModel):
                 return Qt.CheckState.Checked if val else Qt.CheckState.Unchecked
             return None
 
+        if role == Qt.ItemDataRole.FontRole and row_data["kind"] == RowKind.DATA:
+            if index.column() in _DATE_COLUMNS:
+                d: OpenAuditDigest = row_data["digest"]
+                val = d.start_by if index.column() == Column.START_BY else d.ship_date
+                if val is not None:
+                    font = QFont()
+                    font.setBold(True)
+                    return font
+            return None
+
         # Phase 32 (2.5): semantic highlighting for B#, QTY, Process columns.
         if role == Qt.ItemDataRole.ForegroundRole and row_data["kind"] == RowKind.DATA:
             from cockpit.ui import facelift
+            from cockpit.services.date_urgency import DateUrgency
             d: OpenAuditDigest = row_data["digest"]
+            if index.column() in _DATE_COLUMNS:
+                urgency = d.start_by_urgency if index.column() == Column.START_BY else d.ship_urgency
+                if urgency == DateUrgency.OVERDUE:
+                    return facelift.overdue_color()
+                elif urgency == DateUrgency.DUE_SOON:
+                    return facelift.due_soon_color()
+                return None
+
             if index.column() == _STATUS_STAGE_COLUMN.get(d.status):
                 return facelift.attention_color()
             if index.column() == 7 and d.is_itar:
@@ -190,8 +235,8 @@ class AuditListModel(QAbstractTableModel):
             d: OpenAuditDigest = row_data["digest"]
             col = index.column()
             
-            if col == 0: return str(d.start_by) if d.start_by else ""
-            if col == 1: return str(d.ship_date) if d.ship_date else ""
+            if col == 0: return _format_list_date(d.start_by)
+            if col == 1: return _format_list_date(d.ship_date)
             if col == 2: return d.part_number
             if col == 3: return f"{d.work_order_ref}{d.split_suffix}"
             if col == 4: return str(d.lead_time_days) if d.lead_time_days is not None else ""
@@ -238,6 +283,48 @@ class AuditListModel(QAbstractTableModel):
         return None
 
 
+class CenteredCheckDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index):
+        row_data = index.data(Qt.ItemDataRole.UserRole)
+        if not row_data or row_data.get("kind") != RowKind.DATA:
+            super().paint(painter, option, index)
+            return
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.features &= ~QStyleOptionViewItem.ViewItemFeature.HasCheckIndicator
+        opt.text = ""
+        style = option.widget.style() if option.widget else QApplication.style()
+        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, painter, option.widget)
+        
+        state = index.data(Qt.ItemDataRole.CheckStateRole)
+        indicator = QStyleOptionButton()
+        extent = style.pixelMetric(QStyle.PixelMetric.PM_IndicatorWidth, option, option.widget)
+        indicator.rect = _centered_square(option.rect, extent)
+        indicator_state = QStyle.StateFlag.State_Enabled
+        if state == Qt.CheckState.Checked or state == Qt.CheckState.Checked.value or state == 2 or state is True:
+            indicator_state |= QStyle.StateFlag.State_On
+        else:
+            indicator_state |= QStyle.StateFlag.State_Off
+        indicator.state = indicator_state
+        style.drawPrimitive(QStyle.PrimitiveElement.PE_IndicatorCheckBox, indicator, painter, option.widget)
+
+    def editorEvent(self, event, model, option, index):
+        row_data = index.data(Qt.ItemDataRole.UserRole)
+        if not row_data or row_data.get("kind") != RowKind.DATA:
+            return False
+        toggled = False
+        if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton and option.rect.contains(event.pos()):
+            toggled = True
+        elif event.type() == QEvent.Type.KeyPress and event.key() in (Qt.Key.Key_Space, Qt.Key.Key_Select):
+            toggled = True
+        if not toggled:
+            return False
+        current = index.data(Qt.ItemDataRole.CheckStateRole)
+        is_checked = (current == Qt.CheckState.Checked or current == Qt.CheckState.Checked.value or current == 2 or current is True)
+        next_state = Qt.CheckState.Unchecked if is_checked else Qt.CheckState.Checked
+        return model.setData(index, next_state, Qt.ItemDataRole.CheckStateRole)
+
+
 class GroupHeaderDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         row_data = index.data(Qt.ItemDataRole.UserRole)
@@ -269,8 +356,9 @@ class OpenAuditPicker(QWidget):
     label_toggle_requested = pyqtSignal(int, bool)
     photos_toggle_requested = pyqtSignal(int, bool)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, *, settings: QSettings | None = None) -> None:
         super().__init__(parent)
+        self._settings = settings
         layout = QVBoxLayout(self)
         
         layout.addLayout(self.build_title_row())
@@ -288,6 +376,24 @@ class OpenAuditPicker(QWidget):
         self.model.label_toggle_requested.connect(self.label_toggle_requested.emit)
         self.model.photos_toggle_requested.connect(self.photos_toggle_requested.emit)
         self.table_view.setModel(self.model)
+
+        header = self.table_view.horizontalHeader()
+        assert header.count() == len(Column)
+        header.setSectionsMovable(True)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setStretchLastSection(True)
+        header.setSortIndicatorShown(False)
+        self._seed_default_widths()
+        self._default_header_state: QByteArray = header.saveState()
+        self._restore_header_state()
+        self._enforce_start_by_pinned()
+        header.sectionMoved.connect(self._on_section_moved)
+        header.sectionResized.connect(lambda *_: self._persist_header_state())
+        header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        header.customContextMenuRequested.connect(self._on_header_context_menu)
+        
+        for col in (Column.LABEL, Column.PHOTOS):
+            self.table_view.setItemDelegateForColumn(col, CenteredCheckDelegate(self.table_view))
         
         layout.addWidget(self.table_view)
         self._last_digests = []
@@ -344,13 +450,59 @@ class OpenAuditPicker(QWidget):
             if row_data and row_data["kind"] == RowKind.GROUP_HEADER:
                 self.table_view.setSpan(i, 0, 1, self.model.columnCount())
 
+    def _seed_default_widths(self) -> None:
+        header = self.table_view.horizontalHeader()
+        for column, width in _DEFAULT_COLUMN_WIDTHS.items():
+            header.resizeSection(column, width)
+
+    def _enforce_start_by_pinned(self) -> None:
+        header = self.table_view.horizontalHeader()
+        if header.visualIndex(Column.START_BY) != 0:
+            header.blockSignals(True)
+            header.moveSection(header.visualIndex(Column.START_BY), 0)
+            header.blockSignals(False)
+
+    def _on_section_moved(self, logical: int, old_visual: int, new_visual: int) -> None:
+        self._enforce_start_by_pinned()
+        self._persist_header_state()
+
+    def _persist_header_state(self) -> None:
+        if self._settings is None:
+            return
+        self._settings.setValue(_HEADER_STATE_KEY, self.table_view.horizontalHeader().saveState())
+
+    def _restore_header_state(self) -> None:
+        if self._settings is None:
+            return
+        blob = self._settings.value(_HEADER_STATE_KEY)
+        if blob is None:
+            return
+        header = self.table_view.horizontalHeader()
+        if not header.restoreState(blob):
+            logger.warning("Audit list: header state failed to restore; reverting to defaults")
+            header.restoreState(self._default_header_state)
+        self._apply_group_header_spans()
+
+    def _reset_columns(self) -> None:
+        self.table_view.horizontalHeader().restoreState(self._default_header_state)
+        self._enforce_start_by_pinned()
+        if self._settings is not None:
+            self._settings.remove(_HEADER_STATE_KEY)
+        self._apply_group_header_spans()
+
+    def _on_header_context_menu(self, position) -> None:
+        menu = QMenu()
+        reset_action = menu.addAction("Reset columns to default")
+        reset_action.triggered.connect(self._reset_columns)
+        menu.exec(self.table_view.horizontalHeader().mapToGlobal(position))
+
     # --- Global search (Phase 32, 2.3) ---
 
     def _searchable_text(self, d: OpenAuditDigest) -> str:
         """Concatenation of every visible List View column, mirroring the model's display."""
         parts = [
-            str(d.start_by) if d.start_by else "",
-            str(d.ship_date) if d.ship_date else "",
+            _format_list_date(d.start_by),
+            _format_list_date(d.ship_date),
             str(d.part_number),
             f"{d.work_order_ref}{d.split_suffix}",
             str(d.lead_time_days) if d.lead_time_days is not None else "",

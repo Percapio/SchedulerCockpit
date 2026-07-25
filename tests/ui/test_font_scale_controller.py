@@ -94,3 +94,67 @@ def test_persisted_value_missing_returns_default(qtbot, theme, tmp_path):
     
     controller = FontScaleController(app, theme, settings)
     assert controller.current_pt() == 10
+
+
+def test_set_pt_absolute_and_noop(qtbot, theme, tmp_path):
+    app = QApplication.instance()
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    controller = FontScaleController(app, theme, settings)
+
+    with qtbot.waitSignal(controller.scale_changed) as blocker:
+        controller.set_pt(14)
+    QApplication.processEvents()
+
+    assert blocker.args == [14]
+    assert controller.current_pt() == 14
+    assert settings.value("audit_view/font_scale_pt") == 14
+
+    # Second call with same value should be a no-op (no signal emitted)
+    controller.set_pt(14)
+    assert controller.current_pt() == 14
+
+
+def test_restyle_coalescing(qtbot, theme, tmp_path):
+    app = QApplication.instance()
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    controller = FontScaleController(app, theme, settings)
+
+    controller.set_pt(12)
+    controller.set_pt(13)
+    controller.set_pt(14)
+    assert controller._restyle_timer.isActive()
+
+    QApplication.processEvents()
+    assert not controller._restyle_timer.isActive()
+    assert controller.current_pt() == 14
+    assert "font-size:" in app.styleSheet()
+
+
+def test_restyle_reentrancy_guard(qtbot, theme, tmp_path):
+    app = QApplication.instance()
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    
+    controller = None
+    def reentrant_composer(pt: int) -> str:
+        if pt == 12 and controller is not None:
+            controller.set_pt(14)
+        return f"* {{ font-size: {pt}pt; }}"
+
+    controller = FontScaleController(app, theme, settings, composer=reentrant_composer)
+    controller.set_pt(12)
+    QApplication.processEvents()
+    QApplication.processEvents()
+
+    assert controller.current_pt() == 14
+    assert "14pt" in app.styleSheet()
+
+
+def test_reapply_cancels_timer(qtbot, theme, tmp_path):
+    app = QApplication.instance()
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    controller = FontScaleController(app, theme, settings)
+
+    controller.set_pt(15)
+    assert controller._restyle_timer.isActive()
+    controller.reapply()
+    assert not controller._restyle_timer.isActive()

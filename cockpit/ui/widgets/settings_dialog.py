@@ -91,6 +91,7 @@ class SettingsDialog(QDialog):
         self.size_spin.setValue(self._font_scale.current_pt())
         self.size_spin.setSuffix(" pt")
         self.size_spin.valueChanged.connect(self._on_size_changed)
+        self._font_scale.scale_changed.connect(self._sync_spin_from_controller)
         form.addRow("Font size:", self.size_spin)
 
         layout.addLayout(form)
@@ -128,10 +129,17 @@ class SettingsDialog(QDialog):
         self._style.set_font_family(font.family())
 
     def _on_size_changed(self, pt: int) -> None:
-        delta_pt = pt - self._font_scale.current_pt()
-        step = self._font_scale._bounds.step_pt
-        if step and delta_pt % step == 0 and delta_pt != 0:
-            self._font_scale.request_delta(delta_pt // step)
+        self._font_scale.set_pt(pt)
+        effective: int = self._font_scale.current_pt()
+        if effective != pt:
+            self._sync_spin_from_controller(effective)
+
+    def _sync_spin_from_controller(self, pt: int) -> None:
+        if self.size_spin.value() == pt:
+            return
+        self.size_spin.blockSignals(True)
+        self.size_spin.setValue(pt)
+        self.size_spin.blockSignals(False)
 
     def _on_export_diagnostics(self) -> None:
         stamp = datetime.date.today().isoformat()

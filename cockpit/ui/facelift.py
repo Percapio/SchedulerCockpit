@@ -32,6 +32,8 @@ class Palette:
     quantity: str
     process: str
     attention: str          # neon orange — ITAR text + cross-page tab cue
+    overdue: str            # red — date is in the past
+    due_soon: str           # amber — date within the alert window; DISTINCT from `attention` neon-orange
 
 
 _PALETTES = {
@@ -48,6 +50,8 @@ _PALETTES = {
         quantity="#7EE787",
         process="#D2A8FF",
         attention="#FFA033",
+        overdue="#FF5C5C",
+        due_soon="#FFC542",
     ),
     LIGHT: Palette(
         window="#F4F5F7",
@@ -62,6 +66,8 @@ _PALETTES = {
         quantity="#2E7D32",
         process="#6A1B9A",
         attention="#E65100",
+        overdue="#C62828",
+        due_soon="#B26A00",
     ),
 }
 
@@ -99,6 +105,18 @@ def attention_color():
     """QColor for ITAR cells and high-visibility painted elements."""
     from PyQt6.QtGui import QColor
     return QColor(palette().attention)
+
+
+def overdue_color():
+    """QColor for overdue dates (red)."""
+    from PyQt6.QtGui import QColor
+    return QColor(palette().overdue)
+
+
+def due_soon_color():
+    """QColor for due soon dates (amber)."""
+    from PyQt6.QtGui import QColor
+    return QColor(palette().due_soon)
 
 
 def compose_override_qss(preset: str, font_family: str | None = None) -> str:

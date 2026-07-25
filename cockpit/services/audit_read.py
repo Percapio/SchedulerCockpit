@@ -80,6 +80,9 @@ class AuditReadService:
                 feeder_setuptime=a.feeder_setuptime,
                 smt_runtime=a.smt_runtime,
                 tht_runtime=a.tht_runtime,
+                aoi_runtime=a.aoi_runtime,
+                ops_runtime=a.ops_runtime,
+                shipping_runtime=a.shipping_runtime,
                 start_by=start_by_val,
                 is_itar=is_itar_flag
             ))

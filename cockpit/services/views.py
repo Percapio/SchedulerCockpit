@@ -205,6 +205,9 @@ class OpenAuditDigest:
     feeder_setuptime: float | None
     smt_runtime: float | None
     tht_runtime: float | None
+    aoi_runtime: float | None
+    ops_runtime: float | None
+    shipping_runtime: float | None
     start_by: date | None
     is_itar: bool = False
 

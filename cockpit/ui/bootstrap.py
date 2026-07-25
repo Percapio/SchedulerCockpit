@@ -8,6 +8,7 @@ import pathlib
 from dataclasses import dataclass
 from typing import Any, Callable
 from cockpit.services.runtime_constants import RuntimeConstants
+from cockpit.services.runtime_calc import RuntimeCalcService
 
 from cockpit.persistence.connection import open_connection
 from cockpit.persistence.schema import migrate
@@ -54,6 +55,7 @@ class BootstrappedApp:
     holiday_svc: Any  # Use Any to avoid circular imports or just import it at top
     pdf_renderer: PdfRenderer
     reconciliation_report: ReconciliationReport
+    runtime_calc_svc: RuntimeCalcService
 
 
 def bootstrap(
@@ -237,5 +239,6 @@ def bootstrap(
         setup_bom_svc=setup_bom_svc,
         holiday_svc=holiday_svc,
         pdf_renderer=pdf_renderer,
-        reconciliation_report=report
+        reconciliation_report=report,
+        runtime_calc_svc=runtime_calc_svc
     )

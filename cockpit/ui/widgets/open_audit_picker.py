@@ -22,7 +22,8 @@ class AuditListModel(QAbstractTableModel):
     COLUMNS = [
         "Start-By Date", "Ship Date", "B#", "S/O", "LT",
         "QTY", "Type", "Classification", "Class", "Process",
-        "FSU (hrs)", "SMT (hrs)", "THT (hrs)", "Date Ingested"
+        "FSU (hrs)", "SMT (hrs)", "THT (hrs)", 
+        "AOI (hrs)", "OPS (hrs)", "SHIP (hrs)", "Date Ingested"
     ]
     
     GROUP_ORDER = AuditStatus.ordered()
@@ -84,7 +85,10 @@ class AuditListModel(QAbstractTableModel):
         if col == 10: return (d.feeder_setuptime is not None, d.feeder_setuptime)
         if col == 11: return (d.smt_runtime is not None, d.smt_runtime)
         if col == 12: return (d.tht_runtime is not None, d.tht_runtime)
-        if col == 13: return (d.date_ingested is not None, d.date_ingested)
+        if col == 13: return (d.aoi_runtime is not None, d.aoi_runtime)
+        if col == 14: return (d.ops_runtime is not None, d.ops_runtime)
+        if col == 15: return (d.shipping_runtime is not None, d.shipping_runtime)
+        if col == 16: return (d.date_ingested is not None, d.date_ingested)
         return 0
 
     def rowCount(self, parent=QModelIndex()) -> int:
@@ -139,7 +143,10 @@ class AuditListModel(QAbstractTableModel):
             if col == 10: return f"{d.feeder_setuptime:.1f}" if d.feeder_setuptime is not None else ""
             if col == 11: return f"{d.smt_runtime:.1f}" if d.smt_runtime is not None else ""
             if col == 12: return f"{d.tht_runtime:.1f}" if d.tht_runtime is not None else ""
-            if col == 13:
+            if col == 13: return f"{d.aoi_runtime:.1f}" if d.aoi_runtime is not None else ""
+            if col == 14: return f"{d.ops_runtime:.1f}" if d.ops_runtime is not None else ""
+            if col == 15: return f"{d.shipping_runtime:.1f}" if d.shipping_runtime is not None else ""
+            if col == 16:
                 if not d.date_ingested: return ""
                 local = d.date_ingested.astimezone(PST)
                 return f"{local:%Y-%m-%d}"
@@ -274,6 +281,9 @@ class OpenAuditPicker(QWidget):
             f"{d.feeder_setuptime:.1f}" if d.feeder_setuptime is not None else "",
             f"{d.smt_runtime:.1f}" if d.smt_runtime is not None else "",
             f"{d.tht_runtime:.1f}" if d.tht_runtime is not None else "",
+            f"{d.aoi_runtime:.1f}" if d.aoi_runtime is not None else "",
+            f"{d.ops_runtime:.1f}" if d.ops_runtime is not None else "",
+            f"{d.shipping_runtime:.1f}" if d.shipping_runtime is not None else "",
             f"{d.date_ingested.astimezone(PST):%Y-%m-%d}" if d.date_ingested else "",
         ]
         return " ".join(parts).casefold()

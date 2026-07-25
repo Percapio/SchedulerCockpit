@@ -44,7 +44,8 @@ class MainWindow(QMainWindow):
         *,
         theme: Theme,
         settings: QSettings,
-        style_controller=None
+        style_controller=None,
+        runtime_settings_controller=None
     ) -> None:
         super().__init__()
         self._theme = theme
@@ -102,6 +103,11 @@ class MainWindow(QMainWindow):
         self.toast = Toast(self)
 
         self._style_controller = style_controller
+        self._runtime_settings_controller = runtime_settings_controller
+        if runtime_settings_controller is not None:
+            runtime_settings_controller.changed.connect(self._on_runtime_constants_changed)
+        self._runtime_constants_dirty = False
+
         composer = style_controller.compose if style_controller is not None else None
         self._font_scale = FontScaleController(app, theme, settings, composer=composer)
         self._settings = settings
@@ -145,17 +151,39 @@ class MainWindow(QMainWindow):
         self._app.installEventFilter(self)
         self._idle_timer.start()
         
+    def _on_runtime_constants_changed(self) -> None:
+        self._runtime_constants_dirty = True
+
+    def _recompute_and_refresh(self) -> None:
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            summary = self._bootstrapped.runtime_calc_svc.recompute_all()
+            self.picker.populate(self._audit_read_svc.list_open())
+            if summary.failed > 0:
+                self.toast.show_toast(
+                    "Recompute incomplete",
+                    f"{summary.failed} of {summary.attempted} audits could not be recomputed"
+                )
+        finally:
+            QApplication.restoreOverrideCursor()
+
     def _on_settings_requested(self) -> None:
         if self._style_controller is None:
             return
-        from cockpit.ui.widgets.settings_dialog import SettingsDialog
-        dialog = SettingsDialog(
-            self._style_controller,
-            self._font_scale,
-            self._bootstrapped.config,
-            self
-        )
-        dialog.exec()
+        self._runtime_constants_dirty = False
+        try:
+            from cockpit.ui.widgets.settings_dialog import SettingsDialog
+            dialog = SettingsDialog(
+                self._style_controller,
+                self._font_scale,
+                self._runtime_settings_controller,
+                self._bootstrapped.config,
+                self
+            )
+            dialog.exec()
+        finally:
+            if self._runtime_constants_dirty and self._runtime_settings_controller is not None:
+                self._recompute_and_refresh()
 
     def _on_style_changed(self) -> None:
         # Preset/font change: regenerate stylesheet at the current scale and

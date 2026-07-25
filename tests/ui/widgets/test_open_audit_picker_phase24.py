@@ -23,6 +23,9 @@ def test_picker_table_grouping(qtbot):
         feeder_setuptime=None,
         smt_runtime=None,
         tht_runtime=None,
+        aoi_runtime=None,
+        ops_runtime=None,
+        shipping_runtime=None,
         start_by=None
     )
     

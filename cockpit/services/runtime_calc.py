@@ -23,6 +23,11 @@ class RuntimeInputs:
     is_clean_process: bool = False
 
 @dataclass(frozen=True)
+class RecomputeSummary:
+    attempted: int
+    failed: int
+
+@dataclass(frozen=True)
 class RuntimeResults:
     feeder: float
     smt: float
@@ -121,6 +126,24 @@ class RuntimeCalcService:
             is_class_3=audit.is_class_3,
             is_clean_process=audit.is_clean_process,
         )
+
+    def recompute_all(self) -> RecomputeSummary:
+        attempted = 0
+        failed = 0
+        try:
+            audit_ids = self._audit_repo.all_active_ids()
+        except Exception as enumerate_error:
+            logger.error("recompute_all: could not enumerate audits: %s", enumerate_error)
+            return RecomputeSummary(attempted=0, failed=0)
+            
+        for audit_id in audit_ids:
+            attempted += 1
+            try:
+                self.persist(audit_id)
+            except Exception as persist_error:
+                failed += 1
+                logger.error("recompute_all: audit %s failed: %s", audit_id, persist_error)
+        return RecomputeSummary(attempted=attempted, failed=failed)
 
     def persist(self, audit_id: int, known_pdf_page_count: Optional[int] = None) -> None:
         inputs = self.gather_inputs(audit_id, known_pdf_page_count)

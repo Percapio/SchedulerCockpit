@@ -129,6 +129,7 @@ def main() -> None:
         app=app,
         settings=settings,
         style_controller=style_controller,
+        runtime_settings_controller=runtime_settings_controller,
         bootstrapped_app=bootstrapped,
         audit_read_svc=bootstrapped.audit_read_svc,
         checklist_svc=bootstrapped.checklist_svc,

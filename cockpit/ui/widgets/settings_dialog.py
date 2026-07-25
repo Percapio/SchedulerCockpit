@@ -3,20 +3,45 @@
 import datetime
 import logging
 import pathlib
+from dataclasses import dataclass
+from functools import partial
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QHBoxLayout, QComboBox, QFontComboBox,
-    QSpinBox, QPushButton, QLabel, QFileDialog, QMessageBox, QWidget
+    QSpinBox, QDoubleSpinBox, QGroupBox, QPushButton, QLabel, QFileDialog, QMessageBox, QWidget
 )
 from PyQt6.QtGui import QFont
 
 from cockpit.ui import facelift
-from cockpit.ui.ui_prefs import StyleController, export_diagnostics
+from cockpit.ui.ui_prefs import StyleController, export_diagnostics, RuntimeCalcSettingsController
 from cockpit.ui.font_scale_controller import FontScaleController
 
 logger = logging.getLogger(__name__)
 
 _PRESET_LABELS = {facelift.DARK: "Dark", facelift.LIGHT: "Light"}
+
+@dataclass(frozen=True)
+class FieldSpec:
+    label: str
+    min: float
+    max: float
+    step: float
+    decimals: int
+    suffix: str
+
+_RUNTIME_FIELD_SPECS: tuple[tuple[str, FieldSpec], ...] = (
+    ("smt_placement_time_min",       FieldSpec("SMT placement time",             0.001,  1.0,    0.001,  3, " min")),
+    ("tht_placement_time_min",       FieldSpec("THT placement time",             0.01,   5.0,    0.01,   2, " min")),
+    ("aoi_inspection_time_hr",       FieldSpec("AOI inspection time",            0.0001, 0.01,   0.0001, 4, " hr")),
+    ("class_3_multiplier_aoi",       FieldSpec("Class 3 multiplier (AOI)",       1.0,    3.0,    0.05,   2, "×")),
+    ("class_3_multiplier_tht",       FieldSpec("Class 3 multiplier (THT)",       1.0,    3.0,    0.05,   2, "×")),
+    ("clean_process_multiplier_tht", FieldSpec("Clean-process multiplier (THT)", 1.0,    3.0,    0.05,   2, "×")),
+    ("clean_process_multiplier_ops", FieldSpec("Clean-process multiplier (OPS)", 1.0,    3.0,    0.05,   2, "×")),
+    ("shipping_flat_hours",          FieldSpec("Shipping setup (flat)",          0.0,    40.0,   0.5,    1, " hr")),
+    ("shipping_boards_per_hour",     FieldSpec("Shipping rate",                  1.0,    1000.0, 10.0,   0, "/hr")),
+)
+
+
 
 
 class SettingsDialog(QDialog):
@@ -29,6 +54,7 @@ class SettingsDialog(QDialog):
         self,
         style_controller: StyleController,
         font_scale_controller: FontScaleController,
+        runtime_settings_controller: RuntimeCalcSettingsController | None,
         config,
         parent: QWidget | None = None,
     ) -> None:
@@ -69,6 +95,11 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(form)
         layout.addSpacing(12)
+
+        if runtime_settings_controller is not None:
+            calc_group = self._build_calculation_settings(runtime_settings_controller)
+            layout.addWidget(calc_group)
+            layout.addSpacing(12)
 
         diag_label = QLabel("Trouble? Package the logs for the development team:")
         diag_label.setWordWrap(True)
@@ -120,3 +151,22 @@ class SettingsDialog(QDialog):
             self, "Diagnostics exported",
             f"Packaged {len(archived)} file(s) into:\n{target}"
         )
+
+    def _build_calculation_settings(self, controller: RuntimeCalcSettingsController) -> QGroupBox:
+        current_constants = controller.constants()
+        group = QGroupBox("Calculation Settings")
+        form = QFormLayout(group)
+        for field_name, spec in _RUNTIME_FIELD_SPECS:
+            spin = QDoubleSpinBox()
+            spin.setRange(spec.min, spec.max)
+            spin.setSingleStep(spec.step)
+            spin.setDecimals(spec.decimals)
+            spin.setSuffix(spec.suffix)
+            spin.valueChanged.connect(partial(controller.set_value, field_name))
+            spin.blockSignals(True)
+            spin.setValue(getattr(current_constants, field_name))
+            spin.blockSignals(False)
+            if field_name == "clean_process_multiplier_ops":
+                spin.setToolTip("Applies once OPS is computed (a later phase)")
+            form.addRow(spec.label + ":", spin)
+        return group

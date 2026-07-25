@@ -184,6 +184,11 @@ class AuditRepository:
         cur = self.conn.cursor()
         cur.execute("DELETE FROM active_audits WHERE id = ?", (audit_id,))
 
+    def all_active_ids(self) -> list[int]:
+        cur = self.conn.cursor()
+        cur.execute("SELECT id FROM active_audits")
+        return [row["id"] for row in cur.fetchall()]
+
     def list_open(self) -> list[ActiveAudit]:
         cur = self.conn.cursor()
         cur.execute(

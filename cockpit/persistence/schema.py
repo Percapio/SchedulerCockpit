@@ -8,6 +8,7 @@ from .clock import utcnow
 from .errors import SchemaInitializationError, SchemaMismatch, BackfillSourceMissing, PersistenceError
 from ..protocols import ParserRegistry
 from ..ingestion.errors import MalformedBomError
+from .traveler_flags import is_class_3, is_clean_process
 
 logger = logging.getLogger(__name__)
 
@@ -473,6 +474,76 @@ def migrate_to_v9(conn: sqlite3.Connection) -> bool:
         cur.execute("ROLLBACK")
         raise
 
+SCHEMA_V10_DDL_AOI_RUNTIME: str = "ALTER TABLE active_audits ADD COLUMN aoi_runtime REAL NULL"
+SCHEMA_V10_DDL_OPS_RUNTIME: str = "ALTER TABLE active_audits ADD COLUMN ops_runtime REAL NULL"
+SCHEMA_V10_DDL_SHIPPING_RUNTIME: str = "ALTER TABLE active_audits ADD COLUMN shipping_runtime REAL NULL"
+SCHEMA_V10_DDL_IS_CLASS_3: str = "ALTER TABLE active_audits ADD COLUMN is_class_3 INTEGER NOT NULL DEFAULT 0"
+SCHEMA_V10_DDL_IS_CLEAN_PROCESS: str = "ALTER TABLE active_audits ADD COLUMN is_clean_process INTEGER NOT NULL DEFAULT 0"
+
+def migrate_to_v10(conn: sqlite3.Connection) -> bool:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=9)
+        
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=9)
+        
+    current_version = row["version"]
+    if current_version >= 10:
+        return False
+    if current_version < 9:
+        raise SchemaMismatch(found_version=current_version, expected_version=9)
+        
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        for ddl in [
+            SCHEMA_V10_DDL_AOI_RUNTIME,
+            SCHEMA_V10_DDL_OPS_RUNTIME,
+            SCHEMA_V10_DDL_SHIPPING_RUNTIME,
+            SCHEMA_V10_DDL_IS_CLASS_3,
+            SCHEMA_V10_DDL_IS_CLEAN_PROCESS,
+        ]:
+            try:
+                cur.execute(ddl)
+            except sqlite3.OperationalError as add_column_error:
+                if "duplicate column name" not in str(add_column_error):
+                    raise SchemaInitializationError(statement="v10 DDL", cause=add_column_error)
+                    
+        cur.execute("SELECT id, traveler_metadata FROM active_audits")
+        for audit_row in cur.fetchall():
+            raw_metadata = audit_row["traveler_metadata"]
+            if isinstance(raw_metadata, str):
+                try:
+                    traveler_metadata = json.loads(raw_metadata)
+                except json.JSONDecodeError as parse_error:
+                    raise SchemaInitializationError(statement="v10 traveler_metadata parse", cause=parse_error)
+            else:
+                traveler_metadata = raw_metadata
+                
+            cur.execute(
+                "UPDATE active_audits SET is_class_3 = ?, is_clean_process = ? WHERE id = ?",
+                (
+                    1 if is_class_3(traveler_metadata) else 0,
+                    1 if is_clean_process(traveler_metadata) else 0,
+                    audit_row["id"],
+                ),
+            )
+            
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 10, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return False
+    except Exception:
+        cur.execute("ROLLBACK")
+        raise
+
+
 def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     migrate_to_v1(conn)
     migrate_to_v2(conn)
@@ -483,6 +554,7 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     v7_migrated = migrate_to_v7(conn)
     v8_migrated = migrate_to_v8(conn)
     v9_migrated = migrate_to_v9(conn)
+    migrate_to_v10(conn)
     return v7_migrated or v8_migrated or v9_migrated
 
 SCHEMA_V5_DDL_DROP_SHIP_DATE: str = """

@@ -17,6 +17,7 @@ from ..types import ActiveAudit, ActiveAuditDraft, AuditStatus, SourceFileCatego
 
 from .bom_components import AuditBomComponentRepository
 from .pdf_coords import PdfComponentCoordRepository
+from ..traveler_flags import is_class_3, is_clean_process
 import dataclasses
 
 _ACTIVE_AUDIT_FIELDS = frozenset(f.name for f in dataclasses.fields(ActiveAudit))
@@ -53,8 +54,9 @@ class AuditRepository:
                 """
                 INSERT INTO active_audits (
                     part_number, schedule_job_id, work_order_ref, split_suffix,
-                    quantity, status, traveler_metadata, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    quantity, status, traveler_metadata, created_at, updated_at,
+                    is_class_3, is_clean_process
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft.part_number,
@@ -65,7 +67,9 @@ class AuditRepository:
                     AuditStatus.NOT_CLEAR.value,
                     traveler_json,
                     now_iso,
-                    now_iso
+                    now_iso,
+                    1 if is_class_3(draft.traveler_metadata) else 0,
+                    1 if is_clean_process(draft.traveler_metadata) else 0
                 )
             )
         except sqlite3.IntegrityError as e:
@@ -164,7 +168,15 @@ class AuditRepository:
             raise InvalidArgumentError("payload", payload, "Must be JSON serializable")
 
         cur = self.conn.cursor()
-        cur.execute("UPDATE active_audits SET traveler_metadata = ? WHERE id = ?", (traveler_json, audit_id))
+        cur.execute(
+            "UPDATE active_audits SET traveler_metadata = ?, is_class_3 = ?, is_clean_process = ? WHERE id = ?",
+            (
+                traveler_json,
+                1 if is_class_3(payload) else 0,
+                1 if is_clean_process(payload) else 0,
+                audit_id
+            )
+        )
         if cur.rowcount == 0:
             raise AuditNotFound(audit_id)
 
@@ -259,8 +271,9 @@ class AuditRepository:
                 """
                 INSERT INTO active_audits (
                     part_number, schedule_job_id, work_order_ref, split_suffix,
-                    quantity, status, traveler_metadata, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    quantity, status, traveler_metadata, created_at, updated_at,
+                    is_class_3, is_clean_process
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     source["part_number"],
@@ -271,7 +284,9 @@ class AuditRepository:
                     AuditStatus.NOT_CLEAR.value,
                     json.dumps(source["traveler_metadata"]) if source["traveler_metadata"] is not None else None,
                     now_iso,
-                    now_iso
+                    now_iso,
+                    1 if is_class_3(source["traveler_metadata"]) else 0,
+                    1 if is_clean_process(source["traveler_metadata"]) else 0
                 )
             )
         except sqlite3.IntegrityError as e:

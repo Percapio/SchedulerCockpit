@@ -53,6 +53,11 @@ class ActiveAudit:
     feeder_setuptime: float | None
     smt_runtime: float | None
     tht_runtime: float | None
+    aoi_runtime: float | None
+    ops_runtime: float | None
+    shipping_runtime: float | None
+    is_class_3: bool
+    is_clean_process: bool
 
 
 @dataclass(frozen=True)

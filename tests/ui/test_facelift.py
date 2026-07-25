@@ -9,6 +9,16 @@ def test_facelift_attention_color():
     set_active_preset(LIGHT)
     assert attention_color() == QColor("#E65100")
 
+def test_facelift_urgency_colors():
+    from cockpit.ui.facelift import overdue_color, due_soon_color, set_active_preset, DARK, LIGHT
+    set_active_preset(DARK)
+    assert overdue_color() == QColor("#FF5C5C")
+    assert due_soon_color() == QColor("#FFC542")
+    
+    set_active_preset(LIGHT)
+    assert overdue_color() == QColor("#C62828")
+    assert due_soon_color() == QColor("#B26A00")
+
 def test_facelift_semantic_colors():
     from cockpit.ui.facelift import list_column_color, set_active_preset, DARK, LIGHT
     

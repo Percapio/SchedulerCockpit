@@ -7,6 +7,7 @@ from typing import Any, Sequence
 import pathlib
 
 from cockpit.persistence.types import AuditStatus
+from cockpit.services.date_urgency import DateUrgency
 
 
 class ChecklistRowKind(StrEnum):
@@ -231,6 +232,8 @@ class OpenAuditDigest:
     is_itar: bool = False
     is_labeled: bool = False
     are_photos_uploaded: bool = False
+    start_by_urgency: DateUrgency = DateUrgency.COMFORTABLE
+    ship_urgency: DateUrgency = DateUrgency.COMFORTABLE
 
 
 import pathlib

@@ -8,6 +8,7 @@ from datetime import date, timedelta
 import math
 from cockpit.services.repeat import derive_repeat
 from cockpit.services.itar import classification_display, is_itar
+from cockpit.services.date_urgency import classify_urgency
 
 def start_by(ship_date: date | None, total_runtime_hours: float | None, holidays: set[date]) -> date | None:
     if ship_date is None or total_runtime_hours is None:
@@ -36,6 +37,7 @@ class AuditReadService:
         audits = self._audit_repo.list_open()
         
         holidays = self._holiday_svc.list_holidays() if self._holiday_svc else set()
+        today_val = date.today()
         
         digests = []
         for a in audits:
@@ -61,6 +63,8 @@ class AuditReadService:
                 )
                 
             start_by_val = start_by(ship_date_obj, total_runtime, holidays)
+            start_by_urgency = classify_urgency(start_by_val, today_val, holidays)
+            ship_urgency = classify_urgency(ship_date_obj, today_val, holidays)
             
             digests.append(OpenAuditDigest(
                 audit_id=a.id,
@@ -88,6 +92,8 @@ class AuditReadService:
                 is_itar=is_itar_flag,
                 is_labeled=a.is_labeled,
                 are_photos_uploaded=a.are_photos_uploaded,
+                start_by_urgency=start_by_urgency,
+                ship_urgency=ship_urgency,
             ))
 
         return digests

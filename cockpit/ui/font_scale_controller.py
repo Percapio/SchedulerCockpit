@@ -1,6 +1,6 @@
 from typing import Callable
 
-from PyQt6.QtCore import QObject, pyqtSignal, QSettings
+from PyQt6.QtCore import QObject, pyqtSignal, QSettings, QTimer
 from PyQt6.QtWidgets import QApplication
 
 from cockpit.ui.theme import Theme, ConfigurationError
@@ -52,27 +52,48 @@ class FontScaleController(QObject):
                 self._settings.setValue("audit_view/font_scale_pt", pt)
                 
         self._current_pt = pt
+        self._restyle_running: bool = False
+        self._restyle_timer: QTimer = QTimer(self)
+        self._restyle_timer.setSingleShot(True)
+        self._restyle_timer.timeout.connect(self._run_restyle)
 
     def current_pt(self) -> int:
         return self._current_pt
 
+    def set_pt(self, pt: int) -> None:
+        new_pt: int = self._clamp(pt)
+        if new_pt == self._current_pt:
+            return
+        self._current_pt = new_pt
+        self._settings.setValue("audit_view/font_scale_pt", new_pt)
+        self.scale_changed.emit(new_pt)
+        self._schedule_restyle()
+
     def request_delta(self, delta_steps: int) -> None:
         """Move the current scale by delta_steps steps (NOT pt)."""
-        candidate_pt = self._current_pt + delta_steps * self._bounds.step_pt
-        new_pt = self._clamp(candidate_pt)
-        if new_pt != self._current_pt:
-            self._apply(new_pt)
+        self.set_pt(self._current_pt + delta_steps * self._bounds.step_pt)
 
     def _clamp(self, candidate_pt: int) -> int:
         return max(self._bounds.min_pt, min(self._bounds.max_pt, candidate_pt))
 
-    def _apply(self, new_pt: int) -> None:
-        from PyQt6.QtCore import QTimer
-        self._current_pt = new_pt
-        self._settings.setValue("audit_view/font_scale_pt", new_pt)
-        self.scale_changed.emit(new_pt)
-        QTimer.singleShot(0, lambda: self._app.setStyleSheet(self._composer(new_pt)))
+    def _schedule_restyle(self) -> None:
+        if self._restyle_running or self._restyle_timer.isActive():
+            return
+        self._restyle_timer.start(0)
+
+    def _run_restyle(self) -> None:
+        if self._restyle_running:
+            return
+        self._restyle_running = True
+        applied_pt: int = self._current_pt
+        try:
+            self._app.setStyleSheet(self._composer(applied_pt))
+        finally:
+            self._restyle_running = False
+        if self._current_pt != applied_pt:
+            self._schedule_restyle()
 
     def reapply(self) -> None:
         """Regenerate the stylesheet at the current scale (e.g. preset change)."""
-        self._app.setStyleSheet(self._composer(self._current_pt))
+        self._restyle_timer.stop()
+        self._run_restyle()

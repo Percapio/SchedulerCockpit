@@ -1,6 +1,7 @@
 """Main window."""
 
 import pathlib
+from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThread, QSettings, QTimer, QEvent
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox, QApplication
@@ -75,7 +76,7 @@ class MainWindow(QMainWindow):
         self.progress_view.cancel_requested.connect(self._on_cancel_requested)
         self.stacked.addWidget(self.progress_view)
         
-        self.picker = OpenAuditPicker()
+        self.picker = OpenAuditPicker(settings=settings)
         self.picker.audit_selected.connect(self._on_picker_audit_selected)
         self.picker.complete_requested.connect(self._on_complete_requested)
         self.picker.status_change_requested.connect(self._on_status_change_requested)
@@ -155,6 +156,11 @@ class MainWindow(QMainWindow):
         self._app.installEventFilter(self)
         self._idle_timer.start()
         
+        self._midnight_timer = QTimer(self)
+        self._midnight_timer.setSingleShot(True)
+        self._midnight_timer.timeout.connect(self._on_midnight_timer)
+        self._schedule_midnight_timer()
+        
     def _on_runtime_constants_changed(self) -> None:
         self._runtime_constants_dirty = True
 
@@ -198,6 +204,16 @@ class MainWindow(QMainWindow):
     def _run_idle_maintenance(self) -> None:
         from cockpit.persistence.connection import run_idle_maintenance
         run_idle_maintenance(self._bootstrapped.conn)
+
+    def _schedule_midnight_timer(self) -> None:
+        now = datetime.now()
+        tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        ms = max(1000, int((tomorrow - now).total_seconds() * 1000))
+        self._midnight_timer.start(ms)
+
+    def _on_midnight_timer(self) -> None:
+        self._reload_list()
+        self._schedule_midnight_timer()
 
     def eventFilter(self, obj, event) -> bool:
         if event.type() in (

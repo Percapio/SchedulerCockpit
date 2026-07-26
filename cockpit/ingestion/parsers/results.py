@@ -5,6 +5,8 @@ from typing import Any, Literal
 
 from cockpit.persistence.types import ActiveAuditDraft
 
+HeaderLayout = Literal["canonical", "legacy"]
+
 
 @dataclass(frozen=True)
 class BomItem:
@@ -23,6 +25,7 @@ class BomResult:
     raw_row_count: int                  # total non-header rows scanned
     excluded_dni_count: int             # rows that were filtered as DNI
     excluded_pcb_count: int             # rows that were excluded as PCBs
+    header_layout: HeaderLayout         # "canonical" (all optionals present) or "legacy"
 
 
 @dataclass(frozen=True)

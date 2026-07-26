@@ -1,12 +1,15 @@
 """Audit BOM parser."""
 
+import logging
 import pathlib
 import re
 import time
 import zipfile
 
 import openpyxl
-from typing import Any
+from typing import Any, Final
+
+logger = logging.getLogger(__name__)
 
 try:
     # openpyxl >= 3.1: word-level formatting survives as rich-text runs
@@ -17,7 +20,7 @@ except ImportError:  # pragma: no cover - legacy openpyxl fallback
 
 from ..errors import MalformedBomError
 from ..filename_rules import derive_part_number_from_filename
-from .results import BomItem, BomResult
+from .results import BomItem, BomResult, HeaderLayout
 
 
 _ANNOTATION_RE = re.compile(
@@ -29,11 +32,50 @@ _ANNOTATION_RE = re.compile(
 
 REFDES_TOKEN_REGEX = re.compile(r"^[A-Za-z0-9_.+-]+$")
 
-CANONICAL_HEADER = [
-    "Find#", "PartNum", "Count", "MSL level", "Date code", "Baked date", 
-    "Ref_Des", "Package", "Description", "SMT/THT", "Qty Need", "Qty On hand", 
-    "Qty short", "comment"
+REQUIRED_HEADER: Final[list[str]] = [
+    "Find#", "PartNum", "Count",
+    "Ref_Des", "Package", "Description", "SMT/THT",
+    "Qty Need", "Qty On hand", "Qty short", "comment",
 ]
+
+OPTIONAL_HEADER: Final[frozenset[str]] = frozenset(
+    {"MSL level", "Date code", "Baked date"}
+)
+
+
+def validate_header(
+    observed_labels: list[str],
+    path: pathlib.Path,
+) -> None:
+    if not any(observed_labels):
+        raise MalformedBomError(path, "EMPTY_HEADER", {"observed": observed_labels})
+
+    trimmed_observed = list(observed_labels)
+    while trimmed_observed and trimmed_observed[-1] == "":
+        trimmed_observed.pop()
+
+    valid_labels = set(REQUIRED_HEADER) | OPTIONAL_HEADER
+    seen = set()
+    for label in trimmed_observed:
+        if label in valid_labels:
+            if label in seen:
+                raise MalformedBomError(path, "DUPLICATE_HEADER", {
+                    "observed": trimmed_observed,
+                    "label": label,
+                })
+            seen.add(label)
+
+    remainder = [label for label in trimmed_observed if label not in OPTIONAL_HEADER]
+    if remainder != REQUIRED_HEADER:
+        raise MalformedBomError(path, "HEADER_DRIFT", {
+            "required": REQUIRED_HEADER,
+            "optional_ignored": sorted(OPTIONAL_HEADER),
+            "observed": trimmed_observed,
+        })
+
+
+def resolve_column_index(observed_labels: list[str], name: str) -> int:
+    return observed_labels.index(name)
 
 
 def normalize_sheet_label(label: str) -> str:
@@ -199,17 +241,23 @@ def parse(path: pathlib.Path) -> BomResult:
         
         # Check header
         header_row = [cell.value for cell in ws[1]]
-        # Pad or trim header to match canonical length for comparison
-        observed_header = [str(v).strip() if v is not None else "" for v in header_row[:len(CANONICAL_HEADER)]]
-        while len(observed_header) < len(CANONICAL_HEADER):
-            observed_header.append("")
-            
-        if observed_header != CANONICAL_HEADER:
-            raise MalformedBomError(path, "HEADER_DRIFT", {
-                "expected": CANONICAL_HEADER, 
-                "observed": observed_header
-            })
-            
+        observed_labels = [str(v).strip() if v is not None else "" for v in header_row]
+        validate_header(observed_labels, path)
+
+        column_index: dict[str, int] = {
+            name: resolve_column_index(observed_labels, name)
+            for name in REQUIRED_HEADER
+        }
+        find_col = column_index["Find#"]
+        part_col = column_index["PartNum"]
+        ref_des_col = column_index["Ref_Des"]
+        description_col = column_index["Description"]
+        mount_col = column_index["SMT/THT"]
+
+        min_row_width: int = max(column_index.values()) + 1
+        present_optionals = OPTIONAL_HEADER.intersection(observed_labels)
+        header_layout: HeaderLayout = "canonical" if len(present_optionals) == len(OPTIONAL_HEADER) else "legacy"
+
         items = []
         raw_row_count = 0
         excluded_dni_count = 0
@@ -227,10 +275,10 @@ def parse(path: pathlib.Path) -> BomResult:
                 time.sleep(0)
 
             row = [c.value for c in row_cells]
-            if len(row) < 10:
+            if len(row) < min_row_width:
                 continue
 
-            flag = row[9]  # 0-indexed, so 9 is the 10th column ("SMT/THT")
+            flag = row[mount_col]
             if flag is None:
                 continue
                 
@@ -242,7 +290,7 @@ def parse(path: pathlib.Path) -> BomResult:
             else:
                 continue
                 
-            part_number = str(row[1]).strip() if len(row) > 1 and row[1] is not None else ""
+            part_number = str(row[part_col]).strip() if row[part_col] is not None else ""
             if not part_number:
                 continue
                 
@@ -253,12 +301,12 @@ def parse(path: pathlib.Path) -> BomResult:
                 excluded_pcb_count += 1
                 continue
                 
-            find_number = coerce_find_number(row[0], path, part_number)
+            find_number = coerce_find_number(row[find_col], path, part_number)
                 
             # Phase 32 (2.1): strikethrough-aware extraction for Ref_Des and
             # Description; struck words are silently dropped.
-            description = _visible_cell_text(row_cells[8]) if len(row_cells) > 8 else None
-            ref_des_raw = _visible_cell_text(row_cells[6]) if len(row_cells) > 6 else None
+            description = _visible_cell_text(row_cells[description_col]) if len(row_cells) > description_col else None
+            ref_des_raw = _visible_cell_text(row_cells[ref_des_col]) if len(row_cells) > ref_des_col else None
             
             try:
                 ref_des_list = _split_ref_des(ref_des_raw)
@@ -281,12 +329,14 @@ def parse(path: pathlib.Path) -> BomResult:
         if duplicate_mpns:
             raise MalformedBomError(path, "DUPLICATE_MPN", {"duplicates": list(duplicate_mpns)})
             
+        logger.debug("Audit BOM header layout resolved: %s (%s)", header_layout, path.name)
         return BomResult(
             declared_part_number=declared_part_number,
             items=items,
             raw_row_count=raw_row_count,
             excluded_dni_count=excluded_dni_count,
-            excluded_pcb_count=excluded_pcb_count
+            excluded_pcb_count=excluded_pcb_count,
+            header_layout=header_layout,
         )
     finally:
         wb.close()

@@ -51,10 +51,13 @@ class ProgressView(QWidget):
         self.cancel_button.setEnabled(False)
         self.cancel_requested.emit()
 
-    def advance(self, stage: ProgressStage) -> None:
+    def advance(self, stage: ProgressStage, annotation: str | None = None) -> None:
         """Mark stage as completed."""
         if stage in self.stage_labels:
             icon_label, text_label = self.stage_labels[stage]
+            if annotation is not None:
+                base_title = stage.value.replace("_", " ").title()
+                text_label.setText(f"{base_title} — {annotation}")
             icon_label.setText("✓")
             icon_label.setProperty("status", "completed")
             text_label.setProperty("status", "completed")
@@ -65,8 +68,9 @@ class ProgressView(QWidget):
 
     def reset(self) -> None:
         """Reset all stages to pending."""
-        for icon_label, text_label in self.stage_labels.values():
+        for stage, (icon_label, text_label) in self.stage_labels.items():
             icon_label.setText("○")
+            text_label.setText(stage.value.replace("_", " ").title())
             icon_label.setProperty("status", "pending")
             text_label.setProperty("status", "pending")
             icon_label.style().unpolish(icon_label)

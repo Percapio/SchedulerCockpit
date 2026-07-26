@@ -119,3 +119,21 @@ def test_successful_ingestion(qtbot, main_window):
     assert main_window.toast.isVisible()
     assert main_window.stacked.currentWidget() == main_window.dashboard
 
+
+from cockpit.ingestion.progress import ProgressEvent, ProgressStage
+from cockpit.ui.workers.ingestion_worker import IngestionWorker
+
+def test_ingestion_worker_emits_header_layout_annotation(qtbot):
+    worker = IngestionWorker(None, [])
+    emitted = []
+    worker.progress_signal.connect(lambda stage, ann: emitted.append((stage, ann)))
+
+    worker._on_progress(ProgressEvent(ProgressStage.BOM_PARSED, {"header_layout": "legacy"}))
+    worker._on_progress(ProgressEvent(ProgressStage.BOM_PARSED, {"header_layout": "canonical"}))
+    worker._on_progress(ProgressEvent(ProgressStage.GATEKEEPER_PASSED, None))
+
+    assert emitted == [
+        ("bom_parsed", "legacy layout"),
+        ("bom_parsed", "canonical layout"),
+        ("gatekeeper_passed", None),
+    ]

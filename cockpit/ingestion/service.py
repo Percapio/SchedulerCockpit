@@ -139,7 +139,7 @@ class IngestionService:
         pdf_result = None
         try:
             bom_result = audit_bom.parse(stored_bom)
-            _emit(ProgressStage.BOM_PARSED)
+            _emit(ProgressStage.BOM_PARSED, {"header_layout": getattr(bom_result, "header_layout", "canonical")})
 
             eco_result = eco_build_notes.parse(stored_notes)
             _emit(ProgressStage.ECO_PARSED, {"eco_item_count": len(eco_result.items) if eco_result.items else 0})

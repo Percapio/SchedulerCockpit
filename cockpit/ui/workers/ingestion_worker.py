@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from cockpit.ingestion.service import IngestionService
-from cockpit.ingestion.progress import ProgressEvent, IngestionCancelled
+from cockpit.ingestion.progress import ProgressEvent, ProgressStage, IngestionCancelled
 from cockpit.ui.error_messages import render, FailurePayload
 
 
@@ -24,7 +24,7 @@ class AuditSummary:
 
 
 class IngestionWorker(QObject):
-    progress_signal = pyqtSignal(str)
+    progress_signal = pyqtSignal(str, object)
     succeeded_signal = pyqtSignal(object)
     failed_signal = pyqtSignal(object)
     cancelled_signal = pyqtSignal()
@@ -76,4 +76,12 @@ class IngestionWorker(QObject):
         if event.detail:
             self._last_detail.update(event.detail)
             
-        self.progress_signal.emit(event.stage.value)
+        annotation: str | None = None
+        if event.stage == ProgressStage.BOM_PARSED and event.detail and "header_layout" in event.detail:
+            layout_val = event.detail["header_layout"]
+            if layout_val == "canonical":
+                annotation = "canonical layout"
+            elif layout_val == "legacy":
+                annotation = "legacy layout"
+
+        self.progress_signal.emit(event.stage.value, annotation)

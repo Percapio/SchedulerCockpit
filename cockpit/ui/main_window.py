@@ -355,10 +355,10 @@ class MainWindow(QMainWindow):
         if self._worker:
             self._worker.request_cancel()
 
-    def _on_progress(self, stage_str: str) -> None:
+    def _on_progress(self, stage_str: str, annotation: str | None = None) -> None:
         try:
             stage = ProgressStage(stage_str)
-            self.progress_view.advance(stage)
+            self.progress_view.advance(stage, annotation)
         except ValueError:
             logger.exception('Exception caught in main_window')
             pass

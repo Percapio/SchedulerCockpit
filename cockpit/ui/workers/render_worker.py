@@ -13,6 +13,7 @@ class RenderJob:
     page_indices: tuple[int, ...]
     target_pixel_height: int
     want_dimensions: bool
+    is_reference: bool = False
 
 @dataclass(frozen=True)
 class RenderedImage:
@@ -59,7 +60,7 @@ class RenderWorker(QObject):
         try:
             dims = None
             if job.want_dimensions:
-                dims = self.pdf_renderer.get_page_dimensions(job.pdf_path)
+                dims = self.pdf_renderer.get_page_dimensions(job.pdf_path, allow_multipage=job.is_reference)
 
             pages = self.pdf_renderer.render_pages_png(
                 job.pdf_path, list(job.page_indices), job.target_pixel_height

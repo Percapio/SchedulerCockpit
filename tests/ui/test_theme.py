@@ -502,3 +502,9 @@ def test_ThemeLoader_RenderMultiplierEqualsOne_LoadsSuccessfully(valid_theme_dat
     valid_theme_data["canvas"]["zoom"]["render_multiplier"] = 1.0
     valid_theme_data["canvas"]["zoom"]["max_scale"] = 8.0
     ThemeLoader.validate_structural_invariants(valid_theme_data)
+
+def test_Theme_PageSwitcherSegmentedMax_ReturnsConfiguredValue():
+    theme = Theme.for_testing(canvas={"page_switcher_segmented_max": 6})
+    assert theme.page_switcher_segmented_max() == 6
+    theme_default = Theme.for_testing()
+    assert theme_default.page_switcher_segmented_max() == 4

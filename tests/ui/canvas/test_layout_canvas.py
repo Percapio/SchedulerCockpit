@@ -255,10 +255,23 @@ def test_reference_mode_disables_selection_and_clicks(canvas, qtbot):
         audit_id=1, pdf_source_file_id=2, pdf_path=pathlib.Path("fake.pdf"), page_count=1, page_dimensions=((1000.0, 1000.0),), is_reference=True
     )
 
-    # set_selection should ignore non-clear intents in reference mode
+    resolved = ResolvedSelection(
+        kind=ResolutionKind.SINGLE_REFDES,
+        mpn="R123",
+        mpn_set=None,
+        ref_des_list=("R1",),
+        coords=(HighlightCoord("R1", 0, 0.1, 0.1, 0.2, 0.2),)
+    )
+    canvas._layout_query_service.resolve_selection.return_value = resolved
+
+    # set_selection should resolve and store intent/resolved silently without visual highlights in reference mode
     intent = SelectionIntent("MPN1", SelectionKind.BOM_MPN)
     canvas.set_selection(intent)
-    assert canvas._last_intent is None
+    assert canvas._last_intent == intent
+    assert canvas._last_resolved == resolved
+    assert not canvas._dim_item.isVisible()
+    assert all(not item.isVisible() for item in canvas._highlight_items)
+    assert canvas._hint_label.isHidden()
 
     # Mouse clicks should be ignored in reference mode
     clicked = False
@@ -293,3 +306,44 @@ def test_toggle_pdf_source(canvas, qtbot):
     assert canvas._pdf_toggle_btn.text() == "View Primary"
     assert canvas._build_context(canvas._secondary_pending, ((1000.0, 1000.0),)).is_reference is True
 
+
+def test_selection_in_reference_mode_applies_on_switch_to_primary(canvas, qtbot):
+    from cockpit.services.views import SelectionIntent, SelectionKind, ResolutionKind, ResolvedSelection, HighlightCoord, PendingPdf
+
+    canvas._current_audit_id = 1
+    canvas._primary_pending = PendingPdf(1, pathlib.Path("primary.pdf"))
+    canvas._secondary_pending = PendingPdf(2, pathlib.Path("secondary.pdf"))
+    
+    # Start in secondary mode
+    canvas._active_source = "secondary"
+    canvas._current_context = LayoutContext(
+        audit_id=1, pdf_source_file_id=2, pdf_path=pathlib.Path("secondary.pdf"), page_count=1, page_dimensions=((1000.0, 1000.0),), is_reference=True
+    )
+
+    resolved = ResolvedSelection(
+        kind=ResolutionKind.SINGLE_REFDES,
+        mpn="R123",
+        mpn_set=None,
+        ref_des_list=("R1",),
+        coords=(HighlightCoord("R1", 0, 0.1, 0.1, 0.2, 0.2),)
+    )
+    canvas._layout_query_service.resolve_selection.return_value = resolved
+
+    intent = SelectionIntent("MPN1", SelectionKind.BOM_MPN)
+    canvas.set_selection(intent)
+    
+    # In secondary mode, highlights are hidden
+    assert not canvas._dim_item.isVisible()
+    assert all(not item.isVisible() for item in canvas._highlight_items)
+
+    # Now switch back to primary mode
+    canvas._active_source = "primary"
+    canvas._current_context = LayoutContext(
+        audit_id=1, pdf_source_file_id=1, pdf_path=pathlib.Path("primary.pdf"), page_count=1, page_dimensions=((1000.0, 1000.0),), is_reference=False
+    )
+    canvas._apply_selection()
+
+    # Highlights should now appear on primary canvas
+    assert canvas._dim_item.isVisible()
+    assert len(canvas._highlight_items) >= 1
+    assert canvas._highlight_items[0].isVisible()

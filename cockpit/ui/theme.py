@@ -184,6 +184,9 @@ class Theme:
     def canvas_zoom_render_multiplier(self) -> float:
         return float(self._canvas['zoom']['render_multiplier'])
 
+    def page_switcher_segmented_max(self) -> int:
+        return int(self._canvas.get('page_switcher_segmented_max', 4))
+
     def bom_chip_flow_spacing(self) -> int:
         return int(self._bom_panel['chip']['flow_spacing_px'])
 

@@ -143,7 +143,7 @@ class LayoutCanvas(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
-        self._page_switcher = PageSwitcher()
+        self._page_switcher = PageSwitcher(self._theme)
         self._page_switcher.page_changed.connect(self._on_page_changed)
         self._page_switcher.hide()
         
@@ -216,6 +216,9 @@ class LayoutCanvas(QWidget):
     def current_render_height(self) -> int:
         return int(self._theme.canvas_zoom_render_multiplier() * self._graphics_view.viewport().height())
 
+    def _reference_source_active(self) -> bool:
+        return getattr(self, "_active_source", "primary") == "secondary"
+
     def _build_context(self, pending: PendingPdf, dims: tuple[tuple[float,float], ...]) -> LayoutContext:
         return LayoutContext(
             audit_id=self._current_audit_id,
@@ -223,7 +226,7 @@ class LayoutCanvas(QWidget):
             pdf_path=pending.path,
             page_count=len(dims),
             page_dimensions=dims,
-            is_reference=(getattr(self, "_active_source", "primary") == "secondary")
+            is_reference=self._reference_source_active()
         )
 
     def _submit_render(self, job: RenderJob) -> None:
@@ -277,7 +280,7 @@ class LayoutCanvas(QWidget):
         gen = self._render_epoch
         self.generation_bumped.emit(gen)
         self._show_spinner()
-        self._submit_render(RenderJob(gen, pending.path, (page_index,), self.current_render_height(), True))
+        self._submit_render(RenderJob(gen, pending.path, (page_index,), self.current_render_height(), True, is_reference=self._reference_source_active()))
 
     def _on_toggle_pdf_source(self) -> None:
         if self._active_source == "primary":
@@ -310,7 +313,7 @@ class LayoutCanvas(QWidget):
             
         if result.page_dimensions is not None:
             self._current_context = self._build_context(self._pending_pdf, result.page_dimensions)
-            self._page_switcher.set_page_count(self._current_context.page_count)
+            self._page_switcher.set_page_count(self._current_context.page_count, is_reference=self._reference_source_active())
             self._current_page_index = 0
             
         for ri in result.images:
@@ -338,7 +341,7 @@ class LayoutCanvas(QWidget):
                            if i != self._current_page_index
                            and (i not in self._pixmap_cache or self._pixmap_cache[i][0] != self.current_render_height()))
             if others:
-                self._submit_render(RenderJob(self._render_epoch, self._pending_pdf.path, others, self.current_render_height(), False))
+                self._submit_render(RenderJob(self._render_epoch, self._pending_pdf.path, others, self.current_render_height(), False, is_reference=self._reference_source_active()))
 
     def _on_render_error(self, failure: RenderFailure) -> None:
         if failure.generation != self._render_epoch:
@@ -372,7 +375,7 @@ class LayoutCanvas(QWidget):
             self.generation_bumped.emit(gen)
             self._show_spinner()
             if self._pending_pdf:
-                self._submit_render(RenderJob(gen, self._pending_pdf.path, (page_index,), self.current_render_height(), False))
+                self._submit_render(RenderJob(gen, self._pending_pdf.path, (page_index,), self.current_render_height(), False, is_reference=self._reference_source_active()))
 
     def _on_resize_debounced(self) -> None:
         if self._pending_pdf is None or self._stacked.currentWidget() != self._canvas_container:
@@ -382,7 +385,7 @@ class LayoutCanvas(QWidget):
         gen = self._render_epoch
         self.generation_bumped.emit(gen)
         self._show_spinner()
-        self._submit_render(RenderJob(gen, self._pending_pdf.path, (self._current_page_index,), self.current_render_height(), False))
+        self._submit_render(RenderJob(gen, self._pending_pdf.path, (self._current_page_index,), self.current_render_height(), False, is_reference=self._reference_source_active()))
 
 
     def resizeEvent(self, event: QResizeEvent) -> None:
@@ -456,7 +459,7 @@ class LayoutCanvas(QWidget):
         super().mouseDoubleClickEvent(event)
 
     def _on_graphics_view_mouse_press(self, event: QMouseEvent) -> None:
-        if getattr(self, "_active_source", "primary") == "secondary":
+        if self._reference_source_active():
             return
         if event.button() == Qt.MouseButton.LeftButton:
             if self._current_context is None or self._current_page_index is None:
@@ -495,8 +498,6 @@ class LayoutCanvas(QWidget):
             self._graphics_view.setDragMode(QGraphicsView.DragMode.NoDrag)
 
     def set_selection(self, intent: SelectionIntent) -> None:
-        if getattr(self, "_active_source", "primary") == "secondary" and intent.kind != SelectionKind.CLEAR:
-            return
         if intent.kind == SelectionKind.CLEAR:
             self._last_intent = None
             self._last_resolved = None
@@ -573,7 +574,7 @@ class LayoutCanvas(QWidget):
         return f"{prefix}: {n} of {n} footprints highlighted"
 
     def _apply_selection(self, clear: bool = False) -> None:
-        if getattr(self, "_active_source", "primary") == "secondary":
+        if self._reference_source_active():
             clear = True
         resolved = self._last_resolved
         if clear or resolved is None:

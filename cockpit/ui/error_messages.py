@@ -13,6 +13,7 @@ from cockpit.ingestion.errors import (
     MalformedTravelerError
 )
 from cockpit.services.completion import CleanupFailedError
+from cockpit.services.errors import PrintError
 
 logger = logging.getLogger(__name__)
 

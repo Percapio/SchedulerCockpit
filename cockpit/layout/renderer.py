@@ -26,6 +26,8 @@ class PdfRenderer:
     def get_page_dimensions(
         self,
         path: pathlib.Path,
+        *,
+        allow_multipage: bool = False,
     ) -> tuple[tuple[float, float], ...]:
         """Return per-page dimensions in PDF points (1 pt = 1/72 inch)."""
         try:
@@ -35,9 +37,13 @@ class PdfRenderer:
 
         try:
             page_count = len(doc)
-            if page_count not in {1, 2}:
-                # The spec dictates returning UNSUPPORTED_PAGE_COUNT if the page count is not 1 or 2
-                raise MalformedPdfError(path, "UNSUPPORTED_PAGE_COUNT", {"observed": page_count})
+            if allow_multipage:
+                if page_count < 1:
+                    raise MalformedPdfError(path, "UNSUPPORTED_PAGE_COUNT", {"observed": page_count})
+            else:
+                if page_count not in {1, 2}:
+                    # The spec dictates returning UNSUPPORTED_PAGE_COUNT if the page count is not 1 or 2
+                    raise MalformedPdfError(path, "UNSUPPORTED_PAGE_COUNT", {"observed": page_count})
 
             dimensions = []
             for i in range(page_count):

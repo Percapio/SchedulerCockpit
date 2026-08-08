@@ -41,7 +41,7 @@ class ChecklistRow(QFrame):
             )
             self.core = ComponentRowCore(fields, theme)
             self.core.mpn_label_clicked.connect(self._on_core_mpn_clicked)
-            self.core.refdes_chip_clicked.connect(lambda _: self.body_clicked.emit(self._row.key))
+            self.core.refdes_chip_clicked.connect(self._on_core_refdes_clicked)
             layout.addWidget(self.core, stretch=1)
         else:
             self.setProperty("class", "component-card checklist-row")
@@ -81,6 +81,9 @@ class ChecklistRow(QFrame):
 
     def _on_core_mpn_clicked(self, mpn: str) -> None:
         self.mpn_clicked.emit(self._row.key)
+
+    def _on_core_refdes_clicked(self, _: str) -> None:
+        self.body_clicked.emit(self._row.key)
 
     def _apply_view(self, view: ChecklistRowView) -> None:
         self._ignore_signals = True
@@ -132,18 +135,17 @@ class ChecklistRow(QFrame):
                 w.style().polish(w)
 
     def cleanup(self) -> None:
+        # core exists only on the THT variant; the notes variant builds labels.
         if self._row.key.kind == ChecklistRowKind.THT:
             self.core.cleanup()
-        
+
         try: self.checkbox.toggled.disconnect()
-        except Exception:
-            logger.exception('Exception caught in checklist_row')
+        except Exception: logger.debug("checkbox.toggled had no connections")
         try: self.toggle_requested.disconnect()
-        except Exception:
-            logger.exception('Exception caught in checklist_row')
+        except Exception: logger.debug("toggle_requested had no connections")
         try: self.body_clicked.disconnect()
-        except Exception:
-            logger.exception('Exception caught in checklist_row')
+        except Exception: logger.debug("body_clicked had no connections")
         try: self.mpn_clicked.disconnect()
-        except Exception:
-            logger.exception('Exception caught in checklist_row')
+        except Exception: logger.debug("mpn_clicked had no connections")
+        try: self.customContextMenuRequested.disconnect()
+        except Exception: logger.debug("customContextMenuRequested had no connections")

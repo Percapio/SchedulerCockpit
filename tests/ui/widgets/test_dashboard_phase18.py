@@ -8,6 +8,7 @@ from cockpit.services.completion import CompletionService
 from cockpit.ingestion.service import IngestionService
 from cockpit.services.views import ActiveAuditView
 from cockpit.persistence.types import AuditStatus
+from cockpit.ui.theme import Theme
 
 @pytest.fixture
 def dashboard(qtbot):
@@ -15,7 +16,9 @@ def dashboard(qtbot):
     splt = Mock(spec=AuditSplitService)
     comp = Mock(spec=CompletionService)
     ing = Mock(spec=IngestionService)
-    theme = Mock()
+    # A bare Mock returns Mocks for the layout tokens Dashboard passes straight
+    # into setMinimumHeight/setSizes, which reject non-ints.
+    theme = Theme.for_testing()
     rel = Mock()
     setb = Mock()
     d = Dashboard(chk, splt, comp, ing, rel, setb, theme)

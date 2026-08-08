@@ -45,6 +45,15 @@
     "progress_view": {
       "fill_rgb": "#FAFAFA",
       "text_rgb": "#000000"
+    },
+    "checklist": {
+      "min_height_px": 80
+    },
+    "splitter": {
+      "default_sizes": [600, 300]
+    },
+    "complete_button": {
+      "enable_debounce_ms": 500
     }
   },
   "canvas": {
@@ -75,6 +84,11 @@
     "hint_label": {
       "padding_px": 4,
       "border_width_px": 1
+    },
+    "render": {
+      "resize_debounce_ms": 200,
+      "max_cached_bytes": 402653184,
+      "prefetch_page_limit": 1
     }
   },
   "bom_panel": {

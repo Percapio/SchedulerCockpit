@@ -1,0 +1,288 @@
+{
+  "tree_revision": "optimize06",
+  "probe_implementation": "raster-page-cache",
+  "canvas_viewport_height": 1336,
+  "captured_at_utc": "2026-08-08T06:44:01.048666+00:00",
+  "cycles_requested": 6,
+  "samples": [
+    {
+      "cycle_index": 1,
+      "rss_bytes": 214024192,
+      "python_allocated_bytes": 192073216,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 369835200,
+        "resident_page_count": 5,
+        "highlight_pool_size": 70,
+        "probe_implementation": "raster-page-cache"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 0,
+        "resident_page_count": 0,
+        "highlight_pool_size": 0,
+        "probe_implementation": "raster-page-cache"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "live_counts_before_gc": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "render_jobs_observed": 11,
+      "quiescence_reached": true,
+      "exit_wall_ms": 335.6761932373047,
+      "canvas_viewport_height": 1336
+    },
+    {
+      "cycle_index": 2,
+      "rss_bytes": 210841600,
+      "python_allocated_bytes": 192186368,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 369835200,
+        "resident_page_count": 5,
+        "highlight_pool_size": 70,
+        "probe_implementation": "raster-page-cache"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 0,
+        "resident_page_count": 0,
+        "highlight_pool_size": 0,
+        "probe_implementation": "raster-page-cache"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "live_counts_before_gc": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "render_jobs_observed": 10,
+      "quiescence_reached": true,
+      "exit_wall_ms": 362.2429370880127,
+      "canvas_viewport_height": 1336
+    },
+    {
+      "cycle_index": 3,
+      "rss_bytes": 246054912,
+      "python_allocated_bytes": 192238592,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 369835200,
+        "resident_page_count": 5,
+        "highlight_pool_size": 70,
+        "probe_implementation": "raster-page-cache"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 0,
+        "resident_page_count": 0,
+        "highlight_pool_size": 0,
+        "probe_implementation": "raster-page-cache"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "live_counts_before_gc": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "render_jobs_observed": 10,
+      "quiescence_reached": true,
+      "exit_wall_ms": 394.55699920654297,
+      "canvas_viewport_height": 1336
+    },
+    {
+      "cycle_index": 4,
+      "rss_bytes": 248381440,
+      "python_allocated_bytes": 192296960,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 369835200,
+        "resident_page_count": 5,
+        "highlight_pool_size": 70,
+        "probe_implementation": "raster-page-cache"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 0,
+        "resident_page_count": 0,
+        "highlight_pool_size": 0,
+        "probe_implementation": "raster-page-cache"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "live_counts_before_gc": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "render_jobs_observed": 10,
+      "quiescence_reached": true,
+      "exit_wall_ms": 373.17490577697754,
+      "canvas_viewport_height": 1336
+    },
+    {
+      "cycle_index": 5,
+      "rss_bytes": 249524224,
+      "python_allocated_bytes": 192262656,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 369835200,
+        "resident_page_count": 5,
+        "highlight_pool_size": 70,
+        "probe_implementation": "raster-page-cache"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 0,
+        "resident_page_count": 0,
+        "highlight_pool_size": 0,
+        "probe_implementation": "raster-page-cache"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "live_counts_before_gc": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "render_jobs_observed": 10,
+      "quiescence_reached": true,
+      "exit_wall_ms": 382.8117847442627,
+      "canvas_viewport_height": 1336
+    },
+    {
+      "cycle_index": 6,
+      "rss_bytes": 239665152,
+      "python_allocated_bytes": 192320000,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 369835200,
+        "resident_page_count": 5,
+        "highlight_pool_size": 70,
+        "probe_implementation": "raster-page-cache"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 0,
+        "resident_page_count": 0,
+        "highlight_pool_size": 0,
+        "probe_implementation": "raster-page-cache"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "live_counts_before_gc": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "render_jobs_observed": 10,
+      "quiescence_reached": true,
+      "exit_wall_ms": 272.02606201171875,
+      "canvas_viewport_height": 1336
+    }
+  ],
+  "breaches": {
+    "entries": []
+  }
+}

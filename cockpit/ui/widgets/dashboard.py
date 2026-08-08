@@ -81,16 +81,16 @@ class Dashboard(QWidget):
         self.checklist_tht.body_clicked.connect(self.tht_body_clicked.emit)
         self.checklist_tht.mpn_clicked.connect(self.tht_mpn_clicked.emit)
         self.checklist_tht.empty_space_clicked.connect(self.empty_clicked.emit)
-        self.checklist_tht.setMinimumHeight(80)
+        self.checklist_tht.setMinimumHeight(self._theme.checklist_min_height_px())
         self._checklist_splitter.addWidget(self.checklist_tht)
         
         self.checklist_notes = ChecklistView(self._theme)
         self.checklist_notes.toggle_requested.connect(self._on_row_toggle)
         self.checklist_notes.empty_space_clicked.connect(self.empty_clicked.emit)
-        self.checklist_notes.setMinimumHeight(80)
+        self.checklist_notes.setMinimumHeight(self._theme.checklist_min_height_px())
         self._checklist_splitter.addWidget(self.checklist_notes)
         
-        self._checklist_splitter.setSizes([600, 300]) # default ratio
+        self._checklist_splitter.setSizes(self._theme.splitter_default_sizes())
         
         footer = QHBoxLayout()
         from PyQt6.QtWidgets import QToolButton, QMenu
@@ -115,7 +115,33 @@ class Dashboard(QWidget):
         
         layout.addLayout(footer)
 
+    def unload(self) -> None:
+        """Post: _view and _current_audit_id are None; both checklist panes are
+        unloaded; the actions menu is empty; the service-level per-audit memos
+        are dropped. No signal is emitted -- the metadata band is cleared by
+        AuditView.unload(), which owns it.
+        """
+        self.header.unload()
+        self.checklist_tht.unload()
+        self.checklist_notes.unload()
+        self._view = None
+        self._current_audit_id = None
+        self.actions_menu.clear()
+        self._checklist_service.release_audit_scoped_caches()
+
+    def current_audit_id(self) -> int | None:
+        return self._current_audit_id
+
+    def has_pdf(self) -> bool:
+        """Post: False when no audit is loaded. Callers must not need to know
+        that the answer lives on _view."""
+        return self._view is not None and self._view.has_pdf
+
+    def is_loaded(self) -> bool:
+        return self._current_audit_id is not None
+
     def load(self, audit_id: int) -> None:
+        self.unload()
         self._current_audit_id = audit_id
         try:
             self._view = self._checklist_service.load_active_audit(audit_id)
@@ -167,7 +193,10 @@ class Dashboard(QWidget):
         pass
 
     def _on_back_requested(self) -> None:
-        self.metadata_changed.emit({})
+        # The metadata band is cleared by AuditView.unload(), which owns it.
+        # Announcing the clear from here as well was redundant even before
+        # unload() existed, and is the emission post-condition (d) forbids
+        # doing from inside teardown.
         self.flush_audit_notes()
         self.exit_requested.emit()
 
@@ -195,7 +224,8 @@ class Dashboard(QWidget):
         if just_verified:
             self.complete_btn.setEnabled(False)
             from PyQt6.QtCore import QTimer
-            QTimer.singleShot(500, lambda: self.complete_btn.setEnabled(True))
+            debounce_ms = self._theme.complete_button_enable_debounce_ms()
+            QTimer.singleShot(debounce_ms, lambda: self.complete_btn.setEnabled(True))
         else:
             self.complete_btn.setEnabled(is_verified)
 

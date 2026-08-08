@@ -54,7 +54,7 @@
     "left_panel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["section_header", "row", "progress_view", "layout"],
+      "required": ["section_header", "row", "progress_view", "layout", "checklist", "splitter", "complete_button"],
       "properties": {
         "layout": {
           "type": "object",
@@ -93,13 +93,39 @@
             "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
           },
           "required": ["fill_rgb", "text_rgb"]
+        },
+        "checklist": {
+          "type": "object",
+          "properties": {
+            "min_height_px": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["min_height_px"]
+        },
+        "splitter": {
+          "type": "object",
+          "properties": {
+            "default_sizes": {
+              "type": "array",
+              "items": { "type": "integer", "minimum": 0 },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "required": ["default_sizes"]
+        },
+        "complete_button": {
+          "type": "object",
+          "properties": {
+            "enable_debounce_ms": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["enable_debounce_ms"]
         }
       }
     },
     "canvas": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["colour", "pen_width", "z_order", "zoom", "scalar", "hint_label"],
+      "required": ["colour", "pen_width", "z_order", "zoom", "scalar", "hint_label", "render"],
       "properties": {
         "colour": {
           "type": "object",
@@ -111,6 +137,16 @@
             "hint_label_background": { "$ref": "#/$defs/color_with_alpha" },
             "hint_label_text": { "$ref": "#/$defs/color_with_alpha" },
             "hint_label_border": { "$ref": "#/$defs/color_with_alpha" }
+          }
+        },
+        "render": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["resize_debounce_ms", "max_cached_bytes", "prefetch_page_limit"],
+          "properties": {
+            "resize_debounce_ms": { "type": "integer", "minimum": 0 },
+            "max_cached_bytes": { "type": "integer", "minimum": 0 },
+            "prefetch_page_limit": { "type": "integer", "minimum": 0 }
           }
         },
         "pen_width": {

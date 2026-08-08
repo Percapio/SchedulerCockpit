@@ -47,16 +47,34 @@ class PageSwitcher(QWidget):
         return self._segment_buttons
 
     def teardown_children(self) -> None:
-        """Remove and delete all child widgets in layout."""
-        while self.layout.count() > 0:
-            item = self.layout.takeAt(0)
-            widget = item.widget()
-            if widget is not None:
-                widget.deleteLater()
+        """
+        Post: Every child widget is DISCONNECTED and then destroyed; the three
+              pager references and the segment list are cleared.
+
+        The disconnect is the point (Optimize06 section 5, F4 site 4): the
+        predecessor deleteLater()'d the buttons without severing them, so the
+        per-button connection outlived the C++ object. Routing through
+        purge_widget_subtree rather than an enumerated disconnect list keeps
+        that true for any control added to this widget later.
+        """
+        # Deferred: cockpit.ui.widgets.__init__ imports AuditView, which imports
+        # this module. Same reason LayoutCanvas defers EmptyCanvasPlaceholder.
+        from cockpit.ui.widgets.qt_lifecycle import purge_widget_subtree, _drain_layout_widgets
+
+        for widget in _drain_layout_widgets(self.layout):
+            purge_widget_subtree(widget)
         self._segment_buttons.clear()
         self._pager_prev = None
         self._pager_next = None
         self._pager_label = None
+
+    def reset(self) -> None:
+        self.teardown_children()
+        self._mode = SwitcherMode.HIDDEN
+        self._page_count = 0
+        self._current_index = 0
+        self._other_page_indicator_visible = False
+        self.hide()
 
     def set_page_count(self, count: int, *, is_reference: bool = False) -> None:
         """Rebuild the segments or pager based on the page count."""
@@ -80,7 +98,8 @@ class PageSwitcher(QWidget):
             for i, label in enumerate(labels):
                 btn = QPushButton(label)
                 btn.setCheckable(True)
-                btn.clicked.connect(lambda checked, idx=i: self._on_button_clicked(idx))
+                btn.setProperty("page_index", i)
+                btn.clicked.connect(self._on_segment_clicked)
                 self.layout.addWidget(btn)
                 self._segment_buttons.append(btn)
                 
@@ -105,6 +124,13 @@ class PageSwitcher(QWidget):
             self._current_index = 0
             self._update_pager_display()
             self.show()
+
+    def _on_segment_clicked(self) -> None:
+        btn = self.sender()
+        if not btn: return
+        idx = btn.property("page_index")
+        if idx is not None:
+            self._on_button_clicked(idx)
 
     def _on_button_clicked(self, index: int) -> None:
         if index == self._current_index:

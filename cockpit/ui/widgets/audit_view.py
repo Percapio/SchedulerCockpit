@@ -143,8 +143,47 @@ class AuditView(QWidget):
         self._first_show = True
         self._bom_min_width = 200
 
+    def unload(self) -> None:
+        """Sole release point for audit-scoped state.
+
+        Post: the Unloadable post-conditions hold for the coordinator and all
+              three panes, and self is safe to show without loading.
+
+        The coordinator is torn down first: it is the only participant holding
+        references to the panes, so unloading it first guarantees no pane is
+        touched by a coordinator callback after that pane has been released.
+
+        search_input is cleared with signals blocked. QLineEdit.clear() emits
+        textChanged, which routes through _on_search_changed into
+        Dashboard.apply_filter() and AuditBomPanel.apply_filter() -- both of
+        them panes this method has just torn down. That re-entry into a
+        half-unloaded pane is exactly what post-condition (d) forbids.
+        """
+        self._coordinator.unload()
+        self._layout_canvas.unload()
+        self._bom_panel.unload()
+        self._dashboard.unload()
+        self._metadata_band_clear()
+        was_blocked = self.search_input.blockSignals(True)
+        try:
+            self.search_input.clear()
+        finally:
+            self.search_input.blockSignals(was_blocked)
+
+    def is_loaded(self) -> bool:
+        return self._dashboard.current_audit_id() is not None
+
+    def current_audit_id(self) -> int | None:
+        return self._dashboard.current_audit_id()
+
+    def set_render_worker_alive(self, alive: bool) -> None:
+        """Owned here so MainWindow, which owns the worker's lifetime, does not
+        reach two levels down into the canvas to set a thread-safety flag."""
+        self._layout_canvas.set_render_worker_alive(alive)
+
     def load(self, audit_id: int) -> None:
         """Load the audit identified by audit_id into all panes."""
+        self.unload()
         self._dashboard.setEnabled(True)
         self._layout_canvas.setEnabled(True)
         self._bom_panel.setEnabled(True)
@@ -159,17 +198,16 @@ class AuditView(QWidget):
         self._layout_canvas.setEnabled(True)
         self._bom_panel.setEnabled(True)
         self._dashboard.reload()
-        # the dashboard handles saving/loading view state. 
-        # For layout_canvas and bom_panel, we also need to reload.
-        if self._dashboard._current_audit_id is not None:
-            self._bom_panel.load(self._dashboard._current_audit_id)
+        if self._dashboard.current_audit_id() is not None:
+            self._bom_panel.load(self._dashboard.current_audit_id())
         self._layout_canvas.reload()
         
-    def forget_audit(self, audit_id: int) -> None:
-        """Clear the cached view if it matches the given audit_id."""
-        if self._dashboard._current_audit_id == audit_id:
-            self._dashboard._current_audit_id = None
-            self._dashboard._view = None
+    def discard_if_showing(self, audit_id: int) -> bool:
+        """Invalidate the view when the displayed audit was mutated or deleted underneath it."""
+        if self._dashboard.current_audit_id() != audit_id:
+            return False
+        self.unload()
+        return True
             
     def show_loading_placeholder(self) -> None:
         """Show a loading placeholder while a deferred load is pending."""
@@ -221,9 +259,7 @@ class AuditView(QWidget):
         self._splitter.splitterMoved.connect(self._on_splitter_moved)
 
     def _has_pdf(self) -> bool:
-        if self._dashboard._view is not None:
-            return self._dashboard._view.has_pdf
-        return False
+        return self._dashboard.has_pdf()
 
     def _on_splitter_moved(self, pos: int, index: int) -> None:
         if index == 2:
@@ -244,11 +280,14 @@ class AuditView(QWidget):
         self._dashboard.apply_filter(query)
         self._bom_panel.apply_filter(query)
 
-    def _on_metadata_changed(self, metadata: dict) -> None:
+    def _metadata_band_clear(self) -> None:
         while self._metadata_layout.count():
             item = self._metadata_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
+
+    def _on_metadata_changed(self, metadata: dict) -> None:
+        self._metadata_band_clear()
                 
         if not metadata:
             return

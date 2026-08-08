@@ -85,17 +85,18 @@ def bootstrap(
     stderr_handler.setLevel(logging.WARNING)
     logger.addHandler(stderr_handler)
 
-    install_log_path = install_dir() / "log.txt"
-    try:
-        install_handler = RotatingFileHandler(
-            install_log_path, maxBytes=10 * 1024 * 1024, backupCount=2, encoding="utf-8"
-        )
-        install_handler.setFormatter(formatter)
-        logger.addHandler(install_handler)
-        logger.info("Duplicate log destination: %s", install_log_path)
-    except OSError as e:
-        # Install dir may be read-only (e.g. Program Files without elevation)
-        logger.warning("Could not open install-folder log at %s: %s — primary log at %s", install_log_path, e, config.log_path)
+    if config.log_duplicate_to_install_dir:
+        install_log_path = install_dir() / "log.txt"
+        try:
+            install_handler = RotatingFileHandler(
+                install_log_path, maxBytes=10 * 1024 * 1024, backupCount=2, encoding="utf-8"
+            )
+            install_handler.setFormatter(formatter)
+            logger.addHandler(install_handler)
+            logger.info("Duplicate log destination: %s", install_log_path)
+        except OSError as e:
+            # Install dir may be read-only (e.g. Program Files without elevation)
+            logger.warning("Could not open install-folder log at %s: %s — primary log at %s", install_log_path, e, config.log_path)
 
     from cockpit.ui.runtime import runtime_kind
     from cockpit._build_info import get_build_info

@@ -1,11 +1,12 @@
-"""Layout canvas widget."""
-
 from PyQt6.QtCore import pyqtSignal, Qt, QTimer
-from PyQt6.QtGui import QPixmap, QResizeEvent, QShowEvent
+from PyQt6.QtGui import QPixmap, QResizeEvent, QShowEvent, QImage
+from collections import OrderedDict
+from dataclasses import dataclass
+from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QLabel, QGraphicsLineItem, QGraphicsItem, QGraphicsRectItem, QPushButton
 )
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QWheelEvent, QMouseEvent
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QWheelEvent, QMouseEvent, QTransform
 from PyQt6.QtCore import QRectF, QPointF
 
 from cockpit.ui.theme import Theme
@@ -80,13 +81,114 @@ from cockpit.layout.renderer import PdfRenderer
 from cockpit.ui.error_messages import FailurePayload
 from cockpit.ui.error_messages import render as render_error
 from cockpit.services.views import SelectionIntent, ResolvedSelection, SelectionKind, ResolutionKind, HighlightCoord, LayoutContext, PendingPdf
-from cockpit.ui.workers.render_worker import RenderJob, RenderResult, RenderFailure
+from cockpit.ui.workers.render_worker import RenderJob, RenderResult, RenderFailure, RenderedImage
 from cockpit.persistence.errors import PersistenceError
 from cockpit.ui.canvas.page_switcher import PageSwitcher
 from cockpit.ui.canvas.font_scale_bar import FontScaleBar
 import logging
 logger = logging.getLogger(__name__)
 
+@dataclass(frozen=True)
+class RenderBudget:
+    max_cached_bytes: int
+    prefetch_page_limit: int
+
+@dataclass(frozen=True)
+class CachedPage:
+    page_index: int
+    target_pixel_height: int
+    pixmap: QPixmap
+    byte_size: int
+
+class RasterPageEntries:
+    def __init__(self):
+        self._odict: OrderedDict[int, CachedPage] = OrderedDict()
+
+    def __len__(self) -> int:
+        return len(self._odict)
+
+    def insert_or_replace_as_most_recent(self, page: CachedPage) -> None:
+        self._odict.pop(page.page_index, None)
+        self._odict[page.page_index] = page
+
+    def touch_as_most_recent(self, page_index: int) -> None:
+        if page_index in self._odict:
+            self._odict.move_to_end(page_index)
+
+    def peek(self, page_index: int) -> Optional[CachedPage]:
+        """Read without altering recency order."""
+        return self._odict.get(page_index)
+
+    def least_recently_used_excluding(self, *exempt_page_indices: int) -> Optional[CachedPage]:
+        for idx, page in self._odict.items():
+            if idx not in exempt_page_indices:
+                return page
+        return None
+
+    def remove(self, page_index: int) -> None:
+        self._odict.pop(page_index, None)
+
+    def total_bytes(self) -> int:
+        return sum(p.byte_size for p in self._odict.values())
+
+    def clear(self) -> None:
+        self._odict.clear()
+
+class RasterPageCache:
+    def __init__(self, budget: RenderBudget):
+        self._budget = budget
+        self._entries = RasterPageEntries()
+
+    def put(self, page: CachedPage, protected_page_index: Optional[int]) -> list[int]:
+        self._entries.insert_or_replace_as_most_recent(page)
+        evicted = []
+        while self._entries.total_bytes() > self._budget.max_cached_bytes:
+            victim = self._entries.least_recently_used_excluding(
+                protected_page_index, page.page_index
+            )
+            if victim is None:
+                logger.warning(
+                    "raster cache over budget: %d bytes resident against a %d byte ceiling",
+                    self._entries.total_bytes(), self._budget.max_cached_bytes
+                )
+                break
+            self._entries.remove(victim.page_index)
+            evicted.append(victim.page_index)
+        return evicted
+
+    def get(self, page_index: int, required_pixel_height: int) -> Optional[CachedPage]:
+        page = self._entries.peek(page_index)
+        if page is not None and page.target_pixel_height == required_pixel_height:
+            self._entries.touch_as_most_recent(page_index)
+            return page
+        return None
+
+    def contains_at_height(self, page_index: int, required_pixel_height: int) -> bool:
+        page = self._entries.peek(page_index)
+        return page is not None and page.target_pixel_height == required_pixel_height
+
+    def resident_page_count(self) -> int:
+        return len(self._entries)
+
+    def total_bytes(self) -> int:
+        return self._entries.total_bytes()
+
+    def clear(self) -> None:
+        self._entries.clear()
+
+def measure_rendered_bytes(rendered: RenderedImage) -> int:
+    """Buffer size of one rasterized page, measured on the source QImage before
+    pixmap conversion so no deep copy is taken to weigh it."""
+    reported = rendered.image.sizeInBytes()
+    if reported > 0:
+        return reported
+    return rendered.image.width() * rendered.image.height() * 4
+
+def pages_ordered_by_distance_from(current_page_index: int, page_count: int) -> list[int]:
+    return sorted(
+        [i for i in range(page_count) if i != current_page_index],
+        key=lambda i: (abs(i - current_page_index), i)
+    )
 
 class _InnerGraphicsView(QGraphicsView):
     def __init__(self, canvas: 'LayoutCanvas', scene: QGraphicsScene):
@@ -125,13 +227,17 @@ class LayoutCanvas(QWidget):
         self._layout_query_service = layout_query_service
         self._pdf_renderer = pdf_renderer
         
+        self._current_audit_id: int | None = None
         self._current_context = None
         self._current_page_index: int | None = None
-        self._pending_render: bool = False
         self._last_intent: SelectionIntent | None = None
         self._last_resolved: ResolvedSelection | None = None
         self._current_scale = 1.0
-        self._pixmap_cache: dict[int, tuple[int, QPixmap]] = {}
+        self._render_budget = RenderBudget(
+            max_cached_bytes=self._theme.canvas_render_max_cached_bytes(),
+            prefetch_page_limit=self._theme.canvas_render_prefetch_page_limit()
+        )
+        self._raster_cache = RasterPageCache(self._render_budget)
         self._coord_cache: dict[int, list[HighlightCoord]] = {}
         self._worker_alive = False
         self._pending_pdf = None
@@ -210,8 +316,41 @@ class LayoutCanvas(QWidget):
         
         self._resize_debouncer = QTimer(self)
         self._resize_debouncer.setSingleShot(True)
-        self._resize_debouncer.setInterval(200)
-        self._resize_debouncer.timeout.connect(self._on_resize_debounced)
+        self._resize_debouncer.setInterval(self._theme.canvas_render_resize_debounce_ms())
+        self._resize_debouncer.timeout.connect(self.reissue_for_settled_viewport)
+
+    def estimate_page_bytes(self, render_height: int) -> int:
+        if not self._current_context or not self._current_context.page_dimensions:
+            return 0
+        max_aspect = 0.0
+        for w, h in self._current_context.page_dimensions:
+            if h > 0:
+                max_aspect = max(max_aspect, w / h)
+        return render_height * round(render_height * max_aspect) * 4
+
+    def select_prefetch_pages(self, current_page_index: int, page_count: int, budget: RenderBudget) -> tuple[int, ...]:
+        if budget.prefetch_page_limit == 0:
+            return ()
+        render_height = self.current_render_height()
+        estimated_page_bytes = self.estimate_page_bytes(render_height)
+        if estimated_page_bytes <= 0:
+            # No document loaded, or no page geometry to cost a page against.
+            # Prefetch is suppressed rather than admitted at zero cost.
+            return ()
+
+        candidates = pages_ordered_by_distance_from(current_page_index, page_count)
+        selected: list[int] = []
+        projected_bytes = self._raster_cache.total_bytes()
+        for candidate in candidates:
+            if len(selected) >= budget.prefetch_page_limit:
+                break
+            if self._raster_cache.contains_at_height(candidate, render_height):
+                continue
+            if projected_bytes + estimated_page_bytes > budget.max_cached_bytes:
+                break
+            selected.append(candidate)
+            projected_bytes += estimated_page_bytes
+        return tuple(selected)
 
     def current_render_height(self) -> int:
         return int(self._theme.canvas_zoom_render_multiplier() * self._graphics_view.viewport().height())
@@ -229,8 +368,17 @@ class LayoutCanvas(QWidget):
             is_reference=self._reference_source_active()
         )
 
+    def set_render_worker_alive(self, alive: bool) -> None:
+        """Declare whether a render worker is attached and accepting jobs.
+
+        Public because MainWindow owns the worker's lifetime. It previously set
+        _worker_alive by reaching two levels through AuditView, which put a
+        thread-safety flag under the control of code that does not own it.
+        """
+        self._worker_alive = alive
+
     def _submit_render(self, job: RenderJob) -> None:
-        if not getattr(self, "_worker_alive", False):
+        if not self._worker_alive:
             return
         self.request_render.emit(job)
 
@@ -241,12 +389,63 @@ class LayoutCanvas(QWidget):
         if self._stacked.currentWidget() == self._spinner_placeholder:
             self._stacked.setCurrentWidget(self._canvas_container)
 
-    def load(self, audit_id: int) -> None:
-        self._pixmap_cache.clear()
+    def has_displayed_page(self) -> bool:
+        return not self._base_pixmap_item.pixmap().isNull()
+
+    def reset_canvas_geometry(self) -> None:
+        self._base_pixmap_item.setPixmap(QPixmap())
+        self._dim_item.setRect(QRectF())
+        self._dim_item.setVisible(False)
+        self._graphics_view.setTransform(QTransform())
+        self._current_scale = 1.0
+        assert not self.has_displayed_page()
+
+    def unload(self) -> None:
+        """Release every audit-scoped structure and invalidate any render job in
+        flight without blocking on the worker.
+
+        Documented exception to Unloadable post-condition (d): generation_bumped
+        IS emitted. It carries no audit state to a sibling pane -- it is the
+        control signal that makes teardown non-blocking (invariant I1), by
+        letting the existing generation guards discard a stale result on
+        arrival. Bumping before releasing state is what makes that safe.
+        """
+        self._render_epoch += 1
+        self.generation_bumped.emit(self._render_epoch)
+
+        self._raster_cache.clear()
+        self.reset_canvas_geometry()
+
+        self.release_highlight_pool()
+        self._coord_cache.clear()
+
+        self._current_audit_id = None
+        self._current_context = None
+        self._current_page_index = None
+        self._pending_pdf = None
+        self._primary_pending = None
+        self._secondary_pending = None
         self._last_intent = None
         self._last_resolved = None
-        self._apply_selection(clear=True)
-        self._coord_cache.clear()
+        self._active_source = "primary"
+        self._current_scale = 1.0
+
+        self._resize_debouncer.stop()
+        self._page_switcher.reset()
+        self._hint_label.setVisible(False)
+        self._pdf_toggle_btn.setVisible(False)
+        self._stacked.setCurrentWidget(self._empty_placeholder)
+
+    def is_loaded(self) -> bool:
+        return self._current_audit_id is not None
+
+    def release_highlight_pool(self) -> None:
+        for item in self._highlight_items:
+            self._scene.removeItem(item)
+        self._highlight_items.clear()
+
+    def load(self, audit_id: int) -> None:
+        self.unload()
         
         self._current_audit_id = audit_id
         self._primary_pending = self._layout_query_service.resolve_pdf_ref(audit_id)
@@ -289,7 +488,7 @@ class LayoutCanvas(QWidget):
             self._active_source = "secondary"
         else:
             self._active_source = "primary"
-        self._pixmap_cache.clear()
+        self._raster_cache.clear()
         self._current_page_index = 0
         self._render_source(self._active_source, page_index=0)
         self._refresh_toggle_enablement()
@@ -298,69 +497,88 @@ class LayoutCanvas(QWidget):
         self._pdf_toggle_btn.setVisible(self._secondary_pending is not None)
         self._pdf_toggle_btn.setText("View Reference" if self._active_source == "primary" else "View Primary")
 
-    def _on_render_ready(self, result: RenderResult) -> None:
+    def accept_render_result(self, result: RenderResult) -> None:
         if result.generation != self._render_epoch:
             return
         if result.page_dimensions is None and self._current_context is None:
             return
             
-        if result.target_pixel_height != self.current_render_height():
-            if self._current_context is None:
-                self.load(self._current_audit_id)
-            else:
-                self._on_resize_debounced()
-            return
+        rendered_height = result.target_pixel_height
             
         if result.page_dimensions is not None:
+            self._current_page_index = 0
             self._current_context = self._build_context(self._pending_pdf, result.page_dimensions)
             self._page_switcher.set_page_count(self._current_context.page_count, is_reference=self._reference_source_active())
-            self._current_page_index = 0
             
         for ri in result.images:
             pixmap = QPixmap.fromImage(ri.image)
-            self._pixmap_cache[ri.page_index] = (result.target_pixel_height, pixmap)
+            byte_size = measure_rendered_bytes(ri)
+            page = CachedPage(
+                page_index=ri.page_index,
+                target_pixel_height=rendered_height,
+                pixmap=pixmap,
+                byte_size=byte_size
+            )
+            self._raster_cache.put(page, self._current_page_index)
             
-        if self._current_page_index in [ri.page_index for ri in result.images]:
-            self._hide_spinner()
-            self._stacked.setCurrentWidget(self._canvas_container)
-            
-            pixmap = self._pixmap_cache[self._current_page_index][1]
-            self._base_pixmap_item.setPixmap(QPixmap())
-            self._base_pixmap_item.setPixmap(pixmap)
-            self._base_pixmap_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
-            
-            self._scene.setSceneRect(0, 0, pixmap.width(), pixmap.height())
-            self._dim_item.setRect(self._scene.sceneRect())
-            self._graphics_view.fitInView(self._base_pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
-            self._current_scale = 1.0
-            self._update_pan_cursor()
-            
-            self._apply_selection()
-            
-            others = tuple(i for i in range(self._current_context.page_count)
-                           if i != self._current_page_index
-                           and (i not in self._pixmap_cache or self._pixmap_cache[i][0] != self.current_render_height()))
-            if others:
-                self._submit_render(RenderJob(self._render_epoch, self._pending_pdf.path, others, self.current_render_height(), False, is_reference=self._reference_source_active()))
+        if self._current_page_index not in [ri.page_index for ri in result.images]:
+            return
 
-    def _on_render_error(self, failure: RenderFailure) -> None:
+        cached = self._raster_cache.get(self._current_page_index, rendered_height)
+        if cached is None:
+            logger.error("displayed page %d was inserted at height %d and is not resident", self._current_page_index, rendered_height)
+            return
+
+        self._hide_spinner()
+        self._stacked.setCurrentWidget(self._canvas_container)
+        
+        pixmap = cached.pixmap
+        self._base_pixmap_item.setPixmap(QPixmap())
+        self._base_pixmap_item.setPixmap(pixmap)
+        self._base_pixmap_item.setTransformationMode(Qt.TransformationMode.SmoothTransformation)
+        
+        self._scene.setSceneRect(0, 0, pixmap.width(), pixmap.height())
+        self._dim_item.setRect(self._scene.sceneRect())
+        self._graphics_view.fitInView(self._base_pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
+        self._current_scale = 1.0
+        self._update_pan_cursor()
+        
+        self._apply_selection()
+
+        if rendered_height != self.current_render_height():
+            self._resize_debouncer.start()
+            return
+            
+        others = self.select_prefetch_pages(self._current_page_index, self._current_context.page_count, self._render_budget)
+        if others:
+            self._submit_render(RenderJob(self._render_epoch, self._pending_pdf.path, others, self.current_render_height(), False, is_reference=self._reference_source_active()))
+
+    def accept_render_failure(self, failure: RenderFailure) -> None:
         if failure.generation != self._render_epoch:
             return
             
         if self._current_page_index in failure.page_indices:
-            self._hide_spinner()
-            self._error_placeholder.set_text(f"Could not load assembly drawing: {failure.payload.summary}")
-            self._stacked.setCurrentWidget(self._error_placeholder)
-            self.error_occurred.emit(failure.payload)
+            if not self.has_displayed_page():
+                self._hide_spinner()
+                self._error_placeholder.set_text(f"Could not load assembly drawing: {failure.payload.summary}")
+                self._stacked.setCurrentWidget(self._error_placeholder)
+                self.error_occurred.emit(failure.payload)
+            else:
+                logger.warning("render failed at height %d for pages %s", self.current_render_height(), failure.page_indices)
         else:
             logger.warning("background prefetch render failed for pages %s", failure.page_indices)
 
     def _on_page_changed(self, page_index: int) -> None:
+        # Invariant I3: the switcher is a child widget and can deliver into an
+        # unloaded canvas. reset() is contracted not to emit page_changed, but
+        # a queued emission from before the reset must also terminate here.
+        if self._pending_pdf is None:
+            return
         self._current_page_index = page_index
-        cached = self._pixmap_cache.get(page_index)
+        cached = self._raster_cache.get(page_index, self.current_render_height())
         
-        if cached is not None and cached[0] == self.current_render_height():
-            pixmap = cached[1]
+        if cached is not None:
+            pixmap = cached.pixmap
             self._base_pixmap_item.setPixmap(QPixmap())
             self._base_pixmap_item.setPixmap(pixmap)
             self._scene.setSceneRect(0, 0, pixmap.width(), pixmap.height())
@@ -377,14 +595,12 @@ class LayoutCanvas(QWidget):
             if self._pending_pdf:
                 self._submit_render(RenderJob(gen, self._pending_pdf.path, (page_index,), self.current_render_height(), False, is_reference=self._reference_source_active()))
 
-    def _on_resize_debounced(self) -> None:
+    def reissue_for_settled_viewport(self) -> None:
         if self._pending_pdf is None or self._stacked.currentWidget() != self._canvas_container:
             return
-        self._pixmap_cache.clear()
         self._render_epoch += 1
         gen = self._render_epoch
         self.generation_bumped.emit(gen)
-        self._show_spinner()
         self._submit_render(RenderJob(gen, self._pending_pdf.path, (self._current_page_index,), self.current_render_height(), False, is_reference=self._reference_source_active()))
 
 
@@ -400,8 +616,6 @@ class LayoutCanvas(QWidget):
 
     def showEvent(self, event: QShowEvent) -> None:
         super().showEvent(event)
-        if self._pending_render and self._current_context is not None and self._current_context.pdf_path is not None:
-            self._render_current_page()
 
     def reload(self) -> None:
         self._last_intent = None
@@ -533,6 +747,8 @@ class LayoutCanvas(QWidget):
             item.setVisible(False)
 
     def _paint_highlight_rect(self, item: HighlightItem, coord: HighlightCoord, mode: str) -> None:
+        if not self.has_displayed_page():
+            return
         if self._current_context is None:
             return
             
@@ -577,7 +793,7 @@ class LayoutCanvas(QWidget):
         if self._reference_source_active():
             clear = True
         resolved = self._last_resolved
-        if clear or resolved is None:
+        if clear or resolved is None or not self.has_displayed_page():
             self._dim_item.setVisible(False)
             self._hide_all_highlights()
             self._hint_label.setVisible(False)

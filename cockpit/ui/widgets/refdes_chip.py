@@ -1,20 +1,7 @@
-from PyQt6.QtCore import pyqtSignal, Qt, QEvent, QObject
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtGui import QMouseEvent, QCursor
 from PyQt6.QtWidgets import QLabel
-from typing import Any
 
-class MPNLabelFilter(QObject):
-    def __init__(self, parent: Any, row: Any) -> None:
-        super().__init__(parent)
-        self.row = row
-
-    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
-        if event.type() == QEvent.Type.MouseButtonPress:
-            assert isinstance(event, QMouseEvent)
-            if event.button() == Qt.MouseButton.LeftButton:
-                self.row.mpn_label_clicked.emit(self.row._mpn_value)
-                return True  # Stop propagation so parent row doesn't also click
-        return False
 
 class RefDesChip(QLabel):
     """

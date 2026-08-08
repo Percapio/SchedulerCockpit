@@ -60,3 +60,14 @@ class IdentityHeader(QWidget):
         self.qty_value.setText(str(view.quantity))
         self.status_lbl.setText(f"Status: {view.status}")
 
+    def unload(self) -> None:
+        self._current_view = None
+        self.title_lbl.setText("")
+        self.itar_lbl.hide()
+        self.qty_prefix.setText("")
+        self.qty_value.setText("")
+        self.status_lbl.setText("")
+
+    def is_loaded(self) -> bool:
+        return self._current_view is not None
+

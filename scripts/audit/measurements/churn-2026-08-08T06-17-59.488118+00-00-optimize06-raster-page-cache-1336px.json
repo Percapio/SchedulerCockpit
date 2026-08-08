@@ -1,0 +1,126 @@
+{
+  "tree_revision": "optimize06",
+  "probe_implementation": "raster-page-cache",
+  "canvas_viewport_height": 1336,
+  "captured_at_utc": "2026-08-08T06:17:59.488118+00:00",
+  "cycles_requested": 3,
+  "samples": [
+    {
+      "cycle_index": 1,
+      "rss_bytes": 235466752,
+      "python_allocated_bytes": 192016384,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 369835200,
+        "resident_page_count": 5,
+        "highlight_pool_size": 70,
+        "probe_implementation": "raster-page-cache"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 0,
+        "resident_page_count": 0,
+        "highlight_pool_size": 0,
+        "probe_implementation": "raster-page-cache"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "render_jobs_observed": 11,
+      "quiescence_reached": true,
+      "exit_wall_ms": 305.4182529449463,
+      "canvas_viewport_height": 1336
+    },
+    {
+      "cycle_index": 2,
+      "rss_bytes": 243040256,
+      "python_allocated_bytes": 192067584,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 369835200,
+        "resident_page_count": 5,
+        "highlight_pool_size": 70,
+        "probe_implementation": "raster-page-cache"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 0,
+        "resident_page_count": 0,
+        "highlight_pool_size": 0,
+        "probe_implementation": "raster-page-cache"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "render_jobs_observed": 10,
+      "quiescence_reached": true,
+      "exit_wall_ms": 207.4441909790039,
+      "canvas_viewport_height": 1336
+    },
+    {
+      "cycle_index": 3,
+      "rss_bytes": 206204928,
+      "python_allocated_bytes": 192126464,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 369835200,
+        "resident_page_count": 5,
+        "highlight_pool_size": 70,
+        "probe_implementation": "raster-page-cache"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 0,
+        "resident_page_count": 0,
+        "highlight_pool_size": 0,
+        "probe_implementation": "raster-page-cache"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1
+      },
+      "render_jobs_observed": 10,
+      "quiescence_reached": true,
+      "exit_wall_ms": 377.74062156677246,
+      "canvas_viewport_height": 1336
+    }
+  ],
+  "breaches": {
+    "entries": []
+  }
+}

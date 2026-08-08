@@ -31,7 +31,10 @@ def valid_theme_data():
                 "corner_radius_px": 4, "vertical_padding_px": 6, "horizontal_padding_px": 8,
                 "gutter_px": 3
             },
-            "progress_view": { "fill_rgb": "#FAFAFA", "text_rgb": "#000000" }
+            "progress_view": { "fill_rgb": "#FAFAFA", "text_rgb": "#000000" },
+            "checklist": { "min_height_px": 80 },
+            "splitter": { "default_sizes": [600, 300] },
+            "complete_button": { "enable_debounce_ms": 500 }
         },
         "canvas": {
             "colour": {
@@ -45,7 +48,8 @@ def valid_theme_data():
             "z_order": { "base_pixmap": 0.0, "dim": 1.0, "highlight": 2.0 },
             "zoom": { "min_scale": 1.0, "max_scale": 8.0, "step": 1.25, "render_multiplier": 3.0 },
             "scalar": { "highlight_scale": 2.0 },
-            "hint_label": { "padding_px": 4, "border_width_px": 1 }
+            "hint_label": { "padding_px": 4, "border_width_px": 1 },
+            "render": { "resize_debounce_ms": 200, "max_cached_bytes": 402653184, "prefetch_page_limit": 1 }
         },
         "bom_panel": {
             "layout": {

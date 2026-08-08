@@ -1,0 +1,72 @@
+{
+  "tree_revision": "optimize06",
+  "probe_implementation": "raster-page-cache",
+  "canvas_viewport_height": 1336,
+  "captured_at_utc": "2026-08-08T17:40:30.722437+00:00",
+  "cycles_requested": 1,
+  "samples": [
+    {
+      "cycle_index": 1,
+      "rss_bytes": 251527168,
+      "python_allocated_bytes": 191891456,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 369835200,
+        "resident_page_count": 5,
+        "highlight_pool_size": 70,
+        "probe_implementation": "raster-page-cache"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 0,
+        "resident_page_count": 0,
+        "highlight_pool_size": 0,
+        "probe_implementation": "raster-page-cache"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1,
+        "ActiveAuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1,
+        "ActiveAuditView": 0
+      },
+      "live_counts_before_deferred_delete": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1,
+        "ActiveAuditView": 0
+      },
+      "rss_before_deferred_delete": 250425344,
+      "rss_after_exit": 251527168,
+      "live_counts_before_gc": {
+        "ChecklistRow": 0,
+        "AuditBomRow": 0,
+        "RefDesChip": 0,
+        "ComponentRowCore": 0,
+        "HighlightItem": 0,
+        "AuditView": 1,
+        "ActiveAuditView": 0
+      },
+      "render_jobs_observed": 11,
+      "quiescence_reached": true,
+      "exit_wall_ms": 293.306827545166,
+      "canvas_viewport_height": 1336
+    }
+  ],
+  "breaches": {
+    "entries": []
+  }
+}

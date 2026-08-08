@@ -1,0 +1,101 @@
+{
+  "tree_revision": "optimize06",
+  "probe_implementation": "pixmap-dict",
+  "canvas_viewport_height": 1336,
+  "captured_at_utc": "2026-08-08T04:14:34.983398+00:00",
+  "cycles_requested": 2,
+  "samples": [
+    {
+      "cycle_index": 1,
+      "rss_bytes": 400257024,
+      "python_allocated_bytes": 201075200,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 73967040,
+        "resident_page_count": 1,
+        "highlight_pool_size": 70,
+        "probe_implementation": "pixmap-dict"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 147934080,
+        "resident_page_count": 2,
+        "highlight_pool_size": 70,
+        "probe_implementation": "pixmap-dict"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "render_jobs_observed": 0,
+      "quiescence_reached": false,
+      "exit_wall_ms": 28.2590389251709,
+      "canvas_viewport_height": 1336
+    },
+    {
+      "cycle_index": 2,
+      "rss_bytes": 433463296,
+      "python_allocated_bytes": 201097216,
+      "gc_uncollectable_count": 0,
+      "raster_at_peak": {
+        "resident_bytes": 73967040,
+        "resident_page_count": 1,
+        "highlight_pool_size": 70,
+        "probe_implementation": "pixmap-dict"
+      },
+      "raster_after_exit": {
+        "resident_bytes": 147934080,
+        "resident_page_count": 2,
+        "highlight_pool_size": 70,
+        "probe_implementation": "pixmap-dict"
+      },
+      "live_counts_at_peak": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 2640,
+        "ComponentRowCore": 252,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "live_counts_after_exit": {
+        "ChecklistRow": 50,
+        "AuditBomRow": 76,
+        "RefDesChip": 1320,
+        "ComponentRowCore": 126,
+        "HighlightItem": 70,
+        "AuditView": 1
+      },
+      "render_jobs_observed": 0,
+      "quiescence_reached": false,
+      "exit_wall_ms": 27.020931243896484,
+      "canvas_viewport_height": 1336
+    }
+  ],
+  "breaches": {
+    "entries": [
+      {
+        "criterion_id": "A2",
+        "first_cycle": 1,
+        "observed": "147934080",
+        "threshold": "0"
+      },
+      {
+        "criterion_id": "A1",
+        "first_cycle": 2,
+        "observed": "ChecklistRow: 50",
+        "threshold": "<= 0"
+      }
+    ]
+  }
+}

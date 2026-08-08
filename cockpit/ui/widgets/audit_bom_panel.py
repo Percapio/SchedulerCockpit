@@ -14,7 +14,7 @@ from cockpit.persistence.errors import PersistenceError
 from cockpit.ui.theme import Theme
 from cockpit.ui.widgets.flow_layout import FlowLayout
 from .qt_lifecycle import purge_widget_subtree, _drain_layout_widgets
-from cockpit.ui.widgets.refdes_chip import RefDesChip, MPNLabelFilter
+from cockpit.ui.widgets.refdes_chip import RefDesChip
 
 from cockpit.ui.widgets.component_row import ComponentRowCore, ComponentRowFields
 
@@ -37,9 +37,12 @@ class AuditBomRow(QFrame):
             ref_des_list=view.ref_des_list
         )
         self.core = ComponentRowCore(fields, theme)
-        self.core.mpn_label_clicked.connect(lambda _: self.row_clicked.emit(self._view.component_mpn))
-        self.core.refdes_chip_clicked.connect(lambda _: self.row_clicked.emit(self._view.component_mpn))
+        self.core.mpn_label_clicked.connect(self._on_core_clicked)
+        self.core.refdes_chip_clicked.connect(self._on_core_clicked)
         layout.addWidget(self.core)
+
+    def _on_core_clicked(self, _: str) -> None:
+        self.row_clicked.emit(self._view.component_mpn)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -91,11 +94,17 @@ class AuditBomPanel(QWidget):
         self.scroll.setWidget(self.container)
         self.layout.addWidget(self.scroll)
 
-    def load(self, audit_id: int) -> None:
+    def unload(self) -> None:
         self._clear_layout()
-        self._selected_mpn = None
         self._row_index.clear()
+        self._selected_mpn = None
         self._set_header_text("")
+
+    def is_loaded(self) -> bool:
+        return bool(self._row_index)
+
+    def load(self, audit_id: int) -> None:
+        self.unload()
 
         try:
             views = self._layout_query_service.list_bom_rows_for_audit(audit_id)
@@ -122,7 +131,7 @@ class AuditBomPanel(QWidget):
             self.container_layout.addWidget(row)
             self._row_index[view.component_mpn] = row
 
-    def clear(self) -> None:
+    def clear_selection(self) -> None:
         self._selected_mpn = None
         for row in self._row_index.values():
             row.set_selected(False)

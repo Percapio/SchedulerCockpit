@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (
 from cockpit.persistence.types import AuditStatus
 from cockpit.services.views import OpenAuditDigest
 from cockpit.ui.widgets.toast import Toast  # Phase 3
-from cockpit.ui.widgets.holiday_dialog import HolidayDialog
 
 logger = logging.getLogger(__name__)
 
@@ -351,6 +350,7 @@ class OpenAuditPicker(QWidget):
     ship_date_change_requested = pyqtSignal(int, object)  # (audit_id, date | None)
     ops_per_board_change_requested = pyqtSignal(int, object)  # (audit_id, float | None)
     new_audit_requested = pyqtSignal()
+    holidays_requested = pyqtSignal()
     font_scale_change_requested = pyqtSignal(int)
     settings_requested = pyqtSignal()
     label_toggle_requested = pyqtSignal(int, bool)
@@ -561,14 +561,7 @@ class OpenAuditPicker(QWidget):
             self.table_view.clearSelection()
 
     def _on_holidays_clicked(self) -> None:
-        # We need access to holiday_svc. We can get it from the app or passed in.
-        app_win = self.window()
-        if hasattr(app_win, "_holiday_svc") and hasattr(app_win, "_reload_list"):
-            dialog = HolidayDialog(app_win._holiday_svc, self)
-            dialog.exec()
-            app_win._reload_list()
-        else:
-            logger.error("Holidays: holiday service unavailable on top-level window %r", app_win)
+        self.holidays_requested.emit()
 
     def _install_context_menu(self) -> None:
         self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)

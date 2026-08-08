@@ -43,6 +43,11 @@ def canvas(qtbot, theme):
     # Add a mock rect for sceneRect to avoid geometry issues
     widget._scene.setSceneRect(0, 0, 1000, 1000)
     
+    # Add a dummy pixmap so has_displayed_page() is True
+    from PyQt6.QtGui import QPixmap
+    dummy_px = QPixmap(10, 10)
+    widget._base_pixmap_item.setPixmap(dummy_px)
+    
     return widget
 
 

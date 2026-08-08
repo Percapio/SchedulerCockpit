@@ -49,12 +49,17 @@ class ChecklistView(QScrollArea):
                 return widget
         return None
 
-    def populate_section(self, views: list[ChecklistRowView], header_text: str) -> None:
+    def unload(self) -> None:
         prior_children = _drain_layout_widgets(self._layout)
         for child in prior_children:
             purge_widget_subtree(child)
-                
         self._index.clear()
+
+    def is_loaded(self) -> bool:
+        return bool(self._index)
+
+    def populate_section(self, views: list[ChecklistRowView], header_text: str) -> None:
+        self.unload()
         
         header = QLabel(header_text)
         header.setProperty("class", "section-header")

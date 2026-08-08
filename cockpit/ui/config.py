@@ -66,6 +66,11 @@ class AppConfig:
     sqlite_cache_kib: int = -16384
     sqlite_mmap_bytes: int = 134_217_728
     wal_autocheckpoint_pages: int = 1000
+    idle_maintenance_interval_ms: int = 60000
+    # Every record is formatted and written twice when this is on, and in a
+    # frozen install the second copy lands inside the installation directory.
+    # Defaults off; the primary log at log_path is unaffected either way.
+    log_duplicate_to_install_dir: bool = False
 
 
 @dataclass(frozen=True)

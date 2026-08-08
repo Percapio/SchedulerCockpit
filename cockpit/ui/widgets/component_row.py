@@ -2,16 +2,26 @@
 
 from dataclasses import dataclass
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtGui import QCursor, QAction
+from PyQt6.QtGui import QCursor, QAction, QMouseEvent
 from PyQt6.QtWidgets import QFrame, QGridLayout, QLabel, QVBoxLayout, QWidget, QMenu, QApplication
 from typing import Any
 import logging
 
 from cockpit.ui.theme import Theme
 from cockpit.ui.widgets.flow_layout import FlowLayout
-from cockpit.ui.widgets.refdes_chip import RefDesChip, MPNLabelFilter
+from cockpit.ui.widgets.refdes_chip import RefDesChip
 
 logger = logging.getLogger(__name__)
+
+class ClickableLabel(QLabel):
+    clicked = pyqtSignal()
+
+    def mousePressEvent(self, ev: QMouseEvent) -> None:
+        if ev.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            ev.accept()
+            return
+        super().mousePressEvent(ev)
 
 @dataclass(frozen=True)
 class ComponentRowFields:
@@ -47,14 +57,13 @@ class ComponentRowCore(QFrame):
         find_cell_layout.addWidget(self.find_number_badge)
 
         # MPN Label
-        self.mpn_label = QLabel(self._mpn_value)
+        self.mpn_label = ClickableLabel(self._mpn_value)
         self.mpn_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.mpn_label.setCursor(QCursor(Qt.CursorShape.PointingHandCursor))
         self.mpn_label.setProperty("class", "mpn-label")
         self.mpn_label.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.mpn_label.customContextMenuRequested.connect(self._show_context_menu)
-        self._mpn_filter = MPNLabelFilter(self.mpn_label, self)
-        self.mpn_label.installEventFilter(self._mpn_filter)
+        self.mpn_label.clicked.connect(self._on_mpn_label_clicked)
 
         self._mpn_cell = QFrame(self)
         self._mpn_cell.setFrameShape(QFrame.Shape.NoFrame)
@@ -109,6 +118,9 @@ class ComponentRowCore(QFrame):
         grid.setColumnStretch(1, 2)
         grid.setColumnStretch(2, 3)
 
+    def _on_mpn_label_clicked(self) -> None:
+        self.mpn_label_clicked.emit(self._mpn_value)
+
     def _show_context_menu(self, pos: Any) -> None:
         menu = QMenu(self)
         copy_action = QAction("Copy", self)
@@ -136,13 +148,16 @@ class ComponentRowCore(QFrame):
             chip.style().polish(chip)
 
     def cleanup(self) -> None:
-        self.mpn_label.removeEventFilter(self._mpn_filter)
+        try: self.mpn_label_clicked.disconnect()
+        except Exception: logger.debug("mpn_label_clicked had no connections")
+        try: self.refdes_chip_clicked.disconnect()
+        except Exception: logger.debug("refdes_chip_clicked had no connections")
+
+        try: self.mpn_label.clicked.disconnect()
+        except Exception: logger.debug("mpn_label.clicked had no connections")
         try: self.mpn_label.customContextMenuRequested.disconnect()
-        except Exception: pass
+        except Exception: logger.debug("mpn_label context menu had no connections")
+
         for chip in self.chips.values():
             try: chip.clicked.disconnect()
-            except Exception: pass
-        try: self.mpn_label_clicked.disconnect()
-        except Exception: pass
-        try: self.refdes_chip_clicked.disconnect()
-        except Exception: pass
+            except Exception: logger.debug("chip.clicked had no connections")

@@ -199,6 +199,29 @@ class Theme:
     def bom_panel_min_width_absolute(self) -> int:
         return int(self._bom_panel['layout']['min_width_absolute_px'])
 
+    # Defaults below match Optimize06 section 4. They are unreachable in
+    # production -- the schema marks both sections required, so ThemeLoader
+    # rejects a theme.json missing them -- and exist so Theme.for_testing()
+    # keeps its documented "never raises on an under-constrained fixture"
+    # contract, as page_switcher_segmented_max already does.
+    def canvas_render_resize_debounce_ms(self) -> int:
+        return int(self._canvas.get('render', {}).get('resize_debounce_ms', 200))
+
+    def canvas_render_max_cached_bytes(self) -> int:
+        return int(self._canvas.get('render', {}).get('max_cached_bytes', 402_653_184))
+
+    def canvas_render_prefetch_page_limit(self) -> int:
+        return int(self._canvas.get('render', {}).get('prefetch_page_limit', 1))
+
+    def checklist_min_height_px(self) -> int:
+        return int(self._left_panel.get('checklist', {}).get('min_height_px', 80))
+
+    def splitter_default_sizes(self) -> list[int]:
+        return list(self._left_panel.get('splitter', {}).get('default_sizes', [600, 300]))
+
+    def complete_button_enable_debounce_ms(self) -> int:
+        return int(self._left_panel.get('complete_button', {}).get('enable_debounce_ms', 500))
+
     def _compose_bom_grouping(self, grouping_tokens: Mapping[str, Any]) -> str:
         lines = [
             "QFrame[class=\"bom-grouping\"] {",

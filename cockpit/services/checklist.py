@@ -211,3 +211,7 @@ class ChecklistService:
             raise
             
         return self.load_active_audit(audit_id)
+
+    def release_audit_scoped_caches(self) -> None:
+        self._refdes_index_cache.clear()
+        self._bom_source_file_memo.clear()

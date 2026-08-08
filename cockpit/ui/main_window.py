@@ -29,6 +29,11 @@ from cockpit.ui.font_scale_controller import FontScaleController
 import logging
 logger = logging.getLogger(__name__)
 
+# Sized against one worst-case single-page rasterize at unscaled 4K (~3.6 s per
+# Patch01 section 8.2). Beyond this the worker is wrong, not slow, and the exit
+# path stops waiting on it.
+RENDER_SHUTDOWN_TIMEOUT_MS = 10_000
+
 
 class MainWindow(QMainWindow):
     def __init__(
@@ -85,6 +90,7 @@ class MainWindow(QMainWindow):
         self.picker.label_toggle_requested.connect(self._on_label_toggle_requested)
         self.picker.photos_toggle_requested.connect(self._on_photos_toggle_requested)
         self.picker.new_audit_requested.connect(self._on_picker_new_audit_requested)
+        self.picker.holidays_requested.connect(self._on_holidays_requested)
         self.stacked.addWidget(self.picker)
         
         self._load_epoch = 0
@@ -141,17 +147,17 @@ class MainWindow(QMainWindow):
         canvas = self._audit_view._layout_canvas
         canvas.request_render.connect(self._render_worker._on_request, Qt.ConnectionType.QueuedConnection)
         canvas.generation_bumped.connect(self._render_worker.note_latest_generation, Qt.ConnectionType.DirectConnection)
-        self._render_worker.render_ready.connect(canvas._on_render_ready, Qt.ConnectionType.QueuedConnection)
-        self._render_worker.render_error.connect(canvas._on_render_error, Qt.ConnectionType.QueuedConnection)
+        self._render_worker.render_ready.connect(canvas.accept_render_result, Qt.ConnectionType.QueuedConnection)
+        self._render_worker.render_error.connect(canvas.accept_render_failure, Qt.ConnectionType.QueuedConnection)
         
-        canvas._worker_alive = True
+        self._audit_view.set_render_worker_alive(True)
         self._render_thread.start()
         
         self._resolve_initial_page()
         
         self._idle_timer = QTimer(self)
         self._idle_timer.setSingleShot(True)
-        self._idle_timer.setInterval(60000)
+        self._idle_timer.setInterval(self._bootstrapped.config.idle_maintenance_interval_ms)
         self._idle_timer.timeout.connect(self._run_idle_maintenance)
         self._app.installEventFilter(self)
         self._idle_timer.start()
@@ -226,6 +232,9 @@ class MainWindow(QMainWindow):
         return super().eventFilter(obj, event)
         
     def _show_drop_area(self) -> None:
+        # Second exit-to-list path alongside _reload_list; both release before
+        # switching. setCurrentWidget only hides.
+        self._audit_view.unload()
         open_audits = self._audit_read_svc.list_open()
         self.drop_area.set_back_visible(len(open_audits) > 0)
         self.stacked.setCurrentWidget(self.drop_area)
@@ -313,10 +322,16 @@ class MainWindow(QMainWindow):
         self._reload_list()
 
     def _invalidate_audit_view_if_loaded(self, audit_id: int) -> None:
-        self._audit_view.forget_audit(audit_id)
+        self._audit_view.discard_if_showing(audit_id)
         
     def _on_picker_new_audit_requested(self) -> None:
         self._show_drop_area()
+
+    def _on_holidays_requested(self) -> None:
+        from cockpit.ui.widgets.holiday_dialog import HolidayDialog
+        dialog = HolidayDialog(self._holiday_svc, self)
+        dialog.exec()
+        self._reload_list()
 
     def _on_drop_received(self, paths: list[pathlib.Path]) -> None:
         if self._worker_in_flight:
@@ -372,6 +387,13 @@ class MainWindow(QMainWindow):
         self._reload_list()
 
     def _reload_list(self) -> None:
+        # Optimize06 section 3.6: _reload_list and _show_drop_area are the two
+        # exit-to-list paths, and the release belongs on the path rather than on
+        # one chosen caller. setCurrentWidget only hides. Placing it at
+        # _on_dashboard_exit instead would leave _on_midnight_timer -- which
+        # reaches here without the back button -- switching away from a still
+        # loaded audit view, which is F2 recurring on that path.
+        self._audit_view.unload()
         open_audits = self._audit_read_svc.list_open()
         if not open_audits:
             self._show_drop_area()
@@ -418,11 +440,9 @@ class MainWindow(QMainWindow):
             except Exception:
                 logger.exception('Exception caught in main_window')
                 pass
-                
-            self._audit_view._layout_canvas._worker_alive = False
-            if hasattr(self, "_render_thread") and self._render_thread is not None:
-                self._render_thread.quit()
-                self._render_thread.wait()
+
+            self._audit_view.unload()
+            self.shutdown_render_thread()
                 
             from cockpit.persistence.connection import run_idle_maintenance
             run_idle_maintenance(self._bootstrapped.conn)
@@ -433,3 +453,28 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         if self.toast.isVisible():
             self.toast._position_bottom_right()
+
+    def shutdown_render_thread(self, timeout_ms: int = RENDER_SHUTDOWN_TIMEOUT_MS) -> bool:
+        """
+        Intent: Stop the render thread without hanging the exit path on an
+                in-flight rasterize.
+        Pre:    timeout_ms > 0.
+        Post:   Returns True if the thread exited within timeout_ms. On False
+                the thread is left running, the caller still accepts the close
+                event, and the condition is logged at WARNING -- a still-
+                rasterizing worker holds no DB handle and no widget reference,
+                so process exit is safe.
+        Raises: Nothing.
+        """
+        self._audit_view.set_render_worker_alive(False)
+        if getattr(self, "_render_thread", None) is None:
+            return True
+
+        self._render_thread.quit()
+        exited = self._render_thread.wait(timeout_ms)
+        if not exited:
+            # Deliberately NOT terminate(): killing a thread inside fitz can
+            # leave the allocator inconsistent, and the second wait() that
+            # follows terminate() is unbounded -- F9 reintroduced.
+            logger.warning("render thread did not exit within %d ms; exiting anyway", timeout_ms)
+        return exited

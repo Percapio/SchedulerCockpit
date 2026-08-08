@@ -132,6 +132,19 @@ class SelectionCoordinator(QObject):
     def on_audit_loaded(self) -> None:
         self._emit_clear()
 
+    def unload(self) -> None:
+        """Drop the active selection without notifying anyone.
+
+        Distinct from _emit_clear(), which both clears and emits, and which must
+        not be used during teardown. The non-owning _dashboard and _bom_panel
+        references are left intact -- they point at lifetime-stable siblings,
+        not at audit-scoped data, and nulling them would break the next load.
+        """
+        self._active = None
+
+    def is_loaded(self) -> bool:
+        return self._active is not None
+
     def _emit_clear(self) -> None:
         self._clear_panes()
         
@@ -154,4 +167,4 @@ class SelectionCoordinator(QObject):
             if hasattr(self._dashboard, 'checklist_notes'):
                 self._dashboard.checklist_notes.clear_selected_row()
         if self._bom_panel:
-            self._bom_panel.clear()
+            self._bom_panel.clear_selection()

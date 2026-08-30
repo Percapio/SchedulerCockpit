@@ -9,7 +9,6 @@ from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.bom_components import AuditBomComponentRepository
 from cockpit.persistence.repositories.pdf_coords import PdfComponentCoordRepository
 from cockpit.persistence.repositories.source_files import SourceFileRepository
-from cockpit.persistence.repositories.notes_checklist import BuildNotesChecklistRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
 from cockpit.protocols import ParserRegistry
 from cockpit.persistence.types import ActiveAuditDraft, SourceFileCategory
@@ -40,8 +39,7 @@ def env(tmp_path):
     audit_repo = AuditRepository(conn, bom_repo, pdf_repo)
     source_file_repo = SourceFileRepository(conn)
     tht_repo = ThtChecklistRepository(conn)
-    notes_repo = BuildNotesChecklistRepository(conn)
-
+    
     file_storage_root = tmp_path / "cockpit_data"
 
     service = IngestionService(
@@ -49,7 +47,6 @@ def env(tmp_path):
         audit_repo=audit_repo,
         source_file_repo=source_file_repo,
         tht_repo=tht_repo,
-        notes_repo=notes_repo,
         bom_component_repo=bom_repo,
         pdf_coord_repo=pdf_repo,
         layout_parser=DummyLayoutParser(),
@@ -68,10 +65,8 @@ def env(tmp_path):
         conn=conn,
         audit_repo=audit_repo,
         tht_repo=tht_repo,
-        notes_repo=notes_repo,
         source_file_repo=source_file_repo,
         bom_component_repo=bom_repo,
-        image_cache_service=Mock(),
         app_config=Mock()
     )
 

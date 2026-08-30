@@ -2,6 +2,7 @@
 
 import logging
 from logging.handlers import RotatingFileHandler
+import shutil
 import sqlite3
 import sys
 import pathlib
@@ -15,14 +16,12 @@ from cockpit.persistence.schema import migrate
 from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
-from cockpit.persistence.repositories.notes_checklist import BuildNotesChecklistRepository
 from cockpit.persistence.repositories.bom_components import AuditBomComponentRepository
 from cockpit.persistence.repositories.pdf_coords import PdfComponentCoordRepository
 from cockpit.ingestion.service import IngestionService
 from cockpit.ingestion.parsers.coordinate_map import load as load_map
 from cockpit.services.audit_read import AuditReadService
 from cockpit.services.checklist import ChecklistService
-from cockpit.services.image_cache import ImageCacheService
 from cockpit.services.split import AuditSplitService
 
 from cockpit.services.storage_reaper import StorageReaper
@@ -57,6 +56,26 @@ class BootstrappedApp:
     pdf_renderer: PdfRenderer
     reconciliation_report: ReconciliationReport
     runtime_calc_svc: RuntimeCalcService
+
+
+def remove_notes_media_tree(app_data_root: pathlib.Path) -> bool:
+    """Deletes the notes_media/ tree left behind by the pre-v16 image cache.
+
+    pre:  schema v16 has applied, so nothing reads from the tree any more
+    post: returns True when the tree is gone. Best-effort: a locked file leaves
+          a partial tree, which is inert, and the next launch retries. This must
+          never be able to block startup.
+    """
+    tree = pathlib.Path(app_data_root) / "notes_media"
+    try:
+        if not tree.exists():
+            return True
+        shutil.rmtree(tree)
+        logger.info("Removed obsolete notes media cache at %s", tree)
+        return True
+    except OSError as exc:
+        logger.warning("Could not remove obsolete notes media cache at %s: %s", tree, exc)
+        return False
 
 
 def bootstrap(
@@ -149,12 +168,12 @@ def bootstrap(
     )
     
     needs_backfill = migrate(conn, parser_registry)
-    
+    remove_notes_media_tree(config.app_data_root)
+
     audit_repo = AuditRepository(conn, bom_component_repo, pdf_coord_repo)
     source_file_repo = SourceFileRepository(conn)
     tht_repo = ThtChecklistRepository(conn)
-    notes_repo = BuildNotesChecklistRepository(conn)
-    
+
     from cockpit.services.runtime_calc import RuntimeCalcService
     runtime_calc_svc = RuntimeCalcService(
         audit_repo, source_file_repo, bom_component_repo, pdf_coord_repo,
@@ -190,7 +209,6 @@ def bootstrap(
         audit_repo=audit_repo,
         source_file_repo=source_file_repo,
         tht_repo=tht_repo,
-        notes_repo=notes_repo,
         bom_component_repo=bom_component_repo,
         pdf_coord_repo=pdf_coord_repo,
         layout_parser=parser_registry.pdf_layout_parser,
@@ -204,8 +222,7 @@ def bootstrap(
     holiday_svc = HolidayService(holiday_repo)
     
     audit_read_svc = AuditReadService(audit_repo, holiday_svc=holiday_svc)
-    image_cache_svc = ImageCacheService(conn, config)
-    checklist_svc = ChecklistService(conn, audit_repo, tht_repo, notes_repo, source_file_repo, bom_component_repo, image_cache_svc, config)
+    checklist_svc = ChecklistService(conn, audit_repo, tht_repo, source_file_repo, bom_component_repo, config)
     split_svc = AuditSplitService(conn, audit_repo, runtime_calc_svc=runtime_calc_svc)
     
     storage_reaper = StorageReaper(source_file_repo)

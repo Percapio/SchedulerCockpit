@@ -12,7 +12,6 @@ from cockpit.services.date_urgency import DateUrgency
 
 class ChecklistRowKind(StrEnum):
     THT = "tht"
-    NOTES = "notes"
 
 
 @dataclass(frozen=True)
@@ -138,30 +137,9 @@ class PendingPdf:
     path: pathlib.Path
 
 
-from cockpit.ingestion.parsers.results import EcoImageRef
-from cockpit.services.image_cache import CachedImagePath, ImageUnavailable
 
-ImageSlotState = CachedImagePath | ImageUnavailable
 
-@dataclass(frozen=True)
-class ImageSlotView:
-    ref: EcoImageRef
-    state: ImageSlotState
 
-@dataclass(frozen=True)
-class NotesCellView:
-    text: str
-    images: tuple[ImageSlotView, ...]
-
-@dataclass(frozen=True)
-class NotesRowView:
-    key: ChecklistRowKey
-    row_sequence: int
-    cells: tuple[NotesCellView, ...]
-    table_index: int
-
-    def flat_text(self) -> str:
-        return "\n".join(c.text for c in self.cells)
 
 
 @dataclass(frozen=True)
@@ -186,12 +164,12 @@ class ActiveAuditView:
     has_pdf: bool
     tht_placement_count: int = 0
     tht_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
-    notes_rows: Sequence[NotesRowView] = field(default_factory=tuple)
     ship_date: str | None = None
     ops_per_board_min: float | None = None
     has_secondary_pdf: bool = False
     is_labeled: bool = False
     are_photos_uploaded: bool = False
+    notes_docx_path: pathlib.Path | None = None
 
 
 

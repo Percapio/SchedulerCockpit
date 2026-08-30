@@ -4,7 +4,7 @@ from . import audit_bom
 from . import eco_build_notes
 from . import traveler
 from . import coordinate_map
-from .results import BomResult, EcoResult, TravelerResult, IngestionIntent, BomItem, EcoItem
+from .results import BomResult, EcoResult, TravelerResult, IngestionIntent, BomItem
 
 __all__ = [
     "audit_bom",
@@ -16,5 +16,4 @@ __all__ = [
     "TravelerResult",
     "IngestionIntent",
     "BomItem",
-    "EcoItem"
 ]

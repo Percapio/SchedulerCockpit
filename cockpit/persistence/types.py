@@ -93,19 +93,6 @@ class ThtChecklistItem:
 
 
 @dataclass(frozen=True)
-class BuildNoteItem:
-    id: int
-    audit_id: int
-    source_file_id: int | None
-    row_sequence: int
-    cells: str               # JSON array
-    image_refs: str          # JSON array
-    source_table_index: int
-
-
-# ---------- draft types (consumed by repositories on insert) ----------
-
-@dataclass(frozen=True)
 class ActiveAuditDraft:
     part_number: str
     work_order_ref: str
@@ -130,16 +117,6 @@ class ThtChecklistItemDraft:
     component_mpn: str
     source_file_id: int | None = None
     description: str | None = None
-
-
-@dataclass(frozen=True)
-class BuildNoteItemDraft:
-    audit_id: int
-    row_sequence: int
-    cells: str               # JSON array
-    image_refs: str          # JSON array
-    source_table_index: int
-    source_file_id: int | None = None
 
 
 @dataclass(frozen=True)

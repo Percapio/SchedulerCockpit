@@ -116,10 +116,14 @@ class CenterPager(QWidget):
             self._stacked.setCurrentWidget(self._canvas)
             source = PdfSource.PRIMARY if page == CenterPage.PRIMARY_PDF else PdfSource.SECONDARY
             self._canvas.show_source(source)
-
     def bind(self, session: AuditSession) -> None:
         self._session = session
-        self._notes_pane.bind(session)
+        self._session.view_changed.connect(self._on_audit_loaded)
+        
+    def _on_audit_loaded(self, view) -> None:
+        if view:
+            self._notes_pane.load(view)
+
 
     def load(self, audit_id: int) -> None:
         self._selector.set_segments(has_secondary=False)

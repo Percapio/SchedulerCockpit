@@ -35,7 +35,7 @@ def test_unload_does_not_clear_session(qtbot, bootstrapped_app, theme):
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme, settings=QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, 'Test', 'Test')
+        theme=theme
     )
     qtbot.addWidget(view)
     
@@ -58,7 +58,7 @@ def test_center_pager_opens_on_drawing(qtbot, bootstrapped_app, theme):
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme, settings=QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, 'Test', 'Test')
+        theme=theme
     )
     qtbot.addWidget(view)
     
@@ -84,7 +84,7 @@ def test_all_panes_enabled_after_load(qtbot, bootstrapped_app, theme):
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme, settings=QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, 'Test', 'Test')
+        theme=theme
     )
     qtbot.addWidget(view)
     
@@ -120,6 +120,10 @@ def test_main_window_picker_leaves_view_usable(qtbot, bootstrapped_app, theme):
     assert main._audit_view._center_pager.isEnabled()
     assert main._audit_view._right_stack.isEnabled()
 
+    # MainWindow starts its render QThread in __init__ and only stops it from
+    # closeEvent; without this the interpreter cannot exit at teardown.
+    main.shutdown_render_thread()
+
 @patch('cockpit.ui.widgets.dialogs.confirm_destructive')
 def test_complete_declined_leaves_audit_intact(mock_confirm, qtbot, bootstrapped_app, theme):
     view = AuditView(
@@ -131,7 +135,7 @@ def test_complete_declined_leaves_audit_intact(mock_confirm, qtbot, bootstrapped
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme, settings=QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, 'Test', 'Test')
+        theme=theme
     )
     qtbot.addWidget(view)
     
@@ -155,7 +159,7 @@ def test_complete_confirmed_deletes_audit(mock_confirm, qtbot, bootstrapped_app,
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme, settings=QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, 'Test', 'Test')
+        theme=theme
     )
     qtbot.addWidget(view)
     

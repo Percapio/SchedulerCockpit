@@ -21,7 +21,6 @@ def test_bootstrap_probe_history_logging(tmp_path, monkeypatch):
         app_data_root=root,
         db_path=db_path,
         file_storage_root=root / "uploads",
-        notes_media_root=root / "notes_media",
         coord_map_path=None,
         log_path=root / "logs" / "cockpit.log",
         log_level="INFO",

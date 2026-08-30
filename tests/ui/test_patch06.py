@@ -51,8 +51,7 @@ def test_build_identity_banner_assembly_class_list_no_crash():
     view = ActiveAuditView(
         audit_id=1, part_number="P", work_order_ref="W", split_suffix="",
         quantity=1, split_reason=None, status=AuditStatus.NOT_CLEAR,
-        tht_rows=[], notes_rows=[],
-        traveler_metadata={"assembly_class": ["a list", "instead of scalar"]},
+        tht_rows=[], traveler_metadata={"assembly_class": ["a list", "instead of scalar"]},
         has_pdf=False, tht_placement_count=0
     )
     banner = build_identity_banner(view)
@@ -122,7 +121,7 @@ def test_audit_view_integration_populates_panes(qtbot, bootstrapped_app):
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme, settings=Mock()
+        theme=theme, 
     )
     qtbot.addWidget(view)
     view.load(audit_id)
@@ -131,4 +130,8 @@ def test_audit_view_integration_populates_panes(qtbot, bootstrapped_app):
     tht_pane = view.checklist_tht
     notes_pane = view._center_pager._notes_pane
     assert tht_pane.is_loaded()
-    assert notes_pane.is_loaded()
+    # Patch 08: the notes pane holds the path and renders on first show, so
+    # "loaded" is the stored path, not a populated widget tree.
+    assert notes_pane._docx_path is not None
+    assert notes_pane._docx_path.name.endswith(".docx")
+    assert notes_pane._state == "Empty"

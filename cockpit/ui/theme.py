@@ -233,17 +233,16 @@ class Theme:
     def pane_fill_rgb(self) -> str:
         return self._pane.get('fill_rgb', '#1E1E1E')
 
-    def notes_image_inline_max_height_px(self) -> int:
-        return int(self._notes.get('image', {}).get('inline_max_height_px', 64))
 
-    def notes_image_max_decoded_pixels(self) -> int:
-        return int(self._notes.get('image', {}).get('max_decoded_pixels', 16000000))
 
-    def notes_column_min_width_px(self) -> int:
-        return int(self._notes.get('column', {}).get('min_width_px', 24))
 
-    def notes_column_max_content_width_px(self) -> int:
-        return int(self._notes.get('column', {}).get('max_content_width_px', 480))
+
+
+    def notes_page_background_rgb(self) -> str: return self._notes.get("page_background_rgb", "#FFFFFF")
+    def notes_default_text_rgb(self) -> str: return self._notes.get("default_text_rgb", "#000000")
+    def notes_placeholder_border_rgb(self) -> str: return self._notes.get("placeholder_border_rgb", "#CCCCCC")
+    def notes_placeholder_text_rgb(self) -> str: return self._notes.get("placeholder_text_rgb", "#999999")
+    def notes_search_highlight_rgb(self) -> str: return self._notes.get("search_highlight_rgb", "#FFFF00")
 
     def _compose_bom_grouping(self, grouping_tokens: Mapping[str, Any]) -> str:
         lines = [

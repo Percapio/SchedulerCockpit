@@ -70,6 +70,5 @@ def reconcile(
 
     return IngestionIntent(
         audit_draft=audit_draft,
-        bom_items=bom.items,
-        eco_items=eco.items
+        bom_items=bom.items
     )

@@ -29,24 +29,9 @@ class BomResult:
 
 
 @dataclass(frozen=True)
-class EcoImageRef:
-    blob_sha1: str                   # SHA1 hex of the part blob
-    content_type: str                # from the part
-    cell_index: int                  # which cell of the row carried it
-    order: int                       # document order within that cell
-
-@dataclass(frozen=True)
-class EcoItem:
-    row_sequence: int
-    cells: tuple[str, ...]
-    images: tuple[EcoImageRef, ...]
-    source_table_index: int
-
-
-@dataclass(frozen=True)
 class EcoResult:
     declared_part_number: str           # from filename prefix
-    items: list[EcoItem]
+    row_count: int
     raw_table_count: int
 
 
@@ -61,4 +46,3 @@ class TravelerResult:
 class IngestionIntent:
     audit_draft: ActiveAuditDraft           # ready for AuditRepository.create; carries traveler_metadata
     bom_items: list[BomItem]
-    eco_items: list[EcoItem]

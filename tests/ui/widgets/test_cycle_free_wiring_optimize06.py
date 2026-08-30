@@ -88,14 +88,6 @@ def _tht_row_view() -> ChecklistRowView:
     )
 
 
-def _notes_row_view() -> ChecklistRowView:
-    return ChecklistRowView(
-        key=ChecklistRowKey(kind=ChecklistRowKind.NOTES, item_id=2),
-        primary_label="build note",
-        secondary_label=None,
-    )
-
-
 def _bom_row_view() -> AuditBomRowView:
     return AuditBomRowView(
         find_number=1,

@@ -26,7 +26,6 @@ class SelectionCoordinator(QObject):
         self._view_provider = view_provider
         self._layout_query_service = layout_query_service
         self._tht_pane = None
-        self._notes_pane = None
         self._bom_panel = None
         self._active: SelectionIntent | None = None
 
@@ -53,9 +52,6 @@ class SelectionCoordinator(QObject):
 
     def register_tht_pane(self, pane: Any) -> None:
         self._tht_pane = pane
-
-    def register_notes_pane(self, pane: Any) -> None:
-        self._notes_pane = pane
 
     def register_bom_panel(self, bom_panel: 'AuditBomPanel') -> None:
         self._bom_panel = bom_panel
@@ -168,7 +164,5 @@ class SelectionCoordinator(QObject):
     def _clear_panes(self) -> None:
         if self._tht_pane:
             self._tht_pane.clear_selected_row()
-        if self._notes_pane:
-            self._notes_pane.clear_selected_row()
         if self._bom_panel:
             self._bom_panel.clear_selection()

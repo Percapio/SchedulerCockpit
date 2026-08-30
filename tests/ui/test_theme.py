@@ -72,14 +72,11 @@ def valid_theme_data():
             "fill_rgb": "#1E1E1E"
         },
         "notes": {
-            "image": {
-                "inline_max_height_px": 64,
-                "max_decoded_pixels": 16000000
-            },
-            "column": {
-                "min_width_px": 24,
-                "max_content_width_px": 480
-            }
+            "page_background_rgb": "#FFFFFF",
+            "default_text_rgb": "#000000",
+            "placeholder_border_rgb": "#EEEEEE",
+            "placeholder_text_rgb": "#999999",
+            "search_highlight_rgb": "#FFFF00"
         }
     }
 

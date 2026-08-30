@@ -8,13 +8,12 @@ import time
 from typing import Sequence, Callable, Any
 
 from cockpit.persistence.repositories.audits import AuditRepository
-from cockpit.persistence.repositories.notes_checklist import BuildNotesChecklistRepository
 from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
 from cockpit.persistence.repositories.bom_components import AuditBomComponentRepository
 from cockpit.persistence.repositories.pdf_coords import PdfComponentCoordRepository
 from cockpit.persistence.types import (
-    ActiveAudit, AuditBomComponentDraft, BuildNoteItemDraft, PdfComponentCoordDraft,
+    ActiveAudit, AuditBomComponentDraft, PdfComponentCoordDraft,
     SourceFileCategory, SourceFileDraft, ThtChecklistItemDraft
 )
 
@@ -37,7 +36,6 @@ class IngestionService:
         audit_repo: AuditRepository,
         source_file_repo: SourceFileRepository,
         tht_repo: ThtChecklistRepository,
-        notes_repo: BuildNotesChecklistRepository,
         bom_component_repo: AuditBomComponentRepository,
         pdf_coord_repo: PdfComponentCoordRepository,
         layout_parser: Any,
@@ -49,7 +47,6 @@ class IngestionService:
         self.audit_repo = audit_repo
         self.source_file_repo = source_file_repo
         self.tht_repo = tht_repo
-        self.notes_repo = notes_repo
         self.bom_component_repo = bom_component_repo
         self.pdf_coord_repo = pdf_coord_repo
         self.layout_parser = layout_parser
@@ -142,7 +139,7 @@ class IngestionService:
             _emit(ProgressStage.BOM_PARSED, {"header_layout": getattr(bom_result, "header_layout", "canonical")})
 
             eco_result = eco_build_notes.parse(stored_notes)
-            _emit(ProgressStage.ECO_PARSED, {"eco_item_count": len(eco_result.items) if eco_result.items else 0})
+            _emit(ProgressStage.ECO_PARSED, {"eco_item_count": eco_result.row_count})
 
             trav_result = traveler.parse(stored_trav, self.coord_map)
             _emit(ProgressStage.TRAVELER_PARSED)
@@ -229,21 +226,6 @@ class IngestionService:
                 ]
                 if pdf_drafts:
                     self.pdf_coord_repo.bulk_insert(pdf_drafts)
-
-            if intent.eco_items:
-                import json
-                self.notes_repo.insert_many([
-                    BuildNoteItemDraft(
-                        audit_id=audit.id, source_file_id=notes_file.id,
-                        row_sequence=item.row_sequence,
-                        cells=json.dumps(item.cells),
-                        image_refs=json.dumps([
-                            {"blob_sha1": r.blob_sha1, "content_type": r.content_type, "cell_index": r.cell_index, "order": r.order}
-                            for r in item.images
-                        ]),
-                        source_table_index=item.source_table_index
-                    ) for item in intent.eco_items
-                ])
 
             _emit(ProgressStage.PERSISTED, {"tht_item_count": len(through_hole_drafts) if intent.bom_items else 0})
 

@@ -10,7 +10,6 @@ from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.bom_components import AuditBomComponentRepository
 from cockpit.persistence.repositories.pdf_coords import PdfComponentCoordRepository
 from cockpit.persistence.repositories.source_files import SourceFileRepository
-from cockpit.persistence.repositories.notes_checklist import BuildNotesChecklistRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
 from cockpit.protocols import ParserRegistry
 from cockpit.persistence.types import ActiveAuditDraft, SourceFileCategory
@@ -55,8 +54,7 @@ def ingestion_service(tmp_path):
     audit_repo = AuditRepository(conn, bom_repo, pdf_repo)
     source_file_repo = SourceFileRepository(conn)
     tht_repo = ThtChecklistRepository(conn)
-    notes_repo = BuildNotesChecklistRepository(conn)
-    
+        
     file_storage_root = tmp_path / "cockpit_data"
     
     # We need a coordinate map but add_pdf_to_audit doesn't use it
@@ -65,7 +63,6 @@ def ingestion_service(tmp_path):
         audit_repo=audit_repo,
         source_file_repo=source_file_repo,
         tht_repo=tht_repo,
-        notes_repo=notes_repo,
         bom_component_repo=bom_repo,
         pdf_coord_repo=pdf_repo,
         layout_parser=DummyLayoutParser(),
@@ -145,7 +142,7 @@ def test_add_pdf_to_audit_parse_error_rollback(ingestion_service):
 def test_ingest_all_smt_board_persists_empty_tht_checklist(ingestion_service, monkeypatch):
     service, _, tmp_path = ingestion_service
     from cockpit.ingestion.progress import ProgressStage
-    from cockpit.ingestion.parsers.results import BomItem, EcoItem, IngestionIntent
+    from cockpit.ingestion.parsers.results import BomItem, IngestionIntent
     from cockpit.persistence.types import ActiveAuditDraft
     
     # 1. Create files
@@ -160,7 +157,7 @@ def test_ingest_all_smt_board_persists_empty_tht_checklist(ingestion_service, mo
     
     # 2. Monkeypatch
     monkeypatch.setattr("cockpit.ingestion.parsers.audit_bom.parse", lambda p: None)
-    monkeypatch.setattr("cockpit.ingestion.parsers.eco_build_notes.parse", lambda p: type("EcoResult", (), {"items": [1]})())
+    monkeypatch.setattr("cockpit.ingestion.parsers.eco_build_notes.parse", lambda p: type("EcoResult", (), {"declared_part_number": "", "row_count": 1, "raw_table_count": 1})())
     monkeypatch.setattr("cockpit.ingestion.parsers.traveler.parse", lambda p, cm: None)
     
     # Mock intent
@@ -174,15 +171,11 @@ def test_ingest_all_smt_board_persists_empty_tht_checklist(ingestion_service, mo
             find_number=1
         )
     ]
-    eco_items = [
-        EcoItem(row_sequence=1, cells=("Test note",), images=(), source_table_index=0)
-    ]
     
     intent_mock = IngestionIntent(
         audit_draft=ActiveAuditDraft(part_number="TEST-123", work_order_ref="WO", quantity=1),
         bom_items=bom_items,
-        eco_items=eco_items
-    )
+        )
     
     monkeypatch.setattr("cockpit.ingestion.cross_validation.reconcile", lambda b, e, t, cm: intent_mock)
     
@@ -193,9 +186,7 @@ def test_ingest_all_smt_board_persists_empty_tht_checklist(ingestion_service, mo
     audit = service.ingest(paths, progress)
     
     assert audit is not None
-    assert service.tht_repo.list_for_audit(audit.id) == []
-    assert len(service.notes_repo.list_for_audit(audit.id)) > 0
-    
+    assert service.tht_repo.list_for_audit(audit.id) == []    
     persisted_events = [e for e in events if e.stage == ProgressStage.PERSISTED]
     assert len(persisted_events) == 1
     assert persisted_events[0].detail["tht_item_count"] == 0
@@ -204,7 +195,7 @@ def test_ingest_all_smt_board_persists_empty_tht_checklist(ingestion_service, mo
 def test_ingest_mixed_board_reports_tht_count_not_bom_count(ingestion_service, monkeypatch):
     service, _, tmp_path = ingestion_service
     from cockpit.ingestion.progress import ProgressStage
-    from cockpit.ingestion.parsers.results import BomItem, EcoItem, IngestionIntent
+    from cockpit.ingestion.parsers.results import BomItem, IngestionIntent
     from cockpit.persistence.types import ActiveAuditDraft
     
     bom_path = tmp_path / "TEST-123 AUDIT BOM.xlsx"
@@ -217,7 +208,7 @@ def test_ingest_mixed_board_reports_tht_count_not_bom_count(ingestion_service, m
     paths = [bom_path, trav_path, eco_path]
     
     monkeypatch.setattr("cockpit.ingestion.parsers.audit_bom.parse", lambda p: None)
-    monkeypatch.setattr("cockpit.ingestion.parsers.eco_build_notes.parse", lambda p: type("EcoResult", (), {"items": [1]})())
+    monkeypatch.setattr("cockpit.ingestion.parsers.eco_build_notes.parse", lambda p: type("EcoResult", (), {"declared_part_number": "", "row_count": 1, "raw_table_count": 1})())
     monkeypatch.setattr("cockpit.ingestion.parsers.traveler.parse", lambda p, cm: None)
     
     bom_items = [
@@ -227,15 +218,11 @@ def test_ingest_mixed_board_reports_tht_count_not_bom_count(ingestion_service, m
         BomItem(component_mpn="THT-1", description="THT Component", mount_type="T", ref_des_raw="R1", ref_des_list=("R1",), find_number=4),
         BomItem(component_mpn="THT-2", description="THT Component 2", mount_type="T", ref_des_raw="R2", ref_des_list=("R2",), find_number=5),
     ]
-    eco_items = [
-        EcoItem(row_sequence=1, cells=("Test note",), images=(), source_table_index=0)
-    ]
     
     intent_mock = IngestionIntent(
         audit_draft=ActiveAuditDraft(part_number="TEST-123", work_order_ref="WO", quantity=1),
         bom_items=bom_items,
-        eco_items=eco_items
-    )
+        )
     
     monkeypatch.setattr("cockpit.ingestion.cross_validation.reconcile", lambda b, e, t, cm: intent_mock)
     

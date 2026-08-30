@@ -2,197 +2,417 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["application", "base", "checklist_panel", "right_panel", "canvas", "bom_panel", "pane", "notes"],
+  "required": [
+    "application",
+    "base",
+    "checklist_panel",
+    "right_panel",
+    "canvas",
+    "bom_panel",
+    "pane",
+    "notes"
+  ],
   "properties": {
-    "$schema": { "type": "string" },
+    "$schema": {
+      "type": "string"
+    },
     "application": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["font_scale"],
+      "required": [
+        "font_scale"
+      ],
       "properties": {
         "font_scale": {
           "type": "object",
           "properties": {
-            "default_pt": { "type": "integer", "minimum": 1 },
-            "min_pt": { "type": "integer", "minimum": 1 },
-            "max_pt": { "type": "integer", "minimum": 1 },
-            "step_pt": { "type": "integer", "minimum": 1 }
+            "default_pt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "min_pt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_pt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "step_pt": {
+              "type": "integer",
+              "minimum": 1
+            }
           },
-          "required": ["default_pt", "min_pt", "max_pt", "step_pt"]
+          "required": [
+            "default_pt",
+            "min_pt",
+            "max_pt",
+            "step_pt"
+          ]
         }
       }
     },
     "base": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["window", "font", "toast"],
+      "required": [
+        "window",
+        "font",
+        "toast"
+      ],
       "properties": {
         "window": {
           "type": "object",
-          "properties": { "rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" } },
-          "required": ["rgb"]
+          "properties": {
+            "rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            }
+          },
+          "required": [
+            "rgb"
+          ]
         },
         "font": {
           "type": "object",
           "properties": {
-            "family": { "type": "string" },
-            "size_px": { "type": "integer", "minimum": 1 }
+            "family": {
+              "type": "string"
+            },
+            "size_px": {
+              "type": "integer",
+              "minimum": 1
+            }
           },
-          "required": ["family", "size_px"]
+          "required": [
+            "family",
+            "size_px"
+          ]
         },
         "toast": {
           "type": "object",
           "properties": {
-            "info": { "$ref": "#/$defs/toast_severity" },
-            "warn": { "$ref": "#/$defs/toast_severity" },
-            "error": { "$ref": "#/$defs/toast_severity" }
+            "info": {
+              "$ref": "#/$defs/toast_severity"
+            },
+            "warn": {
+              "$ref": "#/$defs/toast_severity"
+            },
+            "error": {
+              "$ref": "#/$defs/toast_severity"
+            }
           },
-          "required": ["info", "warn", "error"]
+          "required": [
+            "info",
+            "warn",
+            "error"
+          ]
         }
       }
     },
     "checklist_panel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["section_header", "row", "progress_view", "checklist"],
+      "required": [
+        "section_header",
+        "row",
+        "progress_view",
+        "checklist"
+      ],
       "properties": {
         "section_header": {
           "type": "object",
           "properties": {
-            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "padding_px": { "type": "integer", "minimum": 0 }
+            "fill_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "text_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "padding_px": {
+              "type": "integer",
+              "minimum": 0
+            }
           },
-          "required": ["fill_rgb", "text_rgb", "padding_px"]
+          "required": [
+            "fill_rgb",
+            "text_rgb",
+            "padding_px"
+          ]
         },
         "row": {
           "type": "object",
           "properties": {
-            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "fill_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "text_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "corner_radius_px": { "type": "integer", "minimum": 0 },
-            "vertical_padding_px": { "type": "integer", "minimum": 0 },
-            "horizontal_padding_px": { "type": "integer", "minimum": 0 },
-            "gutter_px": { "type": "integer", "minimum": 0 }
+            "fill_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "fill_selected_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "text_selected_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "corner_radius_px": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "vertical_padding_px": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "horizontal_padding_px": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "gutter_px": {
+              "type": "integer",
+              "minimum": 0
+            }
           },
-          "required": ["fill_rgb", "fill_selected_rgb", "text_selected_rgb", "corner_radius_px", "vertical_padding_px", "horizontal_padding_px", "gutter_px"]
+          "required": [
+            "fill_rgb",
+            "fill_selected_rgb",
+            "text_selected_rgb",
+            "corner_radius_px",
+            "vertical_padding_px",
+            "horizontal_padding_px",
+            "gutter_px"
+          ]
         },
-
         "progress_view": {
           "type": "object",
           "properties": {
-            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+            "fill_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "text_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            }
           },
-          "required": ["fill_rgb", "text_rgb"]
+          "required": [
+            "fill_rgb",
+            "text_rgb"
+          ]
         },
         "checklist": {
           "type": "object",
           "properties": {
-            "min_height_px": { "type": "integer", "minimum": 0 }
+            "min_height_px": {
+              "type": "integer",
+              "minimum": 0
+            }
           },
-          "required": ["min_height_px"]
+          "required": [
+            "min_height_px"
+          ]
         }
       }
     },
     "right_panel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["layout", "splitter"],
+      "required": [
+        "layout",
+        "splitter"
+      ],
       "properties": {
         "layout": {
           "type": "object",
           "properties": {
-            "min_width_px": { "type": "integer", "minimum": 0 }
+            "min_width_px": {
+              "type": "integer",
+              "minimum": 0
+            }
           },
-          "required": ["min_width_px"]
+          "required": [
+            "min_width_px"
+          ]
         },
         "splitter": {
           "type": "object",
           "properties": {
             "default_sizes": {
               "type": "array",
-              "items": { "type": "integer", "minimum": 0 },
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              },
               "minItems": 2,
               "maxItems": 2
             }
           },
-          "required": ["default_sizes"]
+          "required": [
+            "default_sizes"
+          ]
         }
       }
     },
     "canvas": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["colour", "pen_width", "z_order", "zoom", "scalar", "hint_label", "render"],
+      "required": [
+        "colour",
+        "pen_width",
+        "z_order",
+        "zoom",
+        "scalar",
+        "hint_label",
+        "render"
+      ],
       "properties": {
         "colour": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["highlight_pen", "dim_overlay", "hint_label_background", "hint_label_text", "hint_label_border"],
+          "required": [
+            "highlight_pen",
+            "dim_overlay",
+            "hint_label_background",
+            "hint_label_text",
+            "hint_label_border"
+          ],
           "properties": {
-            "highlight_pen": { "$ref": "#/$defs/color_with_alpha" },
-            "dim_overlay": { "$ref": "#/$defs/color_with_alpha" },
-            "hint_label_background": { "$ref": "#/$defs/color_with_alpha" },
-            "hint_label_text": { "$ref": "#/$defs/color_with_alpha" },
-            "hint_label_border": { "$ref": "#/$defs/color_with_alpha" }
+            "highlight_pen": {
+              "$ref": "#/$defs/color_with_alpha"
+            },
+            "dim_overlay": {
+              "$ref": "#/$defs/color_with_alpha"
+            },
+            "hint_label_background": {
+              "$ref": "#/$defs/color_with_alpha"
+            },
+            "hint_label_text": {
+              "$ref": "#/$defs/color_with_alpha"
+            },
+            "hint_label_border": {
+              "$ref": "#/$defs/color_with_alpha"
+            }
           }
         },
         "render": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["resize_debounce_ms", "max_cached_bytes", "prefetch_page_limit"],
+          "required": [
+            "resize_debounce_ms",
+            "max_cached_bytes",
+            "prefetch_page_limit"
+          ],
           "properties": {
-            "resize_debounce_ms": { "type": "integer", "minimum": 0 },
-            "max_cached_bytes": { "type": "integer", "minimum": 0 },
-            "prefetch_page_limit": { "type": "integer", "minimum": 0 }
+            "resize_debounce_ms": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max_cached_bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "prefetch_page_limit": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         },
         "pen_width": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["highlight"],
+          "required": [
+            "highlight"
+          ],
           "properties": {
-            "highlight": { "type": "integer", "minimum": 1 }
+            "highlight": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         },
         "z_order": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["base_pixmap", "dim", "highlight"],
+          "required": [
+            "base_pixmap",
+            "dim",
+            "highlight"
+          ],
           "properties": {
-            "base_pixmap": { "type": "integer" },
-            "dim": { "type": "integer" },
-            "highlight": { "type": "integer" }
+            "base_pixmap": {
+              "type": "integer"
+            },
+            "dim": {
+              "type": "integer"
+            },
+            "highlight": {
+              "type": "integer"
+            }
           }
         },
         "zoom": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["min_scale", "max_scale", "step", "render_multiplier"],
+          "required": [
+            "min_scale",
+            "max_scale",
+            "step",
+            "render_multiplier"
+          ],
           "properties": {
-            "min_scale": { "type": "number", "minimum": 0.01, "maximum": 1.0 },
-            "max_scale": { "type": "number", "exclusiveMinimum": 1.0, "maximum": 16.0 },
-            "step": { "type": "number", "exclusiveMinimum": 1.0, "maximum": 2.0 },
-            "render_multiplier": { "type": "number", "minimum": 1.0, "maximum": 16.0 }
+            "min_scale": {
+              "type": "number",
+              "minimum": 0.01,
+              "maximum": 1.0
+            },
+            "max_scale": {
+              "type": "number",
+              "exclusiveMinimum": 1.0,
+              "maximum": 16.0
+            },
+            "step": {
+              "type": "number",
+              "exclusiveMinimum": 1.0,
+              "maximum": 2.0
+            },
+            "render_multiplier": {
+              "type": "number",
+              "minimum": 1.0,
+              "maximum": 16.0
+            }
           }
         },
         "scalar": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["highlight_scale"],
+          "required": [
+            "highlight_scale"
+          ],
           "properties": {
-            "highlight_scale": { "type": "number", "minimum": 1.0, "maximum": 4.0 }
+            "highlight_scale": {
+              "type": "number",
+              "minimum": 1.0,
+              "maximum": 4.0
+            }
           }
         },
         "hint_label": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["padding_px", "border_width_px"],
+          "required": [
+            "padding_px",
+            "border_width_px"
+          ],
           "properties": {
-            "padding_px": { "type": "integer", "minimum": 0 },
-            "border_width_px": { "type": "integer", "minimum": 0 }
+            "padding_px": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "border_width_px": {
+              "type": "integer",
+              "minimum": 0
+            }
           }
         }
       }
@@ -200,93 +420,213 @@
     "bom_panel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["grouping", "cell", "chip"],
+      "required": [
+        "grouping",
+        "cell",
+        "chip"
+      ],
       "properties": {
         "grouping": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "border_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "border_width_px": { "type": "integer", "minimum": 1, "maximum": 4 },
-            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "fill_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "corner_radius_px": { "type": "integer", "minimum": 0 },
-            "inner_padding_px": { "type": "integer", "minimum": 0 },
-            "gutter_px": { "type": "integer", "minimum": 0 }
+            "border_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "border_width_px": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4
+            },
+            "fill_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "fill_selected_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "corner_radius_px": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "inner_padding_px": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "gutter_px": {
+              "type": "integer",
+              "minimum": 0
+            }
           },
-          "required": ["border_rgb", "border_width_px", "fill_rgb", "fill_selected_rgb", "corner_radius_px", "inner_padding_px", "gutter_px"]
+          "required": [
+            "border_rgb",
+            "border_width_px",
+            "fill_rgb",
+            "fill_selected_rgb",
+            "corner_radius_px",
+            "inner_padding_px",
+            "gutter_px"
+          ]
         },
         "cell": {
           "type": "object",
           "properties": {
-            "mpn": { "$ref": "#/$defs/cell_style" },
-            "refdes": { "$ref": "#/$defs/cell_style" },
+            "mpn": {
+              "$ref": "#/$defs/cell_style"
+            },
+            "refdes": {
+              "$ref": "#/$defs/cell_style"
+            },
             "description": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-                "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-                "text_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-                "corner_radius_px": { "type": "integer", "minimum": 0 },
-                "padding_px": { "type": "integer", "minimum": 0 },
-                "font_size_px": { "type": "integer", "minimum": 1 }
+                "fill_rgb": {
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                },
+                "text_rgb": {
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                },
+                "text_selected_rgb": {
+                  "type": "string",
+                  "pattern": "^#[0-9A-Fa-f]{6}$"
+                },
+                "corner_radius_px": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "padding_px": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "font_size_px": {
+                  "type": "integer",
+                  "minimum": 1
+                }
               },
-              "required": ["fill_rgb", "text_rgb", "text_selected_rgb", "corner_radius_px", "padding_px", "font_size_px"]
+              "required": [
+                "fill_rgb",
+                "text_rgb",
+                "text_selected_rgb",
+                "corner_radius_px",
+                "padding_px",
+                "font_size_px"
+              ]
             }
           },
-          "required": ["mpn", "refdes", "description"]
+          "required": [
+            "mpn",
+            "refdes",
+            "description"
+          ]
         },
         "chip": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "fill_hover_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "text_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-            "corner_radius_px": { "type": "integer", "minimum": 0 },
-            "vertical_padding_px": { "type": "integer", "minimum": 0 },
-            "horizontal_padding_px": { "type": "integer", "minimum": 0 },
-            "flow_spacing_px": { "type": "integer", "minimum": 0 }
+            "fill_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "fill_hover_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "text_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "text_selected_rgb": {
+              "type": "string",
+              "pattern": "^#[0-9A-Fa-f]{6}$"
+            },
+            "corner_radius_px": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "vertical_padding_px": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "horizontal_padding_px": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "flow_spacing_px": {
+              "type": "integer",
+              "minimum": 0
+            }
           },
-          "required": ["fill_rgb", "fill_hover_rgb", "text_rgb", "text_selected_rgb", "corner_radius_px", "vertical_padding_px", "horizontal_padding_px", "flow_spacing_px"]
+          "required": [
+            "fill_rgb",
+            "fill_hover_rgb",
+            "text_rgb",
+            "text_selected_rgb",
+            "corner_radius_px",
+            "vertical_padding_px",
+            "horizontal_padding_px",
+            "flow_spacing_px"
+          ]
         }
       }
     },
     "pane": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["chamfer_px", "gap_px", "inset_px", "fill_rgb"],
+      "required": [
+        "chamfer_px",
+        "gap_px",
+        "inset_px",
+        "fill_rgb"
+      ],
       "properties": {
-        "chamfer_px": { "type": "integer", "minimum": 0 },
-        "gap_px": { "type": "integer", "minimum": 0 },
-        "inset_px": { "type": "integer", "minimum": 0 },
-        "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+        "chamfer_px": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gap_px": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "inset_px": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fill_rgb": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        }
       }
     },
     "notes": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["image", "column"],
+      "required": [
+        "page_background_rgb",
+        "default_text_rgb",
+        "placeholder_border_rgb",
+        "placeholder_text_rgb",
+        "search_highlight_rgb"
+      ],
       "properties": {
-        "image": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["inline_max_height_px", "max_decoded_pixels"],
-          "properties": {
-            "inline_max_height_px": { "type": "integer", "minimum": 1 },
-            "max_decoded_pixels": { "type": "integer", "minimum": 1 }
-          }
+        "page_background_rgb": {
+          "type": "string"
         },
-        "column": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["min_width_px", "max_content_width_px"],
-          "properties": {
-            "min_width_px": { "type": "integer", "minimum": 1 },
-            "max_content_width_px": { "type": "integer", "minimum": 1 }
-          }
+        "default_text_rgb": {
+          "type": "string"
+        },
+        "placeholder_border_rgb": {
+          "type": "string"
+        },
+        "placeholder_text_rgb": {
+          "type": "string"
+        },
+        "search_highlight_rgb": {
+          "type": "string"
         }
       }
     }
@@ -295,31 +635,74 @@
     "toast_severity": {
       "type": "object",
       "properties": {
-        "background_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-        "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-        "border_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+        "background_rgb": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "text_rgb": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "border_rgb": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        }
       },
-      "required": ["background_rgb", "text_rgb", "border_rgb"]
+      "required": [
+        "background_rgb",
+        "text_rgb",
+        "border_rgb"
+      ]
     },
     "color_with_alpha": {
       "type": "object",
       "properties": {
-        "rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-        "alpha": { "type": "integer", "minimum": 0, "maximum": 255 }
+        "rgb": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "alpha": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        }
       },
-      "required": ["rgb"]
+      "required": [
+        "rgb"
+      ]
     },
     "cell_style": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-        "text_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-        "text_selected_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
-        "corner_radius_px": { "type": "integer", "minimum": 0 },
-        "padding_px": { "type": "integer", "minimum": 0 }
+        "fill_rgb": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "text_rgb": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "text_selected_rgb": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$"
+        },
+        "corner_radius_px": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "padding_px": {
+          "type": "integer",
+          "minimum": 0
+        }
       },
-      "required": ["fill_rgb", "text_rgb", "text_selected_rgb", "corner_radius_px", "padding_px"]
+      "required": [
+        "fill_rgb",
+        "text_rgb",
+        "text_selected_rgb",
+        "corner_radius_px",
+        "padding_px"
+      ]
     }
   }
 }

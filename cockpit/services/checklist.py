@@ -1,22 +1,18 @@
 """Checklist service."""
 
 import logging
+import pathlib
 from cockpit.persistence.errors import AuditNotFound
 from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
-from cockpit.persistence.repositories.notes_checklist import BuildNotesChecklistRepository
 from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.persistence.repositories.bom_components import AuditBomComponentRepository
 from cockpit.persistence.types import AuditStatus, SourceFileCategory
 
 from cockpit.services.views import (
-    NotesRowView,
-    NotesCellView,
-    ImageSlotView,
-
     ActiveAuditView,
-    ChecklistRowKind,
     ChecklistRowKey,
+    ChecklistRowKind,
     ChecklistRowView,
 )
 
@@ -56,7 +52,6 @@ class BomSourceFileMemo:
     def clear(self) -> None:
         self._by_audit.clear()
 
-from cockpit.services.image_cache import ImageCacheService
 from cockpit.ui.config import AppConfig
 
 class ChecklistService:
@@ -65,19 +60,15 @@ class ChecklistService:
         conn: sqlite3.Connection,
         audit_repo: AuditRepository,
         tht_repo: ThtChecklistRepository,
-        notes_repo: BuildNotesChecklistRepository,
         source_file_repo: SourceFileRepository,
         bom_component_repo: AuditBomComponentRepository,
-        image_cache_service: ImageCacheService,
         app_config: AppConfig
     ) -> None:
         self._conn = conn
         self._audit_repo = audit_repo
         self._tht_repo = tht_repo
-        self._notes_repo = notes_repo
         self._source_file_repo = source_file_repo
         self._bom_component_repo = bom_component_repo
-        self._image_cache_service = image_cache_service
         self._app_config = app_config
         self._refdes_index_cache = RefDesIndexCache(self)
         self._bom_source_file_memo = BomSourceFileMemo(self._source_file_repo)
@@ -123,7 +114,6 @@ class ChecklistService:
         tht_index = self._refdes_index_cache.get(bom_sf_id)
 
         tht_rows_db = self._tht_repo.list_for_audit(audit_id)
-        notes_rows_db = self._notes_repo.list_for_audit(audit_id)
 
         tht_views = []
         for r in tht_rows_db:
@@ -145,10 +135,7 @@ class ChecklistService:
         tht_views.sort(key=sort_key)
 
         notes_sf = next((sf for sf in source_files if sf.file_category == SourceFileCategory.NOTES.value), None)
-        if notes_sf:
-            self._image_cache_service.ensure_extracted(notes_sf.file_hash, notes_sf.local_storage_path)
-
-        notes_views = [self._build_note_row_view(r, notes_sf) for r in notes_rows_db]
+        notes_docx_path = pathlib.Path(notes_sf.local_storage_path) if notes_sf else None
 
         tht_placement_count: int = sum(len(ref_des_list) for _, ref_des_list in tht_index.values())
 
@@ -164,47 +151,13 @@ class ChecklistService:
             has_pdf=has_pdf,
             tht_placement_count=tht_placement_count,
             tht_rows=tht_views,
-            notes_rows=notes_views,
+            notes_docx_path=notes_docx_path,
             ship_date=audit.ship_date,
             ops_per_board_min=audit.ops_per_board_min,
             has_secondary_pdf=has_secondary_pdf,
             is_labeled=audit.is_labeled,
             are_photos_uploaded=audit.are_photos_uploaded,
         )
-
-
-
-    def _build_note_row_view(self, r, notes_sf) -> NotesRowView:
-        import json
-        from cockpit.ingestion.parsers.results import EcoImageRef
-        from cockpit.services.image_cache import DocumentMissing
-        cells_list = json.loads(r.cells) if r.cells else []
-        images_list = json.loads(r.image_refs) if r.image_refs else []
-        images_by_cell = {}
-        for img_dict in images_list:
-            ref = EcoImageRef(**img_dict)
-            images_by_cell.setdefault(ref.cell_index, []).append(ref)
-        
-        cell_views = []
-        for i, text in enumerate(cells_list):
-            refs = images_by_cell.get(i, [])
-            img_views = []
-            for ref in refs:
-                if notes_sf:
-                    res = self._image_cache_service.resolve_image(notes_sf.file_hash, ref)
-                    state = res.value if res.is_ready else res.error
-                else:
-                    state = DocumentMissing()
-                img_views.append(ImageSlotView(ref=ref, state=state))
-            cell_views.append(NotesCellView(text=text, images=tuple(img_views)))
-
-        return NotesRowView(
-            key=ChecklistRowKey(ChecklistRowKind.NOTES, r.id),
-            row_sequence=r.row_sequence,
-            cells=tuple(cell_views),
-            table_index=r.source_table_index
-        )
-
     def complete(self, audit_id: int) -> ActiveAuditView:
         self._audit_repo.transition_status(audit_id, AuditStatus.COMPLETED)
         return self.load_active_audit(audit_id)

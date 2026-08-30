@@ -602,7 +602,8 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     v13_migrated = migrate_to_v13(conn)
     v14_migrated = migrate_to_v14(conn, parser_registry)
     v15_migrated = migrate_to_v15(conn)
-    return v7_migrated or v8_migrated or v9_migrated or v11_migrated or v13_migrated or v14_migrated or v15_migrated
+    v16_migrated = migrate_to_v16(conn)
+    return v7_migrated or v8_migrated or v9_migrated or v11_migrated or v13_migrated or v14_migrated or v15_migrated or v16_migrated
 
 SCHEMA_V5_DDL_DROP_SHIP_DATE: str = """
 ALTER TABLE active_audits DROP COLUMN ship_date
@@ -1089,6 +1090,49 @@ def migrate_to_v15(conn: sqlite3.Connection) -> bool:
         now_iso = utcnow().isoformat()
         cur.execute(
             "UPDATE schema_version SET version = 15, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def migrate_to_v16(conn: sqlite3.Connection) -> bool:
+    """Removes the build-notes storage tables. Content is re-derived from the .docx.
+
+    pre:  schema_version >= 15
+    post: neither table exists; schema_version >= 16. Returns False without
+          touching the database when already >= 16.
+    raises: SchemaMismatch when version < 15
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=15)
+
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=15)
+
+    current_version = row[0] if isinstance(row, tuple) and not hasattr(row, 'keys') else row["version"]
+    if current_version >= 16:
+        return False
+    if current_version < 15:
+        raise SchemaMismatch(found_version=current_version, expected_version=15)
+
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        cur.execute("DROP INDEX IF EXISTS ix_notes_audit_seq")
+        cur.execute("DROP INDEX IF EXISTS ix_notes_media_lru")
+        cur.execute("DROP TABLE IF EXISTS build_notes_checklist")
+        cur.execute("DROP TABLE IF EXISTS notes_media_cache")
+
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 16, applied_at = ? WHERE singleton_guard = 1",
             (now_iso,)
         )
         cur.execute("COMMIT")

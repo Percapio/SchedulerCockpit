@@ -20,10 +20,8 @@ def test_cache_invalidation_on_load_active_audit():
         conn=mock_conn,
         audit_repo=mock_audit_repo,
         tht_repo=mock_tht_repo,
-        notes_repo=mock_notes_repo,
         source_file_repo=mock_source_file_repo,
         bom_component_repo=mock_bom_component_repo,
-        image_cache_service=Mock(),
         app_config=Mock()
     )
     

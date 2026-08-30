@@ -175,11 +175,13 @@ def test_scenario_13_probe_cleanup(tmp_path):
     assert not leftovers
 
 
-def test_resolve_config_creates_notes_media(tmp_path):
+def test_resolve_config_no_longer_carries_the_notes_media_cache(tmp_path):
+    """Patch 08 §2: images live in the document, so the cache root is gone."""
     from cockpit.ui.config import resolve_config
     root = tmp_path / "appdata"
     cfg = resolve_config(root)
-    assert cfg.notes_media_root == root / "notes_media"
-    assert cfg.notes_media_root.exists()
-    assert cfg.notes_media_root.is_dir()
-    assert cfg.max_document_bytes == 67_108_864
+    assert not hasattr(cfg, "notes_media_root")
+    assert not (root / "notes_media").exists()
+    for budget_field in ("max_documents", "max_total_bytes", "max_document_bytes",
+                         "max_image_bytes", "max_images_per_doc"):
+        assert not hasattr(cfg, budget_field)

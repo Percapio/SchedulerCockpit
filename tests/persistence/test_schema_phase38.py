@@ -41,10 +41,10 @@ def test_schema_v13_initialization_and_constraints(tmp_path, dummy_registry):
     conn.row_factory = hydrating_row_factory
     migrate(conn, dummy_registry)
 
-    # Check version is 14
+    # Check version is 16
     cur = conn.cursor()
     cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
-    assert cur.fetchone()["version"] == 15
+    assert cur.fetchone()["version"] == 16
 
     # Test inserting new statuses (FSU, AOI, OPS)
     for status in [AuditStatus.FSU, AuditStatus.AOI, AuditStatus.OPS]:

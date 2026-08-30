@@ -382,25 +382,4 @@ class AuditRepository:
                 )
             )
             
-        # Clone Notes rows
-        from .notes_checklist import NOTES_COLUMNS_INSERT
-        cur.execute("SELECT * FROM build_notes_checklist WHERE audit_id = ?", (source_audit_id,))
-        notes_rows = cur.fetchall()
-        for nr in notes_rows:
-            cur.execute(
-                f"""
-                INSERT INTO build_notes_checklist (
-                    {NOTES_COLUMNS_INSERT}
-                ) VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    sibling_id,
-                    file_id_map[nr["source_file_id"]],
-                    nr["row_sequence"],
-                    nr["cells"],
-                    nr["image_refs"],
-                    nr["source_table_index"]
-                )
-            )
-            
         return self.find_by_id(sibling_id)  # type: ignore

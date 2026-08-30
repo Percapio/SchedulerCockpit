@@ -47,8 +47,8 @@ def main_window(qtbot, bootstrapped_app, tmp_path):
         bootstrapped_app.pdf_renderer,
         bootstrapped_app.holiday_svc,
         theme=theme,
-        settings=settings
-    )
+            settings=settings
+        )
     qtbot.addWidget(window)
     window.show()
     qtbot.waitForWindowShown(window)

@@ -165,7 +165,6 @@ class AuditView(QWidget):
             layout_query_service=layout_query_service
         )
         self._coordinator.register_tht_pane(self.checklist_tht)
-        self._coordinator.register_notes_pane(self._center_pager.notes_pane)
         self._coordinator.register_bom_panel(self._bom_panel)
         
         # Signal wiring
@@ -200,13 +199,13 @@ class AuditView(QWidget):
         self._bom_panel.apply_filter(query)
         
         if getattr(self._center_pager._selector, '_current_page', None) == CenterPage.BUILD_NOTES:
-            self._center_pager.notes_pane.apply_filter(query)
+            self._center_pager.notes_pane.queue_highlight(query)
 
     def _on_center_page_changed(self, page: CenterPage) -> None:
         if page == CenterPage.BUILD_NOTES:
-            self._center_pager.notes_pane.apply_filter(self.search_input.text().strip())
+            self._center_pager.notes_pane.highlight_matches(self.search_input.text().strip())
         else:
-            self._center_pager.notes_pane.apply_filter("")
+            self._center_pager.notes_pane.highlight_matches("")
 
     def _on_escape_pressed(self) -> None:
         if self.search_input.hasFocus() and self.search_input.text():
@@ -232,6 +231,10 @@ class AuditView(QWidget):
             self.search_input.clear()
         finally:
             self.search_input.blockSignals(was_blocked)
+
+    def invalidate_notes_render(self) -> None:
+        """A theme change invalidates the snapshotted render palette (§3.3)."""
+        self._center_pager.notes_pane.invalidate()
 
     def is_loaded(self) -> bool:
         return self._session.current_audit_id() is not None

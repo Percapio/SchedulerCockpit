@@ -104,8 +104,7 @@ class MainWindow(QMainWindow):
             release_service=self._bootstrapped.release_svc,
             setup_bom_service=self._bootstrapped.setup_bom_svc,
             pdf_renderer=pdf_renderer,
-            theme=self._theme,
-            settings=settings
+            theme=self._theme
         )
         self._audit_view.exit_requested.connect(self._on_dashboard_exit)
         self._audit_view.error_occurred.connect(self._on_failed)
@@ -200,6 +199,7 @@ class MainWindow(QMainWindow):
         # repaint the list so semantic column colors pick up the new palette.
         self._font_scale.reapply()
         self.picker.table_view.viewport().update()
+        self._audit_view.invalidate_notes_render()
 
     def _run_idle_maintenance(self) -> None:
         from cockpit.persistence.connection import run_idle_maintenance

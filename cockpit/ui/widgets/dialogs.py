@@ -3,7 +3,7 @@ from datetime import date
 from PyQt6.QtCore import QDate
 from PyQt6.QtWidgets import (
     QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QDateEdit, QLabel,
-    QDoubleSpinBox
+    QDoubleSpinBox, QWidget
 )
 
 
@@ -60,12 +60,12 @@ class ShipDateDialog(QDialog):
         qd = self.date_edit.date()
         return date(qd.year(), qd.month(), qd.day())
 
-def confirm_destructive(title: str, body: str, confirm_label: str) -> bool:
+def confirm_destructive(title: str, body: str, confirm_label: str, parent: QWidget) -> bool:
     """
     Shows a modal dialog with a custom confirmation button and a Cancel button.
     The Cancel button is the default. Returns True only if the confirm button is clicked.
     """
-    msg = QMessageBox()
+    msg = QMessageBox(parent)
     msg.setWindowTitle(title)
     msg.setText(body)
     msg.setIcon(QMessageBox.Icon.Warning)

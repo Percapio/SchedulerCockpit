@@ -206,6 +206,11 @@ class _InnerGraphicsView(QGraphicsView):
         super().mousePressEvent(event)
 
 
+from enum import Enum
+class PdfSource(Enum):
+    PRIMARY = "primary"
+    SECONDARY = "secondary"
+
 class LayoutCanvas(QWidget):
     error_occurred = pyqtSignal(object)
     font_scale_change_requested = pyqtSignal(int)
@@ -213,6 +218,7 @@ class LayoutCanvas(QWidget):
     empty_clicked = pyqtSignal()
     request_render = pyqtSignal(object)
     generation_bumped = pyqtSignal(int)
+    secondary_availability_changed = pyqtSignal(bool)
 
     def __init__(
         self,
@@ -289,10 +295,7 @@ class LayoutCanvas(QWidget):
         footer_layout = QHBoxLayout()
         footer_layout.setContentsMargins(4, 4, 4, 4)
         footer_layout.addStretch(1)
-        self._pdf_toggle_btn = QPushButton("View Reference", self._canvas_container)
-        self._pdf_toggle_btn.setVisible(False)
-        self._pdf_toggle_btn.clicked.connect(self._on_toggle_pdf_source)
-        footer_layout.addWidget(self._pdf_toggle_btn)
+        
         footer_layout.addWidget(self._font_scale_bar)
         
         canvas_layout.addLayout(footer_layout)
@@ -433,7 +436,7 @@ class LayoutCanvas(QWidget):
         self._resize_debouncer.stop()
         self._page_switcher.reset()
         self._hint_label.setVisible(False)
-        self._pdf_toggle_btn.setVisible(False)
+        self.secondary_availability_changed.emit(False)
         self._stacked.setCurrentWidget(self._empty_placeholder)
 
     def is_loaded(self) -> bool:
@@ -451,7 +454,7 @@ class LayoutCanvas(QWidget):
         self._primary_pending = self._layout_query_service.resolve_pdf_ref(audit_id)
         self._secondary_pending = getattr(self._layout_query_service, "resolve_secondary_pdf_ref", lambda aid: None)(audit_id)
         self._active_source = "primary"
-        self._refresh_toggle_enablement()
+        self.secondary_availability_changed.emit(self.has_secondary_pdf())
         self._render_source("primary", page_index=0)
 
     def _render_source(self, source: str, page_index: int) -> None:
@@ -481,21 +484,22 @@ class LayoutCanvas(QWidget):
         self._show_spinner()
         self._submit_render(RenderJob(gen, pending.path, (page_index,), self.current_render_height(), True, is_reference=self._reference_source_active()))
 
-    def _on_toggle_pdf_source(self) -> None:
-        if self._active_source == "primary":
-            if self._secondary_pending is None:
-                return
-            self._active_source = "secondary"
-        else:
-            self._active_source = "primary"
+    def has_secondary_pdf(self) -> bool:
+        return self._current_audit_id is not None and self._secondary_pending is not None
+
+    def show_source(self, source: PdfSource) -> None:
+        if source == PdfSource.SECONDARY and not self.has_secondary_pdf():
+            logger.warning("Attempted to show secondary source when none is pending")
+            return
+            
+        source_str = source.value
+        if self._active_source == source_str:
+            return
+            
         self._raster_cache.clear()
+        self._active_source = source_str
         self._current_page_index = 0
         self._render_source(self._active_source, page_index=0)
-        self._refresh_toggle_enablement()
-
-    def _refresh_toggle_enablement(self) -> None:
-        self._pdf_toggle_btn.setVisible(self._secondary_pending is not None)
-        self._pdf_toggle_btn.setText("View Reference" if self._active_source == "primary" else "View Primary")
 
     def accept_render_result(self, result: RenderResult) -> None:
         if result.generation != self._render_epoch:

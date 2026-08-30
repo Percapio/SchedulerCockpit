@@ -1,7 +1,8 @@
 """Audit view container."""
 
 from PyQt6.QtCore import pyqtSignal, Qt
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QSplitter
+from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QSplitter, QLineEdit
+from PyQt6.QtGui import QKeySequence, QShortcut
 
 from cockpit.services.checklist import ChecklistService
 from cockpit.services.split import AuditSplitService
@@ -11,20 +12,31 @@ from cockpit.services.layout_query import LayoutQueryService
 from cockpit.services.release import ReleaseService
 from cockpit.services.setup_bom import SetupBomService
 from cockpit.layout.renderer import PdfRenderer
-from cockpit.ui.widgets.dashboard import Dashboard
+from cockpit.services.views import build_identity_banner
+
+from cockpit.ui.widgets.audit_session import AuditSession
+from cockpit.ui.widgets.audit_actions_bar import AuditActionsBar
+from cockpit.ui.widgets.audit_identity_bar import AuditIdentityBar
+from cockpit.ui.widgets.center_pager import CenterPager, CenterPage
 from cockpit.ui.canvas.layout_canvas import LayoutCanvas
 from cockpit.ui.widgets.audit_bom_panel import AuditBomPanel
+from cockpit.ui.widgets.checklist_view import ChecklistView
 from cockpit.ui.widgets.selection_coordinator import SelectionCoordinator
 from cockpit.ui.theme import Theme
 
 class AuditView(QWidget):
-    """QSplitter container for the Dashboard and LayoutCanvas."""
+    """QSplitter container for the main application panes."""
     
+    # AuditActionsBar relays
     exit_requested = pyqtSignal()
     error_occurred = pyqtSignal(object)  # FailurePayload
-    font_scale_change_requested = pyqtSignal(int)
-    settings_requested = pyqtSignal()
     ops_per_board_change_requested = pyqtSignal(int, object)  # (audit_id, float | None)
+    
+    # LayoutCanvas relays
+    font_scale_change_requested = pyqtSignal(int)
+    
+    # Local
+    settings_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -43,127 +55,164 @@ class AuditView(QWidget):
         super().__init__(parent)
         self._theme = theme
         
-        from PyQt6.QtWidgets import QVBoxLayout, QLineEdit
+        self._session = AuditSession(checklist_service, build_identity_banner)
+        self._session.error_occurred.connect(self.error_occurred.emit)
+        self._session.ops_per_board_change_requested.connect(self.ops_per_board_change_requested.emit)
+        
+        self._esc_shortcut = QShortcut(QKeySequence(Qt.Key.Key_Escape), self)
+        self._esc_shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+        self._esc_shortcut.activated.connect(self._on_escape_pressed)
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         
-        self._metadata_band = QWidget()
-        self._metadata_band.setStyleSheet("margin-left: 6%;")
-        self._metadata_layout = QHBoxLayout(self._metadata_band)
-        self._metadata_layout.setContentsMargins(0, 0, 0, 0)
+        # Header
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
-        header = QHBoxLayout()
-        header.addWidget(self._metadata_band)
-        header.addStretch(4)
+        self._identity_bar = AuditIdentityBar()
+        self._identity_bar.back_requested.connect(self._on_exit_requested)
+        header_layout.addWidget(self._identity_bar)
+        
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search BOM & Build Notes...")
         self.search_input.setClearButtonEnabled(True)
-        self.search_input.setStyleSheet("margin-right: 6%;")
         self.search_input.textChanged.connect(self._on_search_changed)
-        header.addWidget(self.search_input, 2)
+        header_layout.addWidget(self.search_input)
 
         from PyQt6.QtWidgets import QPushButton
         self.settings_btn = QPushButton("Settings...")
-        self.settings_btn.setStyleSheet("margin-right: 6%;")
         self.settings_btn.clicked.connect(self.settings_requested.emit)
-        header.addWidget(self.settings_btn)
-
-        layout.addLayout(header)
+        header_layout.addWidget(self.settings_btn)
         
+        self._actions_bar = AuditActionsBar(
+            split_service, completion_service, ingestion_service,
+            release_service, setup_bom_service, self
+        )
+        self._actions_bar.bind(self._session)
+        self._actions_bar.error_occurred.connect(self.error_occurred.emit)
+        self._actions_bar.reload_requested.connect(self.load)
+        self._actions_bar.ops_per_board_change_requested.connect(self.ops_per_board_change_requested.emit)
+        self._actions_bar.exit_requested.connect(self._on_exit_requested)
+        header_layout.addWidget(self._actions_bar)
+        
+        layout.addLayout(header_layout)
+        
+        # Main Splitter
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
         self._splitter.setChildrenCollapsible(False)
         
-        self._dashboard = Dashboard(
-            checklist_service=checklist_service,
-            split_service=split_service,
-            completion_service=completion_service,
-            ingestion_service=ingestion_service,
-            release_service=release_service,
-            setup_bom_service=setup_bom_service,
-            theme=self._theme,
-            parent=self._splitter
-        )
-        
+        # Center Pager
         self._layout_canvas = LayoutCanvas(
             layout_query_service=layout_query_service,
             pdf_renderer=pdf_renderer,
             parent=self._splitter,
             theme=self._theme
         )
+        self._center_pager = CenterPager(self._layout_canvas, self._theme, self._splitter)
+        self._center_pager.bind(self._session)
+        self._center_pager._selector.page_changed.connect(self._on_center_page_changed)
+        self._splitter.addWidget(self._center_pager)
+        
+        # Right Stack
+        self._right_stack = QSplitter(Qt.Orientation.Vertical)
+        self._right_stack.setChildrenCollapsible(False)
+        
+        self.checklist_tht = ChecklistView(self._theme)
+        self.checklist_tht.setMinimumHeight(self._theme.checklist_min_height_px())
+        self._right_stack.addWidget(self.checklist_tht)
         
         self._bom_panel = AuditBomPanel(
             layout_query_service=layout_query_service,
-            parent=self._splitter,
+            parent=self._right_stack,
             theme=self._theme
         )
+        self._bom_panel.setMinimumHeight(self._theme.checklist_min_height_px())
+        self._right_stack.addWidget(self._bom_panel)
         
-        self._splitter.addWidget(self._dashboard)
-        self._splitter.addWidget(self._layout_canvas)
-        self._splitter.addWidget(self._bom_panel)
+        self._right_stack.setSizes([1, 1])
+        self._splitter.addWidget(self._right_stack)
         
-        self._dashboard.setMinimumWidth(self._theme.left_panel_min_width())
-        
-        layout.addWidget(self._splitter)
+        layout.addWidget(self._splitter, stretch=1)
         
         # Setup Coordinator
         self._coordinator = SelectionCoordinator(
-            view_provider=lambda: self._dashboard._view,
+            view_provider=self._session.current_view,
             layout_query_service=layout_query_service
         )
-        self._coordinator.register_dashboard(self._dashboard)
+        self._coordinator.register_tht_pane(self.checklist_tht)
+        self._coordinator.register_notes_pane(self._center_pager.notes_pane)
         self._coordinator.register_bom_panel(self._bom_panel)
         
         # Signal wiring
-        self._dashboard.exit_requested.connect(self.exit_requested.emit)
-        self._dashboard.error_occurred.connect(self.error_occurred.emit)
-        self._dashboard.metadata_changed.connect(self._on_metadata_changed)
-        self._dashboard.reload_requested.connect(self.load)
-        self._dashboard.ops_per_board_change_requested.connect(self.ops_per_board_change_requested.emit)
-        self._layout_canvas.error_occurred.connect(self.error_occurred.emit)
-        self._layout_canvas.font_scale_change_requested.connect(self.font_scale_change_requested.emit)
-        self._bom_panel.error_occurred.connect(self.error_occurred.emit)
+        self._session.identity_changed.connect(self._identity_bar.set_identity)
         
-        # Connect Dashboard to Coordinator
-        self._dashboard.tht_body_clicked.connect(self._coordinator.on_tht_body_clicked)
-        self._dashboard.tht_mpn_clicked.connect(self._coordinator.on_tht_mpn_clicked)
-        self._dashboard.empty_clicked.connect(self._coordinator.on_empty_clicked)
-        self._dashboard.esc_pressed.connect(self._coordinator.on_escape_pressed)
+        self._session.rows_replaced.connect(self._on_rows_replaced)
+        self._session.row_updated.connect(self._on_row_updated)
+        self._session.row_reverted.connect(self._on_row_reverted)
         
-        # Connect BOM Panel to Coordinator
+        self.checklist_tht.toggle_requested.connect(self._session.set_verification)
+        self.checklist_tht.body_clicked.connect(self._coordinator.on_tht_body_clicked)
+        self.checklist_tht.mpn_clicked.connect(self._coordinator.on_tht_mpn_clicked)
+        self.checklist_tht.empty_space_clicked.connect(self._coordinator.on_empty_clicked)
+        
         self._bom_panel.bom_row_clicked.connect(self._coordinator.on_bom_row_clicked)
         self._bom_panel.empty_space_clicked.connect(self._coordinator.on_empty_clicked)
+        self._bom_panel.error_occurred.connect(self.error_occurred.emit)
         
-        # Connect Canvas to Coordinator
+        self._layout_canvas.error_occurred.connect(self.error_occurred.emit)
+        self._layout_canvas.font_scale_change_requested.connect(self.font_scale_change_requested.emit)
         self._layout_canvas.refdes_clicked.connect(self._coordinator.on_renderer_refdes_clicked)
         self._layout_canvas.empty_clicked.connect(self._coordinator.on_empty_clicked)
         
-        # Connect Coordinator to Canvas
         self._coordinator.selection_changed.connect(self._layout_canvas.set_selection)
         
         self._first_show = True
-        self._bom_min_width = 200
+
+    def _on_rows_replaced(self, view) -> None:
+        self.checklist_tht.populate_section(view.tht_rows, f"T/H - MPN Count: {len(view.tht_rows)} | Total Placements: {view.tht_placement_count}")
+        
+    def _on_row_updated(self, row) -> None:
+        if row.key.kind == "tht":
+            self.checklist_tht.update_row(row)
+            
+    def _on_row_reverted(self, row_key) -> None:
+        if row_key.kind == "tht":
+            self.checklist_tht.revert_row(row_key)
+
+    def _on_search_changed(self, query_text: str) -> None:
+        query = query_text.strip()
+        self.checklist_tht.apply_filter(query)
+        self._bom_panel.apply_filter(query)
+        
+        if getattr(self._center_pager._selector, '_current_page', None) == CenterPage.BUILD_NOTES:
+            self._center_pager.notes_pane.apply_filter(query)
+
+    def _on_center_page_changed(self, page: CenterPage) -> None:
+        if page == CenterPage.BUILD_NOTES:
+            self._center_pager.notes_pane.apply_filter(self.search_input.text().strip())
+        else:
+            self._center_pager.notes_pane.apply_filter("")
+
+    def _on_escape_pressed(self) -> None:
+        if self.search_input.hasFocus() and self.search_input.text():
+            self.search_input.clear()
+        else:
+            self._coordinator.on_escape_pressed()
+
+    def _on_exit_requested(self) -> None:
+        self.unload()
+        self.exit_requested.emit()
 
     def unload(self) -> None:
-        """Sole release point for audit-scoped state.
-
-        Post: the Unloadable post-conditions hold for the coordinator and all
-              three panes, and self is safe to show without loading.
-
-        The coordinator is torn down first: it is the only participant holding
-        references to the panes, so unloading it first guarantees no pane is
-        touched by a coordinator callback after that pane has been released.
-
-        search_input is cleared with signals blocked. QLineEdit.clear() emits
-        textChanged, which routes through _on_search_changed into
-        Dashboard.apply_filter() and AuditBomPanel.apply_filter() -- both of
-        them panes this method has just torn down. That re-entry into a
-        half-unloaded pane is exactly what post-condition (d) forbids.
-        """
         self._coordinator.unload()
-        self._layout_canvas.unload()
+        self._center_pager.unload()
         self._bom_panel.unload()
-        self._dashboard.unload()
-        self._metadata_band_clear()
+        self.checklist_tht.unload()
+        self._actions_bar.unload()
+        self._identity_bar.set_identity(None)
+        self._session.unload()
+        
         was_blocked = self.search_input.blockSignals(True)
         try:
             self.search_input.clear()
@@ -171,51 +220,33 @@ class AuditView(QWidget):
             self.search_input.blockSignals(was_blocked)
 
     def is_loaded(self) -> bool:
-        return self._dashboard.current_audit_id() is not None
+        return self._session.current_audit_id() is not None
 
     def current_audit_id(self) -> int | None:
-        return self._dashboard.current_audit_id()
+        return self._session.current_audit_id()
 
     def set_render_worker_alive(self, alive: bool) -> None:
-        """Owned here so MainWindow, which owns the worker's lifetime, does not
-        reach two levels down into the canvas to set a thread-safety flag."""
         self._layout_canvas.set_render_worker_alive(alive)
 
     def load(self, audit_id: int) -> None:
-        """Load the audit identified by audit_id into all panes."""
         self.unload()
-        self._dashboard.setEnabled(True)
-        self._layout_canvas.setEnabled(True)
-        self._bom_panel.setEnabled(True)
         self._coordinator.on_audit_loaded()
-        self._dashboard.load(audit_id)
+        self._session.load(audit_id)
         self._bom_panel.load(audit_id)
-        self._layout_canvas.load(audit_id)
+        self._center_pager.load(audit_id)
 
     def reload(self) -> None:
-        """Explicit reload of the audit into all panes."""
-        self._dashboard.setEnabled(True)
-        self._layout_canvas.setEnabled(True)
-        self._bom_panel.setEnabled(True)
-        self._dashboard.reload()
-        if self._dashboard.current_audit_id() is not None:
-            self._bom_panel.load(self._dashboard.current_audit_id())
+        self._session.reload()
+        if self._session.current_audit_id() is not None:
+            self._bom_panel.load(self._session.current_audit_id())
         self._layout_canvas.reload()
         
     def discard_if_showing(self, audit_id: int) -> bool:
-        """Invalidate the view when the displayed audit was mutated or deleted underneath it."""
-        if self._dashboard.current_audit_id() != audit_id:
+        if self._session.current_audit_id() != audit_id:
             return False
         self.unload()
         return True
             
-    def show_loading_placeholder(self) -> None:
-        """Show a loading placeholder while a deferred load is pending."""
-        self._dashboard.setEnabled(False)
-        self._layout_canvas.setEnabled(False)
-        self._bom_panel.setEnabled(False)
-        # Proper styling or overlay could be added, but simple disable works as placeholder
-        # and it will be re-enabled during the actual load() or reload().
 
     def hideEvent(self, event) -> None:
         if self.search_input.text():
@@ -230,103 +261,34 @@ class AuditView(QWidget):
             QTimer.singleShot(0, self._apply_initial_layout)
             
     def _apply_initial_layout(self) -> None:
-        screen_w = self.window().screen().size().width()
-        pct = self._theme.bom_panel_min_width_percent()
-        abs_min = self._theme.bom_panel_min_width_absolute()
-        self._bom_min_width = max(int(screen_w * pct), abs_min)
+        right_min_w = self._theme.right_panel_min_width()
         
-        if self._has_pdf():
-            self._splitter.setStretchFactor(0, 0)
-            self._splitter.setStretchFactor(1, 1)
-            self._splitter.setStretchFactor(2, 0)
-            
-            dash_w = self._dashboard.minimumWidth()
-            bom_target_w = self._bom_min_width
-            pcb_w = max(0, self.width() - dash_w - bom_target_w)
-            self._splitter.setSizes([dash_w, pcb_w, bom_target_w])
+        if self._session.has_pdf():
+            self._splitter.setStretchFactor(0, 1)
+            self._splitter.setStretchFactor(1, 0)
         else:
             self._splitter.setStretchFactor(0, 2)
-            self._splitter.setStretchFactor(1, 2)
-            self._splitter.setStretchFactor(2, 1)
+            self._splitter.setStretchFactor(1, 1)
             
-            # Initial split ratio: 40% dashboard / 40% canvas / 20% BOM
-            total_width = self.width()
-            dash_w = int(total_width * 0.40)
-            bom_w = int(total_width * 0.20)
-            canvas_w = max(0, total_width - dash_w - bom_w)
-            self._splitter.setSizes([dash_w, canvas_w, bom_w])
-            
+        total_width = self.width()
+        right_w = max(right_min_w, int(total_width * 0.3))
+        center_w = max(0, total_width - right_w)
+        self._splitter.setSizes([center_w, right_w])
+        
         self._splitter.splitterMoved.connect(self._on_splitter_moved)
 
-    def _has_pdf(self) -> bool:
-        return self._dashboard.has_pdf()
-
     def _on_splitter_moved(self, pos: int, index: int) -> None:
-        if index == 2:
+        if index == 1:
+            right_min_w = self._theme.right_panel_min_width()
             sizes = self._splitter.sizes()
-            if sizes[2] < self._bom_min_width:
+            if sizes[1] < right_min_w:
                 self._splitter.splitterMoved.disconnect(self._on_splitter_moved)
-                self._splitter.setSizes([sizes[0], sizes[1] + sizes[2] - self._bom_min_width, self._bom_min_width])
+                self._splitter.setSizes([sizes[0] + sizes[1] - right_min_w, right_min_w])
                 self._splitter.splitterMoved.connect(self._on_splitter_moved)
 
     def apply_font_scale(self, percentage: int) -> None:
         self._layout_canvas.apply_font_scale(percentage)
 
     def flush_pending_writes(self) -> None:
-        self._dashboard.flush_audit_notes()
-
-    def _on_search_changed(self, text: str) -> None:
-        query = text.strip()
-        self._dashboard.apply_filter(query)
-        self._bom_panel.apply_filter(query)
-
-    def _metadata_band_clear(self) -> None:
-        while self._metadata_layout.count():
-            item = self._metadata_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
-    def _on_metadata_changed(self, metadata: dict) -> None:
-        self._metadata_band_clear()
-                
-        if not metadata:
-            return
-            
-        from PyQt6.QtWidgets import QLabel
-            
-        _METADATA_DISPLAY_LABELS = {
-            "customer_name": "Customer",
-            "sales_order_number": "S/O",
-            "lead_time_days": "LT",
-        }
-        for key, label in _METADATA_DISPLAY_LABELS.items():
-            val = metadata.get(key, "—")
-            self._metadata_layout.addWidget(QLabel(f"{label}: {val}"))
-            
-        ac_raw = metadata.get("assembly_class")
-        if ac_raw is not None:
-            try:
-                ac_num = int(ac_raw)
-                self._metadata_layout.addWidget(QLabel(f"Class {ac_num}"))
-            except (ValueError, TypeError):
-                pass
-            
-        clean_val = metadata.get("process_clean")
-        process_val: Any | None = metadata.get("process")
-
-        if clean_val:
-            lbl_process_prefix = QLabel("Process:")
-            lbl_process_prefix.setStyleSheet("padding-left: 3%;")
-            self._metadata_layout.addWidget(lbl_process_prefix)
-            
-            val_text = f"{process_val if process_val else ''} {clean_val}".strip()
-            lbl_process_value = QLabel(val_text)
-            lbl_process_value.setProperty("class", "hdr-process")
-            self._metadata_layout.addWidget(lbl_process_value)
-            
-        rowc_val = metadata.get("rowc_ref")
-        rowc_label = metadata.get("rowc_label")
-        if rowc_val and rowc_label:
-            lbl_rowc = QLabel(f"{rowc_label} {rowc_val}")
-            lbl_rowc.setStyleSheet("padding-left: 3%;")
-            self._metadata_layout.addWidget(lbl_rowc)
+        # no-op, previously this flushed audit notes
+        pass

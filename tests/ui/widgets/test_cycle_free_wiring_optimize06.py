@@ -34,7 +34,7 @@ from cockpit.ui.widgets.refdes_chip import RefDesChip
 @pytest.fixture
 def theme():
     return Theme.for_testing(
-        left_panel={
+        checklist_panel={
             "row": {
                 "corner_radius_px": 4,
                 "vertical_padding_px": 6,

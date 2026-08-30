@@ -23,7 +23,7 @@ from cockpit.services.views import ActiveAuditView
 from cockpit.ingestion.service import IngestionService
 from cockpit.ui.canvas.layout_canvas import LayoutCanvas
 from cockpit.ui.theme import Theme
-from cockpit.ui.widgets.dashboard import Dashboard
+
 from cockpit.ui.widgets.open_audit_picker import OpenAuditPicker
 
 
@@ -113,55 +113,44 @@ def test_audit_view_exposes_the_worker_flag_so_main_window_need_not_reach(qtbot)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def dashboard(qtbot, theme):
+def session(qtbot, theme):
     service = Mock(spec=ChecklistService)
     service.load_active_audit.return_value = _active_view(has_pdf=True)
-    d = Dashboard(
-        service,
-        Mock(spec=AuditSplitService),
-        Mock(spec=CompletionService),
-        Mock(spec=IngestionService),
-        Mock(),
-        Mock(),
-        theme,
-    )
-    qtbot.addWidget(d)
-    return d
+    from cockpit.ui.widgets.audit_session import AuditSession
+    s = AuditSession(service, lambda v: None)
+    return s
 
 
-def test_dashboard_owns_current_audit_id(dashboard):
-    assert dashboard.current_audit_id() is None
-
-    dashboard.load(audit_id=42)
-
-    assert dashboard.current_audit_id() == 42
+def test_session_owns_current_audit_id(session):
+    assert session.current_audit_id() is None
+    session.load(audit_id=42)
+    assert session.current_audit_id() == 42
 
 
-def test_dashboard_owns_has_pdf(dashboard):
+def test_session_owns_has_pdf(session):
     """AuditView._has_pdf read _dashboard._view.has_pdf, so it was coupled to a
-    private field name on another class."""
-    dashboard.load(audit_id=42)
+    private field name on another class. Now on session."""
+    session.load(audit_id=42)
+    assert session.has_pdf() is True
 
-    assert dashboard.has_pdf() is True
 
-
-def test_dashboard_has_pdf_is_false_when_nothing_is_loaded(dashboard):
+def test_session_has_pdf_is_false_when_nothing_is_loaded(session):
     """The reach-through version raised or misreported here, depending on which
     of _view and _current_audit_id had been nulled."""
-    assert dashboard.has_pdf() is False
-
-    dashboard.load(audit_id=42)
-    dashboard.unload()
-
-    assert dashboard.has_pdf() is False
+    assert session.has_pdf() is False
+    session.load(audit_id=42)
+    session.unload()
+    assert session.has_pdf() is False
 
 
-def test_dashboard_has_pdf_reports_false_for_an_audit_without_one(dashboard):
-    dashboard._checklist_service.load_active_audit.return_value = _active_view(has_pdf=False)
-
-    dashboard.load(audit_id=42)
-
-    assert dashboard.has_pdf() is False
+def test_session_has_pdf_reports_false_for_an_audit_without_one(session):
+    session._checklist_service.load_active_audit.return_value = _active_view(has_pdf=False)
+    session.load(audit_id=42)
+    assert session.has_pdf() is False
+    
+def test_coordinator_view_provider_is_bound_method(session):
+    assert hasattr(session, "current_view")
+    assert callable(session.current_view)
 
 
 def test_forget_audit_is_gone_and_discard_if_showing_replaced_it(qtbot):

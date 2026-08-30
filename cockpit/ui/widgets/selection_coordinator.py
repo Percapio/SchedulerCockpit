@@ -25,7 +25,8 @@ class SelectionCoordinator(QObject):
         super().__init__()
         self._view_provider = view_provider
         self._layout_query_service = layout_query_service
-        self._dashboard = None
+        self._tht_pane = None
+        self._notes_pane = None
         self._bom_panel = None
         self._active: SelectionIntent | None = None
 
@@ -42,16 +43,19 @@ class SelectionCoordinator(QObject):
             row = next((r for r in view.tht_rows if ref_des in r.ref_des_list), None)
             if row:
                 self.on_tht_mpn_clicked(row.key)
-                if self._dashboard:
-                    self._dashboard.checklist_tht.scroll_to_row(row.key)
+                if self._tht_pane:
+                    self._tht_pane.scroll_to_row(row.key)
         elif location.mount_type == 'S':
             if location.mpn:
                 self.on_bom_row_clicked(location.mpn)
                 if self._bom_panel:
                     self._bom_panel.scroll_to_mpn(location.mpn)
 
-    def register_dashboard(self, dashboard: 'Dashboard') -> None:
-        self._dashboard = dashboard
+    def register_tht_pane(self, pane: Any) -> None:
+        self._tht_pane = pane
+
+    def register_notes_pane(self, pane: Any) -> None:
+        self._notes_pane = pane
 
     def register_bom_panel(self, bom_panel: 'AuditBomPanel') -> None:
         self._bom_panel = bom_panel
@@ -74,8 +78,8 @@ class SelectionCoordinator(QObject):
         mpn = row.primary_label
         self._clear_panes()
         
-        if self._dashboard:
-            self._dashboard.checklist_tht.set_selected_row(row_key)
+        if self._tht_pane:
+            self._tht_pane.set_selected_row(row_key)
             
         self._emit(SelectionIntent(kind=SelectionKind.THT_MPN, mpn=mpn))
 
@@ -103,8 +107,8 @@ class SelectionCoordinator(QObject):
 
         self._clear_panes()
         
-        if self._dashboard:
-            self._dashboard.checklist_tht.set_selected_row(row_key)
+        if self._tht_pane:
+            self._tht_pane.set_selected_row(row_key)
             
         self._emit(SelectionIntent(kind=SelectionKind.MPN_CELL, mpn=mpn))
 
@@ -162,9 +166,9 @@ class SelectionCoordinator(QObject):
         self.selection_changed.emit(intent)
 
     def _clear_panes(self) -> None:
-        if self._dashboard:
-            self._dashboard.checklist_tht.clear_selected_row()
-            if hasattr(self._dashboard, 'checklist_notes'):
-                self._dashboard.checklist_notes.clear_selected_row()
+        if self._tht_pane:
+            self._tht_pane.clear_selected_row()
+        if self._notes_pane:
+            self._notes_pane.clear_selected_row()
         if self._bom_panel:
             self._bom_panel.clear_selection()

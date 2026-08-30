@@ -67,6 +67,10 @@ class ActiveAudit:
     is_labeled: bool = False
     are_photos_uploaded: bool = False
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, AuditStatus):
+            object.__setattr__(self, 'status', AuditStatus(self.status))
+
 
 @dataclass(frozen=True)
 class SourceFile:

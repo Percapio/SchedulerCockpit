@@ -22,10 +22,7 @@
       "error": { "background_rgb": "#E8F5E9", "text_rgb": "#2E7D32", "border_rgb": "#4CAF50" }
     }
   },
-  "left_panel": {
-    "layout": {
-      "min_width_px": 380
-    },
+  "checklist_panel": {
     "section_header": {
       "fill_rgb": "#1E1E1E",
       "text_rgb": "#E0E0E0",
@@ -48,12 +45,14 @@
     },
     "checklist": {
       "min_height_px": 80
+    }
+  },
+  "right_panel": {
+    "layout": {
+      "min_width_px": 380
     },
     "splitter": {
-      "default_sizes": [600, 300]
-    },
-    "complete_button": {
-      "enable_debounce_ms": 500
+      "default_sizes": [1, 1]
     }
   },
   "canvas": {
@@ -92,10 +91,6 @@
     }
   },
   "bom_panel": {
-    "layout": {
-      "min_width_percent": 0.15,
-      "min_width_absolute_px": 240
-    },
     "grouping": {
       "border_rgb": "#3F3F3F",
       "border_width_px": 1,

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["application", "base", "left_panel", "canvas", "bom_panel"],
+  "required": ["application", "base", "checklist_panel", "right_panel", "canvas", "bom_panel"],
   "properties": {
     "$schema": { "type": "string" },
     "application": {
@@ -51,18 +51,11 @@
         }
       }
     },
-    "left_panel": {
+    "checklist_panel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["section_header", "row", "progress_view", "layout", "checklist", "splitter", "complete_button"],
+      "required": ["section_header", "row", "progress_view", "checklist"],
       "properties": {
-        "layout": {
-          "type": "object",
-          "properties": {
-            "min_width_px": { "type": "integer", "minimum": 0 }
-          },
-          "required": ["min_width_px"]
-        },
         "section_header": {
           "type": "object",
           "properties": {
@@ -100,6 +93,20 @@
             "min_height_px": { "type": "integer", "minimum": 0 }
           },
           "required": ["min_height_px"]
+        }
+      }
+    },
+    "right_panel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layout", "splitter"],
+      "properties": {
+        "layout": {
+          "type": "object",
+          "properties": {
+            "min_width_px": { "type": "integer", "minimum": 0 }
+          },
+          "required": ["min_width_px"]
         },
         "splitter": {
           "type": "object",
@@ -112,13 +119,6 @@
             }
           },
           "required": ["default_sizes"]
-        },
-        "complete_button": {
-          "type": "object",
-          "properties": {
-            "enable_debounce_ms": { "type": "integer", "minimum": 0 }
-          },
-          "required": ["enable_debounce_ms"]
         }
       }
     },
@@ -200,16 +200,8 @@
     "bom_panel": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["grouping", "cell", "chip", "layout"],
+      "required": ["grouping", "cell", "chip"],
       "properties": {
-        "layout": {
-          "type": "object",
-          "properties": {
-            "min_width_percent": { "type": "number", "minimum": 0, "maximum": 1 },
-            "min_width_absolute_px": { "type": "integer", "minimum": 0 }
-          },
-          "required": ["min_width_percent", "min_width_absolute_px"]
-        },
         "grouping": {
           "type": "object",
           "additionalProperties": false,

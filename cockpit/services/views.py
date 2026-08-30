@@ -168,18 +168,6 @@ class ActiveAuditView:
     is_labeled: bool = False
     are_photos_uploaded: bool = False
 
-    @property
-    def total_rows(self) -> int:
-        return len(self.tht_rows) + len(self.notes_rows)
-
-    @property
-    def verified_rows(self) -> int:
-        return sum(1 for r in self.tht_rows if r.is_verified) + \
-               sum(1 for r in self.notes_rows if r.is_verified)
-
-    @property
-    def is_fully_verified(self) -> bool:
-        return self.verified_rows == self.total_rows
 
     def with_row_replaced(self, updated: ChecklistRowView) -> "ActiveAuditView":
         tht = list(self.tht_rows)
@@ -196,6 +184,61 @@ class ActiveAuditView:
             
         return replace(self, tht_rows=tht, notes_rows=notes)
 
+@dataclass(frozen=True)
+class AuditIdentityBanner:
+    sales_order: str
+    part_number: str          # includes split_suffix
+    quantity: str
+    lead_time_days: str
+    assembly_class: str       # "Class 3" | ""
+    process: str              # process and process_clean, space-joined, stripped
+    customer: str
+    repeat_marker: str        # rowc_label and rowc_ref, space-joined
+    status: str
+    is_itar: bool
+
+def build_identity_banner(view: ActiveAuditView) -> AuditIdentityBanner:
+    from cockpit.services.itar import is_itar
+    meta = view.traveler_metadata or {}
+    
+    assembly_class = ""
+    raw_class = meta.get("assembly_class")
+    if raw_class is not None:
+        try:
+            assembly_class = f"Class {int(raw_class)}"
+        except (ValueError, TypeError):
+            pass
+
+    process_parts = []
+    if p := meta.get("process"):
+        process_parts.append(str(p))
+    if p := meta.get("process_clean"):
+        process_parts.append(str(p))
+    process_str = " ".join(process_parts).strip()
+    
+    repeat_parts = []
+    if r := meta.get("rowc_label"):
+        repeat_parts.append(str(r))
+    if r := meta.get("rowc_ref"):
+        repeat_parts.append(str(r))
+    repeat_marker = " ".join(repeat_parts).strip()
+    
+    part_number = view.part_number
+    if view.split_suffix:
+        part_number = f"{part_number}{view.split_suffix}"
+        
+    return AuditIdentityBanner(
+        sales_order=str(meta.get("sales_order_number") or ""),
+        part_number=part_number,
+        quantity=str(view.quantity) if view.quantity is not None else "",
+        lead_time_days=str(meta.get("lead_time_days") or ""),
+        assembly_class=assembly_class,
+        process=process_str,
+        customer=str(meta.get("customer_name") or ""),
+        repeat_marker=repeat_marker,
+        status=view.status.value,
+        is_itar=is_itar(meta),
+    )
 
 
 

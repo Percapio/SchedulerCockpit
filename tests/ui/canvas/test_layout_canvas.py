@@ -287,29 +287,40 @@ def test_reference_mode_disables_selection_and_clicks(canvas, qtbot):
     canvas._on_graphics_view_mouse_press(event)
     assert not getattr(canvas, "_clicked", False)
 
-def test_toggle_pdf_source(canvas, qtbot):
-    from cockpit.services.views import PendingPdf
-    from unittest.mock import Mock
-
-    primary = PendingPdf(1, pathlib.Path("primary.pdf"))
-    secondary = PendingPdf(2, pathlib.Path("secondary.pdf"))
+def test_show_source_primary_when_active_submits_nothing(canvas, qtbot):
+    from cockpit.ui.canvas.layout_canvas import PdfSource
     
     canvas._current_audit_id = 1
-    canvas._primary_pending = primary
-    canvas._secondary_pending = secondary
-    canvas._active_source = "primary"
-    canvas._refresh_toggle_enablement()
+    canvas._active_source = PdfSource.PRIMARY
+    
+    requested = []
+    bumped = []
+    canvas.request_render.connect(requested.append)
+    canvas.generation_bumped.connect(bumped.append)
+    
+    canvas.show_source(PdfSource.PRIMARY)
+    
+    assert not requested
+    assert not bumped
 
-    assert not canvas._pdf_toggle_btn.isHidden()
-    assert canvas._pdf_toggle_btn.text() == "View Reference"
-
-    # Mock submit render to prevent actual thread work
-    canvas._submit_render = Mock()
-    canvas._on_toggle_pdf_source()
-
-    assert canvas._active_source == "secondary"
-    assert canvas._pdf_toggle_btn.text() == "View Primary"
-    assert canvas._build_context(canvas._secondary_pending, ((1000.0, 1000.0),)).is_reference is True
+def test_show_source_secondary_when_missing_is_noop(canvas, qtbot):
+    from cockpit.ui.canvas.layout_canvas import PdfSource
+    
+    canvas._current_audit_id = 1
+    canvas._active_source = PdfSource.PRIMARY
+    canvas._secondary_pending = None
+    
+    requested = []
+    bumped = []
+    canvas.request_render.connect(requested.append)
+    canvas.generation_bumped.connect(bumped.append)
+    
+    canvas.show_source(PdfSource.SECONDARY)
+    
+    assert not requested
+    assert not bumped
+    assert canvas.has_secondary_pdf() is False
+    assert canvas._active_source == PdfSource.PRIMARY
 
 
 def test_selection_in_reference_mode_applies_on_switch_to_primary(canvas, qtbot):

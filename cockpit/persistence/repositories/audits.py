@@ -11,7 +11,6 @@ from ..errors import (
     AuditNotFound,
     DuplicateIdentityError,
     IllegalStateTransition,
-    IncompleteChecklistError,
     InvalidArgumentError,
 )
 from ..types import ActiveAudit, ActiveAuditDraft, AuditStatus, SourceFileCategory

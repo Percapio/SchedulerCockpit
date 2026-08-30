@@ -22,7 +22,7 @@ class ChecklistView(QScrollArea):
         self._container = QWidget()
         self._layout = QVBoxLayout(self._container)
         self._layout.setContentsMargins(0, 0, 0, 0)
-        self._layout.setSpacing(3)  # From theme.json left_panel.row.gutter_px
+        self._layout.setSpacing(3)  # From theme.json checklist_panel.row.gutter_px
         self.setWidget(self._container)
         
         self._index: dict[ChecklistRowKey, ChecklistRow] = {}

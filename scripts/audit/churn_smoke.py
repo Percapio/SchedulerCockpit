@@ -28,7 +28,7 @@ from cockpit.ui.data_migration import migrate_to_versioned_layout
 
 from cockpit.ui.widgets.checklist_row import ChecklistRow
 from cockpit.ui.widgets.audit_bom_panel import AuditBomRow
-from cockpit.ui.widgets.dashboard import Dashboard
+
 from cockpit.services.views import ActiveAuditView
 from cockpit.ui.widgets.component_row import RefDesChip, ComponentRowCore
 from cockpit.ui.canvas.layout_canvas import LayoutCanvas, HighlightItem
@@ -378,11 +378,12 @@ def switch_pages(window: MainWindow, count: int):
 
 def toggle_to_reference_source(window: MainWindow, expected_page_count: int):
     view = window._audit_view
-    canvas = view._layout_canvas
-    if not hasattr(canvas, '_pdf_toggle_btn') or not canvas._pdf_toggle_btn.isVisible() or not canvas._pdf_toggle_btn.isEnabled():
-        raise GestureUnavailable("toolbar", "_pdf_toggle_btn missing or disabled", 0)
+    selector = view._center_pager._selector
+    from cockpit.ui.widgets.center_pager import CenterPage
+    if CenterPage.SECONDARY_PDF not in selector._buttons:
+        raise GestureUnavailable("toolbar", "SECONDARY_PDF segment missing", 0)
         
-    canvas._pdf_toggle_btn.click()
+    selector._buttons[CenterPage.SECONDARY_PDF].click()
     QApplication.processEvents()
     
     # Wait for document to load and page count to match

@@ -128,7 +128,7 @@ def compose_override_qss(preset: str, font_family: str | None = None) -> str:
 
     lines.append(f"""
 /* ---- Phase 32 facelift ({preset}) ---- */
-QMainWindow, QStackedWidget, QDialog, DropArea, OpenAuditPicker, AuditView, Dashboard {{
+QMainWindow, QStackedWidget, QDialog, DropArea, OpenAuditPicker, AuditView {{
     background-color: {p.window};
     color: {p.text};
 }}

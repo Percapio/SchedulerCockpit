@@ -21,10 +21,7 @@ def valid_theme_data():
                 "error": { "background_rgb": "#E8F5E9", "text_rgb": "#2E7D32", "border_rgb": "#4CAF50" }
             }
         },
-        "left_panel": {
-            "layout": {
-                "min_width_px": 280
-            },
+        "checklist_panel": {
             "section_header": { "fill_rgb": "#FAFAFA", "text_rgb": "#555555", "padding_px": 4 },
             "row": {
                 "fill_rgb": "#2A2A2A", "fill_selected_rgb": "#FFFACD", "text_selected_rgb": "#000000",
@@ -32,9 +29,11 @@ def valid_theme_data():
                 "gutter_px": 3
             },
             "progress_view": { "fill_rgb": "#FAFAFA", "text_rgb": "#000000" },
-            "checklist": { "min_height_px": 80 },
-            "splitter": { "default_sizes": [600, 300] },
-            "complete_button": { "enable_debounce_ms": 500 }
+            "checklist": { "min_height_px": 80 }
+        },
+        "right_panel": {
+            "layout": { "min_width_px": 280 },
+            "splitter": { "default_sizes": [1, 1] }
         },
         "canvas": {
             "colour": {
@@ -52,10 +51,6 @@ def valid_theme_data():
             "render": { "resize_debounce_ms": 200, "max_cached_bytes": 402653184, "prefetch_page_limit": 1 }
         },
         "bom_panel": {
-            "layout": {
-                "min_width_percent": 0.15,
-                "min_width_absolute_px": 200
-            },
             "grouping": {
                 "border_rgb": "#3F3F3F", "border_width_px": 1, "fill_rgb": "#252525", "fill_selected_rgb": "#FFFACD",
                 "corner_radius_px": 4, "inner_padding_px": 6, "gutter_px": 3
@@ -382,7 +377,8 @@ def test_Theme_Qss_RefdesChipNoLongerEmitsMarginRight(valid_theme_data):
     theme = Theme(
         _application=valid_theme_data["application"],
         _base=valid_theme_data["base"],
-        _left_panel=valid_theme_data["left_panel"],
+        _checklist_panel=valid_theme_data["checklist_panel"],
+        _right_panel=valid_theme_data["right_panel"],
         _canvas=valid_theme_data["canvas"],
         _bom_panel=valid_theme_data["bom_panel"],
     )
@@ -394,7 +390,8 @@ def test_Theme_Qss_ReturnsNonEmptyString(valid_theme_data):
     theme = Theme(
         _application=valid_theme_data["application"],
         _base=valid_theme_data["base"],
-        _left_panel=valid_theme_data["left_panel"],
+        _checklist_panel=valid_theme_data["checklist_panel"],
+        _right_panel=valid_theme_data["right_panel"],
         _canvas=valid_theme_data["canvas"],
         _bom_panel=valid_theme_data["bom_panel"],
     )
@@ -406,7 +403,8 @@ def test_Theme_Qss_IsIdempotent(valid_theme_data):
     theme = Theme(
         _application=valid_theme_data["application"],
         _base=valid_theme_data["base"],
-        _left_panel=valid_theme_data["left_panel"],
+        _checklist_panel=valid_theme_data["checklist_panel"],
+        _right_panel=valid_theme_data["right_panel"],
         _canvas=valid_theme_data["canvas"],
         _bom_panel=valid_theme_data["bom_panel"],
     )
@@ -418,7 +416,8 @@ def test_Theme_Qss_ContainsExpectedSelectorsFromEverySection(valid_theme_data):
     theme = Theme(
         _application=valid_theme_data["application"],
         _base=valid_theme_data["base"],
-        _left_panel=valid_theme_data["left_panel"],
+        _checklist_panel=valid_theme_data["checklist_panel"],
+        _right_panel=valid_theme_data["right_panel"],
         _canvas=valid_theme_data["canvas"],
         _bom_panel=valid_theme_data["bom_panel"],
     )
@@ -434,7 +433,8 @@ def test_Theme_Frozen_AttributeMutationRaisesFrozenInstanceError(valid_theme_dat
     theme = Theme(
         _application=valid_theme_data["application"],
         _base=valid_theme_data["base"],
-        _left_panel=valid_theme_data["left_panel"],
+        _checklist_panel=valid_theme_data["checklist_panel"],
+        _right_panel=valid_theme_data["right_panel"],
         _canvas=valid_theme_data["canvas"],
         _bom_panel=valid_theme_data["bom_panel"],
     )
@@ -450,7 +450,7 @@ def test_Theme_ForTestingWithNoArgs_ReturnsUsableInstance():
 def test_Theme_ForTestingPartialSection_FillsOtherSectionsWithDefaults():
     theme = Theme.for_testing(canvas={"colour": {"dim": {"rgb": "#000"}}})
     assert theme._base == {"font": {"family": "Segoe UI", "size_px": 13}}
-    assert theme._left_panel == {}
+    assert theme._checklist_panel == {}
     assert theme.canvas_colour("dim").name() == "#000000"
 
 def test_Theme_CanvasZoomRenderMultiplier_ReturnsConfiguredValue():

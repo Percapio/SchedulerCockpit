@@ -198,19 +198,7 @@ class ChecklistService:
         self._audit_repo.transition_status(audit_id, AuditStatus.COMPLETED)
         return self.load_active_audit(audit_id)
 
-    def verify_all(self, audit_id: int) -> ActiveAuditView:
-        self._conn.execute("SAVEPOINT verify_all")
-        try:
-            self._tht_repo.mark_all_verified(audit_id)
-            self._notes_repo.mark_all_verified(audit_id)
-            self._conn.execute("RELEASE SAVEPOINT verify_all")
-        except Exception:
-            logger.exception("Suppressed Exception in verify_all")
-            self._conn.execute("ROLLBACK TO SAVEPOINT verify_all")
-            self._conn.execute("RELEASE SAVEPOINT verify_all")
-            raise
-            
-        return self.load_active_audit(audit_id)
+
 
     def release_audit_scoped_caches(self) -> None:
         self._refdes_index_cache.clear()

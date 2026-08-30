@@ -253,7 +253,6 @@ class MainWindow(QMainWindow):
     def _on_picker_audit_selected(self, audit_id: int) -> None:
         self._load_epoch += 1
         epoch = self._load_epoch
-        self._audit_view.show_loading_placeholder()
         self.stacked.setCurrentWidget(self._audit_view)
         
         def do_load():
@@ -267,7 +266,8 @@ class MainWindow(QMainWindow):
         if not confirm_destructive(
             title="Complete audit",
             body="This permanently deletes the audit and its source files. This cannot be undone.",
-            confirm_label="Complete"
+            confirm_label="Complete",
+            parent=self
         ):
             return
             

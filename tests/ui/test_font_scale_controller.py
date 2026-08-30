@@ -7,7 +7,7 @@ from cockpit.ui.font_scale_controller import FontScaleController
 
 DUMMY_STRUCTURAL_DATA = dict(
     base={"window": {"rgb": "#000"}, "toast": {"info": {"background_rgb": "#0", "text_rgb": "#0", "border_rgb": "#0"}, "warn": {"background_rgb": "#0", "text_rgb": "#0", "border_rgb": "#0"}, "error": {"background_rgb": "#0", "text_rgb": "#0", "border_rgb": "#0"}}},
-    left_panel={"section_header": {"text_rgb": "#0", "fill_rgb": "#0", "padding_px": 0}, "row": {"fill_rgb": "#0", "fill_selected_rgb": "#0", "text_selected_rgb": "#0", "corner_radius_px": 0, "vertical_padding_px": 0, "horizontal_padding_px": 0, "gutter_px": 0}},
+    checklist_panel={"section_header": {"text_rgb": "#0", "fill_rgb": "#0", "padding_px": 0}, "row": {"fill_rgb": "#0", "fill_selected_rgb": "#0", "text_selected_rgb": "#0", "corner_radius_px": 0, "vertical_padding_px": 0, "horizontal_padding_px": 0, "gutter_px": 0}},
     bom_panel={"grouping": {"border_width_px": 0, "border_rgb": "#0", "fill_rgb": "#0", "fill_selected_rgb": "#0", "corner_radius_px": 0, "inner_padding_px": 0, "gutter_px": 0}, "cell": {"mpn": {"fill_rgb": "#0", "text_rgb": "#0", "text_selected_rgb": "#0", "corner_radius_px": 0, "padding_px": 0, "font_size_px": 11}}, "chip": {"fill_rgb": "#0", "fill_hover_rgb": "#0", "text_rgb": "#0", "text_selected_rgb": "#0", "corner_radius_px": 0, "vertical_padding_px": 0, "horizontal_padding_px": 0, "flow_spacing_px": 0}},
     canvas={"colour": {"hint_label_background": {"rgb": "#0"}, "hint_label_text": {"rgb": "#0"}, "hint_label_border": {"rgb": "#0"}}, "hint_label": {"padding_px": 0, "border_width_px": 0}}
 )

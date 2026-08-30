@@ -49,7 +49,8 @@ class Theme:
 
     _application: Mapping[str, Any]
     _base:       Mapping[str, Any]
-    _left_panel: Mapping[str, Any]
+    _checklist_panel: Mapping[str, Any]
+    _right_panel: Mapping[str, Any]
     _canvas:     Mapping[str, Any]
     _bom_panel:  Mapping[str, Any]
 
@@ -67,7 +68,7 @@ class Theme:
         Intent:   Compose and return the full application stylesheet.
         """
         base = self._base
-        lp = self._left_panel
+        lp = self._checklist_panel
         bp = self._bom_panel
         cv = self._canvas
         
@@ -190,14 +191,8 @@ class Theme:
     def bom_chip_flow_spacing(self) -> int:
         return int(self._bom_panel['chip']['flow_spacing_px'])
 
-    def left_panel_min_width(self) -> int:
-        return int(self._left_panel['layout']['min_width_px'])
-
-    def bom_panel_min_width_percent(self) -> float:
-        return float(self._bom_panel['layout']['min_width_percent'])
-
-    def bom_panel_min_width_absolute(self) -> int:
-        return int(self._bom_panel['layout']['min_width_absolute_px'])
+    def right_panel_min_width(self) -> int:
+        return int(self._right_panel['layout']['min_width_px'])
 
     # Defaults below match Optimize06 section 4. They are unreachable in
     # production -- the schema marks both sections required, so ThemeLoader
@@ -214,13 +209,10 @@ class Theme:
         return int(self._canvas.get('render', {}).get('prefetch_page_limit', 1))
 
     def checklist_min_height_px(self) -> int:
-        return int(self._left_panel.get('checklist', {}).get('min_height_px', 80))
+        return int(self._checklist_panel.get('checklist', {}).get('min_height_px', 80))
 
     def splitter_default_sizes(self) -> list[int]:
-        return list(self._left_panel.get('splitter', {}).get('default_sizes', [600, 300]))
-
-    def complete_button_enable_debounce_ms(self) -> int:
-        return int(self._left_panel.get('complete_button', {}).get('enable_debounce_ms', 500))
+        return list(self._right_panel.get('splitter', {}).get('default_sizes', [1, 1]))
 
     def _compose_bom_grouping(self, grouping_tokens: Mapping[str, Any]) -> str:
         lines = [
@@ -273,7 +265,7 @@ class Theme:
         return "\n".join(lines)
 
     @classmethod
-    def for_testing(cls, application=None, base=None, left_panel=None, canvas=None, bom_panel=None) -> 'Theme':
+    def for_testing(cls, application=None, base=None, checklist_panel=None, right_panel=None, canvas=None, bom_panel=None) -> 'Theme':
         """
         Intent:   Construct a Theme for unit tests. Bypasses file I/O and
                   schema validation. Unprovided sections default to empty dicts.
@@ -286,7 +278,8 @@ class Theme:
         return cls(
             _application=application or {},
             _base=b,
-            _left_panel=left_panel or {},
+            _checklist_panel=checklist_panel or {},
+            _right_panel=right_panel or {},
             _canvas=canvas or {},
             _bom_panel=bom_panel or {}
         )
@@ -347,7 +340,8 @@ class ThemeLoader:
         return Theme(
             _application=theme_data["application"],
             _base=theme_data["base"],
-            _left_panel=theme_data["left_panel"],
+            _checklist_panel=theme_data["checklist_panel"],
+            _right_panel=theme_data["right_panel"],
             _canvas=theme_data["canvas"],
             _bom_panel=theme_data["bom_panel"]
         )

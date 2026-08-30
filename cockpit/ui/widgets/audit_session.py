@@ -12,8 +12,6 @@ class AuditSession(QObject):
     view_changed = pyqtSignal(object) # ActiveAuditView
     identity_changed = pyqtSignal(object) # AuditIdentityBanner
     rows_replaced = pyqtSignal(object) # ActiveAuditView
-    row_updated = pyqtSignal(object) # ChecklistRowView
-    row_reverted = pyqtSignal(object) # ChecklistRowKey
     error_occurred = pyqtSignal(object) # FailurePayload
     reload_requested = pyqtSignal(int)
     ops_per_board_change_requested = pyqtSignal(int, object)
@@ -60,18 +58,7 @@ class AuditSession(QObject):
     def has_pdf(self) -> bool:
         return self._view is not None and self._view.has_pdf
 
-    def set_verification(self, row_key: ChecklistRowKey, verified: bool) -> None:
-        if self._view is None:
-            return
-        try:
-            updated = self._checklist_service.set_verification(row_key, verified)
-            self._view = self._view.with_row_replaced(updated)
-            self.row_updated.emit(updated)
-        except PersistenceError as exc:
-            logger.exception('Exception caught in set_verification')
-            self.row_reverted.emit(row_key)
-            self.error_occurred.emit(render(exc))
-            self.reload()
+
             
     def _apply_view(self, view: ActiveAuditView) -> None:
         self.view_changed.emit(view)

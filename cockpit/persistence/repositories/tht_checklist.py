@@ -5,9 +5,7 @@ from typing import Sequence
 
 from ..errors import (
     AuditNotFound,
-    ChecklistItemNotFound,
     ForeignKeyMismatch,
-    IllegalStateTransition,
     InvalidArgumentError,
     SourceFileNotFound,
 )
@@ -49,15 +47,14 @@ class ThtChecklistRepository:
                 cur.execute(
                     """
                     INSERT INTO tht_verification_checklist (
-                        audit_id, source_file_id, component_mpn, description, is_verified
-                    ) VALUES (?, ?, ?, ?, ?)
+                        audit_id, source_file_id, component_mpn, description
+                    ) VALUES (?, ?, ?, ?)
                     """,
                     (
                         item.audit_id,
                         item.source_file_id,
                         item.component_mpn,
-                        item.description,
-                        item.is_verified
+                        item.description
                     )
                 )
                 item_id = cur.lastrowid
@@ -80,31 +77,3 @@ class ThtChecklistRepository:
         cur.execute("SELECT * FROM tht_verification_checklist WHERE audit_id = ? ORDER BY id ASC", (audit_id,))
         return [ThtChecklistItem(**row) for row in cur.fetchall()]
 
-    def set_verification(self, item_id: int, is_verified: bool) -> ThtChecklistItem:
-        cur = self.conn.cursor()
-        cur.execute(
-            "UPDATE tht_verification_checklist SET is_verified = ? WHERE id = ?",
-            (is_verified, item_id)
-        )
-        if cur.rowcount == 0:
-            raise ChecklistItemNotFound(item_id, "tht")
-            
-        cur.execute("SELECT * FROM tht_verification_checklist WHERE id = ?", (item_id,))
-        row = cur.fetchone()
-        assert row is not None
-        return ThtChecklistItem(**row)
-
-    def mark_all_verified(self, audit_id: int) -> int:
-        cur = self.conn.cursor()
-        cur.execute("SELECT status FROM active_audits WHERE id = ?", (audit_id,))
-        row = cur.fetchone()
-        if not row:
-            raise AuditNotFound(audit_id)
-            
-        # Completed audits are hard-deleted, no status check needed
-            
-        cur.execute(
-            "UPDATE tht_verification_checklist SET is_verified = 1 WHERE audit_id = ? AND is_verified = 0",
-            (audit_id,)
-        )
-        return cur.rowcount

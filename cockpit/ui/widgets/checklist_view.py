@@ -4,12 +4,11 @@ from PyQt6.QtCore import pyqtSignal, QEvent, Qt, QObject
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QScrollArea, QLabel
 
 from cockpit.services.views import ActiveAuditView, ChecklistRowView, ChecklistRowKey
-from .checklist_row import ChecklistRow
+from cockpit.ui.widgets.component_row import ComponentRowCore
 from .qt_lifecycle import purge_widget_subtree, _drain_layout_widgets
 
 
 class ChecklistView(QScrollArea):
-    toggle_requested = pyqtSignal(object, bool)
     empty_space_clicked = pyqtSignal()
     body_clicked = pyqtSignal(object)
     mpn_clicked = pyqtSignal(object)
@@ -25,7 +24,7 @@ class ChecklistView(QScrollArea):
         self._layout.setSpacing(3)  # From theme.json checklist_panel.row.gutter_px
         self.setWidget(self._container)
         
-        self._index: dict[ChecklistRowKey, ChecklistRow] = {}
+        self._index: dict[ChecklistRowKey, tuple[ChecklistRowView, ComponentRowCore]] = {}
         
         self.viewport().installEventFilter(self)
 
@@ -41,11 +40,11 @@ class ChecklistView(QScrollArea):
                 return True
         return super().eventFilter(obj, event)
 
-    def _last_row_widget_or_none(self) -> ChecklistRow | None:
+    def _last_row_widget_or_none(self) -> ComponentRowCore | None:
         for i in reversed(range(self._layout.count())):
             item = self._layout.itemAt(i)
             widget = item.widget()
-            if isinstance(widget, ChecklistRow):
+            if isinstance(widget, ComponentRowCore):
                 return widget
         return None
 
@@ -66,52 +65,53 @@ class ChecklistView(QScrollArea):
         self._layout.addWidget(header)
         
         for row_view in views:
-            row_widget = ChecklistRow(row_view, self._theme)
-            row_widget.toggle_requested.connect(self.toggle_requested.emit)
-            row_widget.body_clicked.connect(self.body_clicked.emit)
-            row_widget.mpn_clicked.connect(self.mpn_clicked.emit)
-            self._layout.addWidget(row_widget)
-            self._index[row_view.key] = row_widget
+            from cockpit.ui.widgets.component_row import ComponentRowFields
+            fields = ComponentRowFields(
+                find_number=row_view.find_number,
+                mpn=row_view.primary_label,
+                description=row_view.secondary_label,
+                ref_des_list=row_view.ref_des_list
+            )
+            core = ComponentRowCore(
+                view=fields,
+                theme=self._theme
+            )
+            core.setProperty("class", "component-card checklist-row")
+            core.refdes_chip_clicked.connect(lambda _, k=row_view.key: self.body_clicked.emit(k))
+            core.mpn_label_clicked.connect(lambda _, k=row_view.key: self.mpn_clicked.emit(k))
+            self._layout.addWidget(core)
+            self._index[row_view.key] = (row_view, core)
             
         self._layout.addStretch()
 
-    def update_row(self, updated: ChecklistRowView) -> None:
-        if updated.key in self._index:
-            self._index[updated.key].set_view(updated)
-
-    def revert_row(self, row_key: ChecklistRowKey) -> None:
-        if row_key in self._index:
-            self._index[row_key].revert()
-
     def set_selected_row(self, row_key: ChecklistRowKey) -> None:
-        for k, row_widget in self._index.items():
-            row_widget.set_selected(k == row_key)
+        for k, (_, core) in self._index.items():
+            core.set_mpn_selected(k == row_key)
 
     def clear_selected_row(self) -> None:
-        for row_widget in self._index.values():
-            row_widget.set_selected(False)
+        for _, core in self._index.values():
+            core.set_mpn_selected(False)
 
     def scroll_to_row(self, row_key: ChecklistRowKey) -> None:
         if row_key in self._index:
-            self.ensureWidgetVisible(self._index[row_key])
+            self.ensureWidgetVisible(self._index[row_key][1])
 
     def apply_filter(self, query: str) -> None:
         q = query.strip().lower()
         vbar = self.verticalScrollBar()
         old_val = vbar.value()
         
-        for row_widget in self._index.values():
+        for view, core in self._index.values():
             if not q:
-                row_widget.setVisible(True)
+                core.setVisible(True)
                 continue
             
-            view = row_widget._row
             text = view.primary_label.lower()
             if view.secondary_label:
                 text += " " + view.secondary_label.lower()
             if view.ref_des_list:
                 text += " " + " ".join(view.ref_des_list).lower()
                 
-            row_widget.setVisible(q in text)
+            core.setVisible(q in text)
             
         vbar.setValue(old_val)

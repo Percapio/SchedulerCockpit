@@ -1,6 +1,6 @@
 """Audit view container."""
 
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, Qt, QSettings
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QSplitter, QLineEdit
 from PyQt6.QtGui import QKeySequence, QShortcut
 
@@ -22,6 +22,7 @@ from cockpit.ui.canvas.layout_canvas import LayoutCanvas
 from cockpit.ui.widgets.audit_bom_panel import AuditBomPanel
 from cockpit.ui.widgets.checklist_view import ChecklistView
 from cockpit.ui.widgets.selection_coordinator import SelectionCoordinator
+from cockpit.ui.widgets.chamfered_pane import ChamferedPane
 from cockpit.ui.theme import Theme
 
 class AuditView(QWidget):
@@ -31,9 +32,6 @@ class AuditView(QWidget):
     exit_requested = pyqtSignal()
     error_occurred = pyqtSignal(object)  # FailurePayload
     ops_per_board_change_requested = pyqtSignal(int, object)  # (audit_id, float | None)
-    
-    # LayoutCanvas relays
-    font_scale_change_requested = pyqtSignal(int)
     
     # Local
     settings_requested = pyqtSignal()
@@ -50,9 +48,11 @@ class AuditView(QWidget):
         pdf_renderer: PdfRenderer,
         parent: QWidget | None = None,
         *,
-        theme: Theme
+        theme: Theme,
+        
     ) -> None:
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._theme = theme
         
         self._session = AuditSession(checklist_service, build_identity_banner)
@@ -64,7 +64,8 @@ class AuditView(QWidget):
         self._esc_shortcut.activated.connect(self._on_escape_pressed)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        gap_px = self._theme.pane_gap_px()
+        layout.setContentsMargins(gap_px, gap_px, gap_px, gap_px)
         
         # Header
         header_layout = QHBoxLayout()
@@ -101,6 +102,7 @@ class AuditView(QWidget):
         # Main Splitter
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
         self._splitter.setChildrenCollapsible(False)
+        self._splitter.setHandleWidth(gap_px)
         
         # Center Pager
         self._layout_canvas = LayoutCanvas(
@@ -112,15 +114,30 @@ class AuditView(QWidget):
         self._center_pager = CenterPager(self._layout_canvas, self._theme, self._splitter)
         self._center_pager.bind(self._session)
         self._center_pager._selector.page_changed.connect(self._on_center_page_changed)
-        self._splitter.addWidget(self._center_pager)
+        
+        center_chamfered = ChamferedPane(
+            self._center_pager, 
+            self._theme.pane_chamfer_px(), 
+            self._theme.pane_inset_px(), 
+            self._theme.pane_fill_rgb()
+        )
+        self._splitter.addWidget(center_chamfered)
         
         # Right Stack
         self._right_stack = QSplitter(Qt.Orientation.Vertical)
         self._right_stack.setChildrenCollapsible(False)
+        self._right_stack.setHandleWidth(gap_px)
         
         self.checklist_tht = ChecklistView(self._theme)
         self.checklist_tht.setMinimumHeight(self._theme.checklist_min_height_px())
-        self._right_stack.addWidget(self.checklist_tht)
+        
+        tht_chamfered = ChamferedPane(
+            self.checklist_tht, 
+            self._theme.pane_chamfer_px(), 
+            self._theme.pane_inset_px(), 
+            self._theme.pane_fill_rgb()
+        )
+        self._right_stack.addWidget(tht_chamfered)
         
         self._bom_panel = AuditBomPanel(
             layout_query_service=layout_query_service,
@@ -128,7 +145,14 @@ class AuditView(QWidget):
             theme=self._theme
         )
         self._bom_panel.setMinimumHeight(self._theme.checklist_min_height_px())
-        self._right_stack.addWidget(self._bom_panel)
+        
+        bom_chamfered = ChamferedPane(
+            self._bom_panel, 
+            self._theme.pane_chamfer_px(), 
+            self._theme.pane_inset_px(), 
+            self._theme.pane_fill_rgb()
+        )
+        self._right_stack.addWidget(bom_chamfered)
         
         self._right_stack.setSizes([1, 1])
         self._splitter.addWidget(self._right_stack)
@@ -148,10 +172,7 @@ class AuditView(QWidget):
         self._session.identity_changed.connect(self._identity_bar.set_identity)
         
         self._session.rows_replaced.connect(self._on_rows_replaced)
-        self._session.row_updated.connect(self._on_row_updated)
-        self._session.row_reverted.connect(self._on_row_reverted)
         
-        self.checklist_tht.toggle_requested.connect(self._session.set_verification)
         self.checklist_tht.body_clicked.connect(self._coordinator.on_tht_body_clicked)
         self.checklist_tht.mpn_clicked.connect(self._coordinator.on_tht_mpn_clicked)
         self.checklist_tht.empty_space_clicked.connect(self._coordinator.on_empty_clicked)
@@ -161,7 +182,6 @@ class AuditView(QWidget):
         self._bom_panel.error_occurred.connect(self.error_occurred.emit)
         
         self._layout_canvas.error_occurred.connect(self.error_occurred.emit)
-        self._layout_canvas.font_scale_change_requested.connect(self.font_scale_change_requested.emit)
         self._layout_canvas.refdes_clicked.connect(self._coordinator.on_renderer_refdes_clicked)
         self._layout_canvas.empty_clicked.connect(self._coordinator.on_empty_clicked)
         
@@ -172,13 +192,7 @@ class AuditView(QWidget):
     def _on_rows_replaced(self, view) -> None:
         self.checklist_tht.populate_section(view.tht_rows, f"T/H - MPN Count: {len(view.tht_rows)} | Total Placements: {view.tht_placement_count}")
         
-    def _on_row_updated(self, row) -> None:
-        if row.key.kind == "tht":
-            self.checklist_tht.update_row(row)
-            
-    def _on_row_reverted(self, row_key) -> None:
-        if row_key.kind == "tht":
-            self.checklist_tht.revert_row(row_key)
+
 
     def _on_search_changed(self, query_text: str) -> None:
         query = query_text.strip()
@@ -272,7 +286,7 @@ class AuditView(QWidget):
             
         total_width = self.width()
         right_w = max(right_min_w, int(total_width * 0.3))
-        center_w = max(0, total_width - right_w)
+        center_w = max(0, total_width - right_w - self._splitter.handleWidth())
         self._splitter.setSizes([center_w, right_w])
         
         self._splitter.splitterMoved.connect(self._on_splitter_moved)
@@ -285,9 +299,6 @@ class AuditView(QWidget):
                 self._splitter.splitterMoved.disconnect(self._on_splitter_moved)
                 self._splitter.setSizes([sizes[0] + sizes[1] - right_min_w, right_min_w])
                 self._splitter.splitterMoved.connect(self._on_splitter_moved)
-
-    def apply_font_scale(self, percentage: int) -> None:
-        self._layout_canvas.apply_font_scale(percentage)
 
     def flush_pending_writes(self) -> None:
         # no-op, previously this flushed audit notes

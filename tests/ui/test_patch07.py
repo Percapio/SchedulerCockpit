@@ -1,3 +1,4 @@
+from PyQt6.QtCore import QSettings
 import pytest
 import pathlib
 from unittest.mock import patch, Mock
@@ -34,7 +35,7 @@ def test_unload_does_not_clear_session(qtbot, bootstrapped_app, theme):
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme
+        theme=theme, settings=QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, 'Test', 'Test')
     )
     qtbot.addWidget(view)
     
@@ -57,7 +58,7 @@ def test_center_pager_opens_on_drawing(qtbot, bootstrapped_app, theme):
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme
+        theme=theme, settings=QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, 'Test', 'Test')
     )
     qtbot.addWidget(view)
     
@@ -83,7 +84,7 @@ def test_all_panes_enabled_after_load(qtbot, bootstrapped_app, theme):
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme
+        theme=theme, settings=QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, 'Test', 'Test')
     )
     qtbot.addWidget(view)
     
@@ -114,6 +115,8 @@ def test_main_window_picker_leaves_view_usable(qtbot, bootstrapped_app, theme):
     main._audit_view.load = Mock()
     main.picker.audit_selected.emit(1)
     
+    qtbot.waitUntil(lambda: main._audit_view.load.called)
+    
     assert main._audit_view._center_pager.isEnabled()
     assert main._audit_view._right_stack.isEnabled()
 
@@ -128,7 +131,7 @@ def test_complete_declined_leaves_audit_intact(mock_confirm, qtbot, bootstrapped
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme
+        theme=theme, settings=QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, 'Test', 'Test')
     )
     qtbot.addWidget(view)
     
@@ -152,7 +155,7 @@ def test_complete_confirmed_deletes_audit(mock_confirm, qtbot, bootstrapped_app,
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme
+        theme=theme, settings=QSettings(QSettings.Format.IniFormat, QSettings.Scope.UserScope, 'Test', 'Test')
     )
     qtbot.addWidget(view)
     

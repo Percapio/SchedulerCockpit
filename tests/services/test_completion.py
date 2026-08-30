@@ -36,8 +36,7 @@ def test_hard_delete_failure_leaves_completed(tmp_path, monkeypatch):
     
     # insert an audit
     conn.execute("INSERT INTO active_audits (id, part_number, work_order_ref, split_suffix, quantity, status, created_at, updated_at) VALUES (1, 'p', 'w', '', 1, 'Not Clear', '2020-01-01T00:00:00', '2020-01-01T00:00:00')")
-    # complete everything so it passes checklist check if it was there
-    conn.execute("INSERT INTO tht_verification_checklist (audit_id, component_mpn, is_verified) VALUES (1, 'c', 1)")
+    conn.execute("INSERT INTO tht_verification_checklist (audit_id, component_mpn) VALUES (1, 'c')")
 
     storage_reaper = StorageReaper(source_file_repo)
     completion_service = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)

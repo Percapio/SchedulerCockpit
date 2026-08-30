@@ -5,14 +5,14 @@ from typing import Sequence
 
 from ..errors import (
     AuditNotFound,
-    ChecklistItemNotFound,
     ForeignKeyMismatch,
-    IllegalStateTransition,
     InvalidArgumentError,
     SourceFileNotFound,
 )
 from ..types import BuildNoteItem, BuildNoteItemDraft, AuditStatus
 
+
+NOTES_COLUMNS_INSERT = "audit_id, source_file_id, row_sequence, cells, image_refs, source_table_index"
 
 class BuildNotesChecklistRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:
@@ -47,17 +47,18 @@ class BuildNotesChecklistRepository:
         try:
             for item in items:
                 cur.execute(
-                    """
+                    f"""
                     INSERT INTO build_notes_checklist (
-                        audit_id, source_file_id, row_sequence, original_text, is_verified
-                    ) VALUES (?, ?, ?, ?, ?)
+                        {NOTES_COLUMNS_INSERT}
+                    ) VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         item.audit_id,
                         item.source_file_id,
                         item.row_sequence,
-                        item.original_text,
-                        item.is_verified
+                        item.cells,
+                        item.image_refs,
+                        item.source_table_index
                     )
                 )
                 item_id = cur.lastrowid
@@ -83,31 +84,3 @@ class BuildNotesChecklistRepository:
         )
         return [BuildNoteItem(**row) for row in cur.fetchall()]
 
-    def set_verification(self, item_id: int, is_verified: bool) -> BuildNoteItem:
-        cur = self.conn.cursor()
-        cur.execute(
-            "UPDATE build_notes_checklist SET is_verified = ? WHERE id = ?",
-            (is_verified, item_id)
-        )
-        if cur.rowcount == 0:
-            raise ChecklistItemNotFound(item_id, "notes")
-            
-        cur.execute("SELECT * FROM build_notes_checklist WHERE id = ?", (item_id,))
-        row = cur.fetchone()
-        assert row is not None
-        return BuildNoteItem(**row)
-
-    def mark_all_verified(self, audit_id: int) -> int:
-        cur = self.conn.cursor()
-        cur.execute("SELECT status FROM active_audits WHERE id = ?", (audit_id,))
-        row = cur.fetchone()
-        if not row:
-            raise AuditNotFound(audit_id)
-            
-        # Completed audits are hard-deleted, no status check needed
-            
-        cur.execute(
-            "UPDATE build_notes_checklist SET is_verified = 1 WHERE audit_id = ? AND is_verified = 0",
-            (audit_id,)
-        )
-        return cur.rowcount

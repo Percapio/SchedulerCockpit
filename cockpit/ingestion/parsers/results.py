@@ -29,10 +29,18 @@ class BomResult:
 
 
 @dataclass(frozen=True)
+class EcoImageRef:
+    blob_sha1: str                   # SHA1 hex of the part blob
+    content_type: str                # from the part
+    cell_index: int                  # which cell of the row carried it
+    order: int                       # document order within that cell
+
+@dataclass(frozen=True)
 class EcoItem:
-    row_sequence: int                   # monotonic across the entire ECO, starts at 1
-    original_text: str                  # verbatim with embedded \n preserved
-    source_table_index: int             # 0 (instructions) or 1 (x-ray); diagnostic only
+    row_sequence: int
+    cells: tuple[str, ...]
+    images: tuple[EcoImageRef, ...]
+    source_table_index: int
 
 
 @dataclass(frozen=True)

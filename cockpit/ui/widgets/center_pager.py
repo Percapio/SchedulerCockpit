@@ -1,9 +1,10 @@
 from enum import Enum
-from PyQt6.QtCore import pyqtSignal, Qt
+from PyQt6.QtCore import pyqtSignal, QSettings, Qt
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QStackedWidget
 
 from cockpit.ui.canvas.layout_canvas import LayoutCanvas, PdfSource
 from cockpit.ui.widgets.checklist_view import ChecklistView
+from cockpit.ui.widgets.build_notes_pane import BuildNotesPane
 from cockpit.ui.widgets.audit_session import AuditSession
 from cockpit.ui.theme import Theme
 
@@ -65,20 +66,6 @@ class SourceSelector(QWidget):
         self._current_page = page
         for p, btn in self._buttons.items():
             btn.setChecked(p == page)
-
-class BuildNotesPane(ChecklistView):
-    def __init__(self, theme: Theme, parent: QWidget | None = None) -> None:
-        super().__init__(theme, parent)
-        self.setMinimumHeight(theme.checklist_min_height_px())
-        
-    def bind(self, session: AuditSession) -> None:
-        session.rows_replaced.connect(self._on_rows_replaced)
-        session.row_updated.connect(self.update_row)
-        session.row_reverted.connect(self.revert_row)
-        self.toggle_requested.connect(session.set_verification)
-        
-    def _on_rows_replaced(self, view) -> None:
-        self.populate_section(view.notes_rows, f"Build Notes ({len(view.notes_rows)} items)")
 
 class CenterPager(QWidget):
     def __init__(

@@ -84,7 +84,6 @@ from cockpit.services.views import SelectionIntent, ResolvedSelection, Selection
 from cockpit.ui.workers.render_worker import RenderJob, RenderResult, RenderFailure, RenderedImage
 from cockpit.persistence.errors import PersistenceError
 from cockpit.ui.canvas.page_switcher import PageSwitcher
-from cockpit.ui.canvas.font_scale_bar import FontScaleBar
 import logging
 logger = logging.getLogger(__name__)
 
@@ -213,7 +212,6 @@ class PdfSource(Enum):
 
 class LayoutCanvas(QWidget):
     error_occurred = pyqtSignal(object)
-    font_scale_change_requested = pyqtSignal(int)
     refdes_clicked = pyqtSignal(str)
     empty_clicked = pyqtSignal()
     request_render = pyqtSignal(object)
@@ -287,18 +285,6 @@ class LayoutCanvas(QWidget):
         self._highlight_items: list[HighlightItem] = []
         
         canvas_layout.addWidget(self._graphics_view, stretch=1)
-        
-        self._font_scale_bar = FontScaleBar(self._canvas_container)
-        self._font_scale_bar.scale_decrease_requested.connect(lambda: self.font_scale_change_requested.emit(-1))
-        self._font_scale_bar.scale_increase_requested.connect(lambda: self.font_scale_change_requested.emit(1))
-        
-        footer_layout = QHBoxLayout()
-        footer_layout.setContentsMargins(4, 4, 4, 4)
-        footer_layout.addStretch(1)
-        
-        footer_layout.addWidget(self._font_scale_bar)
-        
-        canvas_layout.addLayout(footer_layout)
         
         self._hint_label = QLabel(self)
         self._hint_label.setProperty("class", "hint-label bold")

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["application", "base", "checklist_panel", "right_panel", "canvas", "bom_panel"],
+  "required": ["application", "base", "checklist_panel", "right_panel", "canvas", "bom_panel", "pane", "notes"],
   "properties": {
     "$schema": { "type": "string" },
     "application": {
@@ -251,6 +251,42 @@
             "flow_spacing_px": { "type": "integer", "minimum": 0 }
           },
           "required": ["fill_rgb", "fill_hover_rgb", "text_rgb", "text_selected_rgb", "corner_radius_px", "vertical_padding_px", "horizontal_padding_px", "flow_spacing_px"]
+        }
+      }
+    },
+    "pane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["chamfer_px", "gap_px", "inset_px", "fill_rgb"],
+      "properties": {
+        "chamfer_px": { "type": "integer", "minimum": 0 },
+        "gap_px": { "type": "integer", "minimum": 0 },
+        "inset_px": { "type": "integer", "minimum": 0 },
+        "fill_rgb": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+      }
+    },
+    "notes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["image", "column"],
+      "properties": {
+        "image": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inline_max_height_px", "max_decoded_pixels"],
+          "properties": {
+            "inline_max_height_px": { "type": "integer", "minimum": 1 },
+            "max_decoded_pixels": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "column": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min_width_px", "max_content_width_px"],
+          "properties": {
+            "min_width_px": { "type": "integer", "minimum": 1 },
+            "max_content_width_px": { "type": "integer", "minimum": 1 }
+          }
         }
       }
     }

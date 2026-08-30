@@ -115,5 +115,21 @@
       "horizontal_padding_px": 6,
       "flow_spacing_px": 4
     }
+  },
+  "pane": {
+    "chamfer_px": 6,
+    "gap_px": 8,
+    "inset_px": 6,
+    "fill_rgb": "#1E1E1E"
+  },
+  "notes": {
+    "image": {
+      "inline_max_height_px": 64,
+      "max_decoded_pixels": 16000000
+    },
+    "column": {
+      "min_width_px": 24,
+      "max_content_width_px": 480
+    }
   }
 }

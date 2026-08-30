@@ -1,0 +1,50 @@
+### 3.2 Table geometry
+
+Column widths come from `w:tblGrid`, in twentieths of a point:
+
+```
+px = twips / 15          # 1440 twips per inch, 96 px per inch
+```
+
+applied as `QTextTableFormat.setColumnWidthConstraints` with
+`QTextLength.Type.FixedLength`.
+
+`tblGrid` coverage is not all-or-nothing, and the three cases are distinct:
+
+| `tblGrid` | Rule |
+| --- | --- |
+| Every `gridCol` carries a `w` | Fixed widths throughout |
+| Some carry `w`, others are absent or zero | Fixed widths for those that specify; the remainder of the table's declared width (`w:tblW`) split evenly among those that do not. With no `w:tblW`, the unspecified columns take the mean of the specified ones |
+| No `tblGrid`, or `autofit` | `QTextLength.Type.PercentageLength` split evenly — Qt's own default, and the only honest answer when the document declares nothing |
+
+Only the first two contribute to `natural_width` (§3.1).
+
+Merged cells come from the two mechanisms Word uses, which are not
+interchangeable:
+
+Merged cells come from the two mechanisms Word uses, which are not
+interchangeable:
+
+| Word | Read from | Applied as |
+| --- | --- | --- |
+| Horizontal merge | `CT_Tc.grid_span` | `QTextTable.mergeCells(row, col, 1, span)` |
+| Vertical merge | `CT_Tc.vMerge` — `restart` opens a run, `continue` extends it | `mergeCells(startRow, col, rowSpan, 1)` after the run closes |
+
+`vMerge` cannot be applied cell-by-cell: the row span is only known when the
+run of `continue` cells ends, so vertical merges are collected during the walk
+and applied after the table is fully populated. Applying them during the walk
+shifts the cell indices under the walker — this is the single most likely place
+for the renderer to produce a scrambled table.
+
+**A merge that conflicts is skipped, not raised and not aborted.** Qt refuses a
+`mergeCells` whose region overlaps an existing merge, and a malformed document
+can produce exactly that — a `vMerge` run crossing a region already claimed by a
+`gridSpan`, or a `continue` with no `restart` above it. Before each deferred
+merge the renderer checks the region against the merges already applied; a
+conflicting one is dropped and recorded as `MergeConflict` in `anomalies`
+(§3.1), naming the table, row, and column.
+
+The alternative — failing the whole document as `DocumentUnreadable` — is wrong
+here: one bad merge in a four-row table would hide every legible instruction in
+it. A table with an unmerged cell where Word shows a merged one is degraded and
+readable; a pane showing an error message is neither.

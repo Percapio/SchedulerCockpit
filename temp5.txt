@@ -1,0 +1,193 @@
+| Condition | Cause | Pane shows |
+| --- | --- | --- |
+| `DocumentMissing` | The `.docx` was deleted from `uploads/` outside the app | The expected path and that the audit must be re-ingested |
+| `DocumentUnreadable` | Corrupt zip, `PermissionError`, file open exclusively elsewhere | The underlying reason, verbatim |
+| `NoTablesFound` | A `.docx` with no tables | "No build-note tables in this document" |
+| No `Notes` source file | The audit was ingested without one | "No build notes attached" — not an error |
+| Undecodable medium | EMF/WMF, a corrupt blob, a degenerate decode (§3.4) | Inline placeholder naming the format; the rest of the table renders |
+| Merge conflict | Malformed or overlapping `vMerge` (§3.2) | Nothing — the cell renders unmerged; recorded in `anomalies` only |
+
+**The "no `Notes` source file" row never reaches the renderer.**
+`render_build_notes` is only called with a path, so the `None` case is decided
+one level up: the pane's render trigger checks `notes_docx_path is None` first
+and shows the not-attached message directly. Folding it into
+`NotesRenderFailure` would make an ordinary state — an audit ingested without
+build notes — into a failure value that every caller has to distinguish from a
+real one.
+
+The audit still loads in every case. This is a stronger requirement than the
+current pane has: today a render failure would surface through
+`ChecklistService.load`, which is on the audit-load path.
+
+---
+
+## 8. Coupling and blast radius
+
+- **`ChecklistService`** loses its notes branch, its `ImageCacheService`
+  constructor dependency, and — with `notes_rows` gone from `ActiveAuditView` —
+  its only filesystem dependency. It returns to being four repositories and
+  sqlite, which is what it was before Phase 42.
+- **`ActiveAuditView`** trades `notes_rows: Sequence[NotesRowView]` for
+  `notes_docx_path: Path | None`. The lookup already exists at
+  [checklist.py:147](../cockpit/services/checklist.py#L147); it stops feeding the
+  image cache and starts feeding the view.
+- **`AuditSession`** is unchanged. It was reduced to load-only by Patch 07 and
+  stays there.
+- **`CenterPager`** loses the `settings` parameter Patch 07 added
+  ([center_pager.py:89](../cockpit/ui/widgets/center_pager.py#L89)) and keeps the
+  relay at [center_pager.py:90](../cockpit/ui/widgets/center_pager.py#L90),
+  `notes_pane.empty_space_clicked → self._canvas.empty_clicked.emit`. The
+  `empty_clicked` signal belongs to `LayoutCanvas`, which `CenterPager` receives
+  by injection and this patch does not touch; only the pane on the emitting side
+  changes.
+- **`empty_space_clicked` needs a new emitter.** The current pane raises it from
+  an event filter on a `QScrollArea` viewport, which no longer exists. A
+  `QTextEdit` has no such signal, so `BuildNotesPane` overrides
+  `mousePressEvent`: `cursorForPosition(event.pos()).currentTable()` returning
+  `None` means the click landed outside every table, and the signal is emitted.
+  A click inside a table falls through to `QTextEdit` so selection still works.
+  This is the same predicate §4 uses to decide whether to offer the copy action,
+  and it should be one helper, not two.
+- **`SelectionCoordinator`** loses `register_notes_pane` entirely. The notes pane
+  has no rows and no keys, so `set_selected_row`, `clear_selected_row`, and
+  `scroll_to_row` — already no-op stubs — are deleted rather than reimplemented.
+- **`bootstrap`** drops the `ImageCacheService` construction
+  ([bootstrap.py:207](../cockpit/ui/bootstrap.py#L207)) and gains the one-time
+  `notes_media/` removal (§6).
+- **Ingestion** keeps parsing the `.docx` and keeps rejecting malformed ones. It
+  stops writing notes rows.
+
+---
+
+## 9. Test impact
+
+| Area | Change |
+| --- | --- |
+| `tests/services/test_notes_renderer.py` (new) | Fixture `.docx` files built with python-docx: a plain table; `gridSpan`; a `vMerge` run of three rows; a `tblGrid` with unequal widths; a **partially specified** `tblGrid`; no `tblGrid` at all; an inline image with a `wp:extent` smaller than its native size; an image with no extent; an undecodable blob; a truncated PNG that decodes to zero dimensions. Assert `QTextTable` row/column counts, `cellAt` spans, column-width constraints, and `QTextImageFormat` width/height in px |
+| Same | A decoded image's `QImage` dimensions equal the `wp:extent` conversion, not the intrinsic size — the regression guard for scaled decoding (§3.4) |
+| Same | An overlapping `vMerge` yields a `MergeConflict` anomaly and a readable table, not an exception (§3.2); `natural_width` is 0 when every table falls back to percentage widths (§3.1) |
+| Same | Cell borders override table borders per edge, and a `nil` cell edge suppresses rather than inheriting (§3.3) |
+| Same | `vMerge` applied **after** the walk — a table with a vertical merge in a middle column must not scramble the cells to its right (§3.2) |
+| Same | Each `NotesRenderFailure` arm returns rather than raises |
+| `tests/services/test_cell_copy.py` (new) | `cell_mime_data` HTML contains `data:image/png;base64,` and no `notes://` URL; plain text contains no `U+FFFC`; a text-only cell yields both formats; a cell click outside any table yields no menu |
+| `tests/persistence/test_schema_v16.py` (new) | Forward migration from v15; both tables and both indexes gone; re-run at v16 returns `False`; `SchemaMismatch` below v15 |
+| `tests/ui/` notes pane | Renders on first show, not on load; a second switch to the page does not re-render; **`load(B)` while showing A's notes re-renders to B, and `load(B)` while the PDF page is showing defers until the switch** (§3.1); `unload()` gives the editor a fresh document and clears the old one; `highlight_matches` returns 0 on an `Empty` pane and clears on an empty query; the notes search is debounced while BOM and THT filtering stay immediate; a click outside every table emits `empty_space_clicked` and one inside does not |
+| Same | `notes_docx_path is None` shows "No build notes attached" without calling the renderer (§7) |
+| Deleted | Every test covering `ImageCacheService`, `notes_media` eviction, the staging rename, `measure_columns` / `resolve_column_widths` / `load_pinned_widths`, the column header, and `build_notes_checklist` inserts and split-cloning |
+| `tests/ingestion/` ECO parser | Reduced to `declared_part_number`, row count, and the three `MalformedEcoError` gates. Cell-tuple and image-ref assertions deleted |
+| `tests/ui/test_config_phase19.py` | `notes_media_root` and the budget fields removed from `AppConfig` |
+| `tests/ui/test_theme*.py` | `notes` section rewritten to `search_highlight_rgb` only |
+
+---
+
+## 10. Sequencing
+
+1. **The renderer, standalone** (§3). A pure function from a path to a
+   `QTextDocument`, with the fixture suite above. No wiring, nothing deleted
+   yet — this is where the fidelity questions of §3.2 and §3.5 get answered
+   against a real build note before anything is thrown away.
+2. **`cell_mime_data` and the context menu** (§4). Also standalone; operates on
+   a document produced by step 1.
+3. **Pane replacement** (§3.1, §5). `BuildNotesPane` renders lazily, highlights
+   instead of filtering; `ActiveAuditView` carries the path; `ChecklistService`
+   loses its notes branch; `SelectionCoordinator` loses its notes registration.
+   The old grid is deleted here. **First point at which the feature is usable.**
+4. **v16 plus the persistence teardown** (§2, §6). Tables, repository, types,
+   ingestion writes, `image_cache.py`, reconciler sweep, config fields, theme
+   tokens, and the `QSettings` threading revert.
+
+Steps 1 and 2 are additive and land independently. Step 3 is the cutover. Step 4
+is pure removal and is deliberately last: if step 3 reveals that the renderer
+cannot match the document, the stored rows are still there to fall back on.
+Reversing that order trades a revert for a re-ingest.
+
+---
+
+## 11. Audit disposition
+
+Against [20260830-Patch08Audit.md](20260830-Patch08Audit.md). Twenty-two of
+twenty-three findings accepted; one refuted by the code, with the citation it
+asked for added anyway.
+
+| # | Verdict | Disposition |
+| --- | --- | --- |
+| 1 `RenderPalette` undefined | Accepted | Defined in §3.1 with four fields and snapshot-by-value semantics. Working it through exposed a larger problem — see below |
+| 2 `SkippedMedium` undefined | Accepted | Replaced by `RenderAnomaly` in §3.1, carrying reason, relationship id, and table/row/column. Renamed because finding 8 gave it a second, non-media case |
+| 3 `load()` while `Rendered` | Accepted | §3.1's diagram gains the transition. `load()` always discards to `Empty`; visibility alone drives rendering, so there is one trigger rather than two |
+| 4 `unload()` callers unnamed | Accepted | §3.1 names the path — `AuditView.unload()` → `CenterPager.unload()` → the pane — and the three entries to it |
+| 5 Document memory release | Accepted | §3.1 gives the three-step release. `setDocument(None)` is explicitly not the mechanism |
+| 6 `natural_width` with percentage tables | Accepted | §3.1 excludes them and states what happens when every table falls back |
+| 7 palette purity | Accepted | Folded into 1: snapshotted at the call site, and §3.3 adds the invalidation on `StyleController.changed` that a snapshot requires |
+| 8 Overlapping `vMerge` | Accepted | §3.2 checks each deferred merge against the applied set and drops conflicts as anomalies. Aborting the table was considered and rejected — one bad merge would hide every instruction in it |
+| 9 Partial `tblGrid` | Accepted | §3.2 gains a three-case table; mixed coverage splits the declared table width among the unspecified columns |
+| 10 Border cascade | Accepted | §3.3 resolves per edge, cell over table, with `nil` on a cell edge suppressing rather than inheriting |
+| 11 Degenerate `QImage` | Accepted | §3.4 defines success as `not isNull() and width() > 0 and height() > 0` |
+| 12 Unbounded synchronous decode | **Accepted, fixed at the source** | The display size is known before the pixels are, so §3.4 decodes through `QImageReader.setScaledSize` at the display size. Cost scales with what is shown, not with what is stored, which removes the need for a thread. `max_document_media_px` remains as a guard |
+| 13 HTML API unnamed | Accepted | §4.2 names `QTextCursor.selection()` → `QTextDocumentFragment.toHtml()`, says why not `QTextDocument.toHtml()`, and pins the `src` form to `notes-img:<blob-sha1>` — a name this module chooses, so the rewrite is a lookup over known keys rather than a regex against Qt's output |
+| 14 base64 encode on right-click | **Accepted, resolved by 12** | Once images are stored at display size, the re-encode is a few hundred kilopixels. §4.2 states the dependency explicitly rather than leaving it implicit |
+| 15 `highlight_matches` on `Empty` | Accepted | §5 makes the early return part of the contract rather than relying on a guard that lives in `AuditView` |
+| 16 No debounce | Accepted | Verified: nothing is debounced today. §5 adds a timer inside the pane only — debouncing `_on_search_changed` would change BOM and THT behaviour, which nothing asked for |
+| 17 `rmtree` partial failure | Accepted | §6 makes the delete best-effort, logged, and retried on the next launch; a partial tree is inert after v16 |
+| 18 `notes_docx_path is None` path | Accepted | §7 states where it is decided and why it is not a `NotesRenderFailure` variant |
+| 19 `empty_space_clicked` emitter | Accepted | §8 defines the `mousePressEvent` → `cursorForPosition` → `currentTable()` predicate, and notes it is the same one §4 uses for the copy action |
+| 20 `canvas.empty_clicked` owner | Accepted | §8 identifies `LayoutCanvas`, injected into `CenterPager`, untouched by this patch |
+| 21 `notes_media_cache` in `DDL_STATEMENTS` | Accepted | It is not — it is created by `migrate_to_v14`. §6 states the asymmetry and that neither creation is edited |
+| 22 No test for load-while-rendered | Accepted | §9 adds both directions of finding 3, plus tests for every other branch added here |
+| 23 `reference_count` coupling | **Rejected on evidence, citation added** | `reference_count` is `SELECT COUNT(DISTINCT audit_id) FROM source_files WHERE file_hash = ?` and reads no other table; the only references to `build_notes_checklist` outside `schema.py` and its repository are the two split-clone statements, neither on a retention path. A7 now carries the citation the finding asked for |
+
+One problem the audit did not reach, found while defining `RenderPalette`:
+
+- **An accurate render on a dark application is an unreadable one.** A Word
+  build note is authored black-on-white and mostly does not set `w:color`; the
+  application is dark. Rendering the document's own colours onto the app's
+  ground would put black text on `#2A2A2A`. §3.3 gives the pane a document
+  ground of its own, so the Build Notes page reads as a white page inside a dark
+  application — deliberately, and recorded as A8. This is the kind of defect that
+  would have been found only by running it.
+
+---
+
+## Assumptions
+
+- **A1** — Build notes are always `.docx`, always table-structured, and follow a
+  consistent format. This is the premise the patch was requested on. A `.doc`
+  (OLE, not OOXML) would fail `UNREADABLE_DOCUMENT` at ingestion today, so the
+  renderer never sees one.
+- **A2** — Structural fidelity is sufficient and pixel fidelity is not required
+  (§3.5). The escalation path is PDF conversion, and it costs the copy feature.
+- **A3** — 96 DPI is the right conversion for both EMU and twips. On a
+  high-DPI display Qt applies its own device pixel ratio on top, so the render
+  stays physically correct; it is logical pixels that are being computed here,
+  not device pixels.
+- **A4** — The Build Notes pane ignores the global font scale (§3.3). This makes
+  it the one view in the application where the Settings font size has no effect,
+  which is the correct trade for a document render but will read as a bug to
+  anyone who does not know why.
+- **A5** — Lazy rendering on first page-switch is acceptable, and the departure
+  from Phase 41 A9's rebuild-on-reload is justified by cost: rows were cheap,
+  documents are not.
+- **A6** — HTML with `data:` URIs is accepted by the applications these cells get
+  pasted into. Word and Outlook are the stated targets. If a target refuses data
+  URIs, adding `image/png` to `cell_mime_data` is additive (§4.2).
+- **A7** — Deleting `build_notes_checklist` loses nothing unrecoverable, because
+  the `.docx` is retained by `reference_count > 0` and the orphan sweep. Verified
+  rather than assumed: `SourceFileRepository.reference_count` is
+  `SELECT COUNT(DISTINCT audit_id) FROM source_files WHERE file_hash = ?`
+  ([source_files.py:56-62](../cockpit/persistence/repositories/source_files.py#L56-L62)).
+  It reads `source_files` and nothing else, and a search across `cockpit/` finds
+  only two references to `build_notes_checklist` outside `schema.py` and its own
+  repository — both in the split-clone, neither on a retention path. Dropping the
+  table cannot change any file's reference count.
+
+  If a `.docx` is ever lost, the notes are lost with it — under the old design
+  the parsed rows would have survived. That exposure is accepted and is the same
+  one Phase 42 §3.4 accepted when it made a missing `.docx` a hard migration
+  failure, though it widens from migration-time to always.
+- **A8** — The Build Notes page reads as a white document on a dark application
+  (§3.3). That is the intended appearance. If it is judged wrong in use, the
+  alternative is remapping the document's colours to the theme, which reintroduces
+  exactly the fidelity loss this patch removes.
+- **A9** — Decoding at display size (§3.4) is sufficient to keep the render
+  synchronous. It rests on build notes being pages a human laid out, so the total
+  displayed pixel area is small. `max_document_media_px` is the guard for when
+  that is untrue; its value is chosen, not measured.

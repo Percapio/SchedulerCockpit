@@ -1,0 +1,230 @@
+px = twips / 15          # 1440 twips per inch, 96 px per inch
+```
+
+applied as `QTextTableFormat.setColumnWidthConstraints` with
+`QTextLength.Type.FixedLength`.
+
+`tblGrid` coverage is not all-or-nothing, and the three cases are distinct:
+
+| `tblGrid` | Rule |
+| --- | --- |
+| Every `gridCol` carries a `w` | Fixed widths throughout |
+| Some carry `w`, others are absent or zero | Fixed widths for those that specify; the remainder of the table's declared width (`w:tblW`) split evenly among those that do not. With no `w:tblW`, the unspecified columns take the mean of the specified ones |
+| No `tblGrid`, or `autofit` | `QTextLength.Type.PercentageLength` split evenly — Qt's own default, and the only honest answer when the document declares nothing |
+
+Only the first two contribute to `natural_width` (§3.1).
+
+Merged cells come from the two mechanisms Word uses, which are not
+interchangeable:
+
+Merged cells come from the two mechanisms Word uses, which are not
+interchangeable:
+
+| Word | Read from | Applied as |
+| --- | --- | --- |
+| Horizontal merge | `CT_Tc.grid_span` | `QTextTable.mergeCells(row, col, 1, span)` |
+| Vertical merge | `CT_Tc.vMerge` — `restart` opens a run, `continue` extends it | `mergeCells(startRow, col, rowSpan, 1)` after the run closes |
+
+`vMerge` cannot be applied cell-by-cell: the row span is only known when the
+run of `continue` cells ends, so vertical merges are collected during the walk
+and applied after the table is fully populated. Applying them during the walk
+shifts the cell indices under the walker — this is the single most likely place
+for the renderer to produce a scrambled table.
+
+**A merge that conflicts is skipped, not raised and not aborted.** Qt refuses a
+`mergeCells` whose region overlaps an existing merge, and a malformed document
+can produce exactly that — a `vMerge` run crossing a region already claimed by a
+`gridSpan`, or a `continue` with no `restart` above it. Before each deferred
+merge the renderer checks the region against the merges already applied; a
+conflicting one is dropped and recorded as `MergeConflict` in `anomalies`
+(§3.1), naming the table, row, and column.
+
+The alternative — failing the whole document as `DocumentUnreadable` — is wrong
+here: one bad merge in a four-row table would hide every legible instruction in
+it. A table with an unmerged cell where Word shows a merged one is degraded and
+readable; a pane showing an error message is neither.
+
+**The document renders at its true width and scrolls; it does not squeeze to
+fit.** `QTextEdit` defaults to wrapping at widget width, which would compress
+a wide table and defeat the whole point. Set `LineWrapMode.NoWrap` and give the
+document an explicit text width of `RenderedNotes.natural_width`, so a table
+wider than the pane produces a horizontal scrollbar. Text inside a cell still
+wraps, to the fixed column width from `tblGrid`.
+
+This is the first behaviour to verify against a real document, because it is the
+one where Qt's layout engine and Word's disagree most visibly.
+
+### 3.3 Run and cell formatting
+
+Read per run and mapped onto `QTextCharFormat`: `w:b`, `w:i`, `w:u`, `w:color`,
+`w:sz` (half-points → points), `w:rFonts`. Per cell onto
+`QTextTableCellFormat`: `w:shd/@w:fill` as background, `w:vAlign`, and borders
+by the cascade below.
+
+**Border precedence is cell over table**, resolved in the renderer because Qt
+has no cascade to do it. Word's model is `w:tcBorders` on the cell overriding
+`w:tblBorders` on the table, per edge; Qt's `QTextTableCellFormat` carries one
+flat set of border properties per cell. So each cell's four edges are resolved
+independently: take the cell's `w:tcBorders` edge if present and not `nil`,
+otherwise the table's `w:tblBorders` edge, otherwise no border. `nil` on a cell
+edge means *suppress*, and must not fall through to the table value — that is
+the one case where "absent" and "explicitly none" differ.
+
+**The document renders on its own page ground, not the application's dark
+theme.** This is not in the requirements and it decides whether the pane is
+legible at all. A Word build note is authored black-on-white and mostly does not
+set `w:color`; the surrounding application is dark
+(`checklist_panel.row.fill_rgb` `#2A2A2A`), and the current pane inherits it —
+which is why the screenshot shows white text. Render "accurately" into that and
+every run without an explicit colour becomes black on near-black.
+
+The pane therefore paints a document ground from `RenderPalette`
+(`page_background_rgb`, `default_text_rgb`) and lets the document's own colours
+apply on top of it, the way a document viewer does. The Build Notes page will
+read as a white page inside a dark application. That is the intended appearance,
+not an unstyled oversight — the alternative, remapping the document's colours to
+suit the theme, is exactly the fidelity loss this patch exists to stop.
+
+Because the palette is snapshotted (§3.1), a theme or preset change while an
+audit is open does not restyle an already-built document. `StyleController.changed`
+therefore invalidates the pane to `Empty`, and the next page switch re-renders.
+Without that, the ground would be from the old theme and the placeholders from
+the new one.
+
+**The document's own fonts win, and the global font scale does not apply to this
+pane.** `FontScaleController` restyles via application QSS
+([font_scale_controller.py](../cockpit/ui/font_scale_controller.py)); a
+`QTextDocument`'s own character formats override it. That is correct — a render
+at "100% scale" that changes size with a Settings slider is not a render of the
+document. Recorded as A4, because it makes this pane the one place in the
+application where the font-size setting has no effect.
+
+### 3.4 Images at Word's size
+
+For each `a:blip` in a run, resolve the relationship to its `ImagePart`, read the
+declared display size, decode the blob **to that size**, register the result as a
+document resource, and insert it.
+
+```
+# Display size of an embedded image, as Word lays it out.
+# pre:  drawing is an inline or anchored drawing element
+# post: returns wp:extent (or a:ext) cx/cy converted at 96 DPI; when no extent
+#       is present, the medium's intrinsic size as reported by QImageReader
+def display_size_px(drawing: Element, reader: QImageReader) -> QSize:
+    ...
+    # px = emu / 9525        (914400 EMU per inch, 96 px per inch)
+```
+
+**Decode at the display size, not at full resolution.** The size is known before
+the pixels are, so `QImageReader.setScaledSize(display_size_px(...))` decodes
+straight to the size that will be drawn. A 12-megapixel photograph pasted into a
+cell and shrunk to 200 px costs a 200 px decode, not a 48 MB one.
+
+This is what bounds the synchronous render (§3.1) without a thread or a budget
+ceiling: decode cost scales with what is *shown*, and what is shown is bounded
+by the page a human laid out. It also bounds §4.2 — the `QImage` in the document
+is already display-sized, so re-encoding one to PNG at right-click time is a
+sub-millisecond operation on a few hundred kilopixels, not a full-resolution
+round trip.
+
+Two guards remain, because "a human laid it out" is an assumption about the
+document and not a property of the format:
+
+- `max_document_media_px`, a total decoded-pixel budget across one document.
+  Media that would take the render past it are placeheld and recorded as
+  anomalies rather than decoded. The rendered page is still readable; the
+  alternative is a frozen application.
+- `QImageReader.setAllocationLimit` stays at Qt's default, which refuses
+  absurd allocations from a malformed header before any pixels are read.
+
+`QTextImageFormat.setWidth` / `setHeight` take the display pixels. This is what
+"100% scale" means here: the pane matches what the author sees when they open
+the `.docx`, so a screenshot shrunk to fit a cell stays shrunk.
+
+**A decode "succeeds" only if it produced pixels.** Several Qt codecs return a
+non-null but degenerate `QImage` on a truncated or malformed stream, so the test
+is `not image.isNull() and image.width() > 0 and image.height() > 0`. Anything
+else — including an `image/png` part whose bytes are not a PNG — is a
+`DegenerateImage` anomaly with a bordered placeholder in its place. Treating a
+zero-dimension image as a success inserts an invisible resource and loses the
+instruction silently.
+
+**Images live in the document, not on disk.** Registering them as
+`QTextDocument` resources for the one open audit replaces `notes_media/`, the
+`notes_media_cache` table, the LRU, the atomic staging rename, and the startup
+sweep — roughly 300 lines and a schema table, gone because the lifetime of an
+image is now the lifetime of the document that displays it. Memory is bounded by
+one document at a time and released as §3.1 describes.
+
+The content-type whitelist from Phase 42 §4.5 stays, moved into the renderer.
+EMF and WMF still cannot be decoded (§3.5) and are `UndecodableMedium`
+anomalies. The path-traversal defences of Phase 42 §4.5 become moot — nothing is
+written to disk, so the archive's supplied filenames never reach a filesystem
+call.
+
+### 3.5 Fidelity limits, named
+
+Qt's rich-text engine is a subset of Word's layout model. What will not survive,
+so it is not discovered as a bug:
+
+- **EMF and WMF images.** No decoder in Qt, none bundled
+  ([cockpit.spec:38](../cockpit.spec#L38) ships `imageformats` only). These
+  render as a placeholder naming the format.
+- **Floating and anchored drawings** (`wp:anchor`), text boxes, and anything in
+  a header or footer. Only inline content inside table cells is walked.
+- **Automatic list numbering** (`w:numPr`). Word computes the visible number
+  from a numbering definition; Qt has its own list engine and will not agree.
+  Hard-typed numbers — which is what these documents use — are literal text and
+  render correctly.
+- **Nested tables** render, but column-width constraints on the inner table are
+  approximate.
+- **Exact line breaking.** Qt's text shaping differs from Word's, so a cell may
+  wrap at a different word even at identical widths.
+
+If any of these turns out to matter, the escalation is PDF conversion (§1.2),
+and it costs the copy feature.
+
+---
+
+## 4. Copying a cell
+
+### 4.1 Qt's built-in copy does not satisfy the requirement
+
+Verified, not assumed. Copying a `QTextDocument` fragment containing an image
+produces HTML referencing the *document's own* resource URL:
+
+```html
+<img src="notes://img/abc.png" />
+```
+
+Nothing outside this process can resolve that. The plain-text form of an image
+is `U+FFFC`, the object-replacement character, which pastes into Notepad as a
+box. So `QTextEdit`'s built-in copy delivers a broken image to Word and a
+mojibake character to a text editor. The clipboard payload has to be
+constructed.
+
+### 4.2 The payload
+
+```
+# Clipboard contents for one table cell.
+# pre:  cell belongs to a table in the rendered document
+# post: text/plain carries the cell's text with image placeholders removed;
+#       text/html carries the same content with every image inlined as a
+#       base64 data: URI, so a paste into Word or Outlook keeps the images
+def cell_mime_data(
+    cell:     QTextTableCell,
+    document: QTextDocument
+) -> QMimeData
+```
+
+Construction, with the APIs named because the rewrite depends on their exact
+output:
+
+1. Select the cell — `cell.firstCursorPosition()` to `cell.lastCursorPosition()`
+   with `KeepAnchor` — and take `QTextCursor.selection()`, a
+   `QTextDocumentFragment`.
+2. `QTextDocumentFragment.toHtml()` for the markup, `toPlainText()` for the text
+   arm. Not `QTextDocument.toHtml()`, which emits a whole document with a
+   `<head>` and body-level styling that would be pasted along with the cell.
+3. Rewrite each `src`. **The `src` values are ours, not Qt's**: §3.4 registers
+   every resource under a name this module chose, of the form

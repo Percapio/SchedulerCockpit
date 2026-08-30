@@ -1,0 +1,50 @@
+### 3.3 Run and cell formatting
+
+Read per run and mapped onto `QTextCharFormat`: `w:b`, `w:i`, `w:u`, `w:color`,
+`w:sz` (half-points → points), `w:rFonts`. Per cell onto
+`QTextTableCellFormat`: `w:shd/@w:fill` as background, `w:vAlign`, and borders
+by the cascade below.
+
+**Border precedence is cell over table**, resolved in the renderer because Qt
+has no cascade to do it. Word's model is `w:tcBorders` on the cell overriding
+`w:tblBorders` on the table, per edge; Qt's `QTextTableCellFormat` carries one
+flat set of border properties per cell. So each cell's four edges are resolved
+independently: take the cell's `w:tcBorders` edge if present and not `nil`,
+otherwise the table's `w:tblBorders` edge, otherwise no border. `nil` on a cell
+edge means *suppress*, and must not fall through to the table value — that is
+the one case where "absent" and "explicitly none" differ.
+
+**The document renders on its own page ground, not the application's dark
+theme.** This is not in the requirements and it decides whether the pane is
+legible at all. A Word build note is authored black-on-white and mostly does not
+set `w:color`; the surrounding application is dark
+(`checklist_panel.row.fill_rgb` `#2A2A2A`), and the current pane inherits it —
+which is why the screenshot shows white text. Render "accurately" into that and
+every run without an explicit colour becomes black on near-black.
+
+The pane therefore paints a document ground from `RenderPalette`
+(`page_background_rgb`, `default_text_rgb`) and lets the document's own colours
+apply on top of it, the way a document viewer does. The Build Notes page will
+read as a white page inside a dark application. That is the intended appearance,
+not an unstyled oversight — the alternative, remapping the document's colours to
+suit the theme, is exactly the fidelity loss this patch exists to stop.
+
+Because the palette is snapshotted (§3.1), a theme or preset change while an
+audit is open does not restyle an already-built document. `StyleController.changed`
+therefore invalidates the pane to `Empty`, and the next page switch re-renders.
+Without that, the ground would be from the old theme and the placeholders from
+the new one.
+
+**The document's own fonts win, and the global font scale does not apply to this
+pane.** `FontScaleController` restyles via application QSS
+([font_scale_controller.py](../cockpit/ui/font_scale_controller.py)); a
+`QTextDocument`'s own character formats override it. That is correct — a render
+at "100% scale" that changes size with a Settings slider is not a render of the
+document. Recorded as A4, because it makes this pane the one place in the
+application where the font-size setting has no effect.
+
+### 3.4 Images at Word's size
+
+For each `a:blip` in a run, resolve the relationship to its `ImagePart`, read the
+declared display size, decode the blob **to that size**, register the result as a
+document resource, and insert it.

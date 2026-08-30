@@ -22,7 +22,9 @@ def test_cache_invalidation_on_load_active_audit():
         tht_repo=mock_tht_repo,
         notes_repo=mock_notes_repo,
         source_file_repo=mock_source_file_repo,
-        bom_component_repo=mock_bom_component_repo
+        bom_component_repo=mock_bom_component_repo,
+        image_cache_service=Mock(),
+        app_config=Mock()
     )
     
     # Pre-populate caches to simulate previous state
@@ -43,39 +45,3 @@ def test_cache_invalidation_on_load_active_audit():
     # Assert caches were cleared before being repopulated
     assert 999 not in service._refdes_index_cache._by_source_file
     assert service._bom_source_file_memo._by_audit[1] == 1000
-
-def test_set_verification_calls_no_bom_reads():
-    mock_audit_repo = Mock()
-    mock_source_file_repo = Mock()
-    mock_tht_repo = Mock()
-    mock_notes_repo = Mock()
-    mock_bom_component_repo = Mock()
-    mock_conn = Mock()
-    
-    service = ChecklistService(
-        conn=mock_conn,
-        audit_repo=mock_audit_repo,
-        tht_repo=mock_tht_repo,
-        notes_repo=mock_notes_repo,
-        source_file_repo=mock_source_file_repo,
-        bom_component_repo=mock_bom_component_repo
-    )
-    
-    service._bom_source_file_memo._by_audit[1] = 999
-    service._refdes_index_cache._by_source_file[999] = {"M1": (1, ("R1",))}
-    
-    from cockpit.services.views import ChecklistRowKey, ChecklistRowKind
-    row_key = ChecklistRowKey(ChecklistRowKind.THT, 42)
-    
-    mock_r = Mock()
-    mock_r.audit_id = 1
-    mock_r.component_mpn = "M1"
-    mock_r.description = "Test"
-    mock_r.is_verified = True
-    mock_tht_repo.set_verification.return_value = mock_r
-    
-    service.set_verification(row_key, True)
-    
-    mock_tht_repo.set_verification.assert_called_once_with(42, True)
-    mock_source_file_repo.find_by_audit_and_category.assert_not_called()
-    mock_bom_component_repo.list_for_source_file.assert_not_called()

@@ -231,10 +231,17 @@ class IngestionService:
                     self.pdf_coord_repo.bulk_insert(pdf_drafts)
 
             if intent.eco_items:
+                import json
                 self.notes_repo.insert_many([
                     BuildNoteItemDraft(
                         audit_id=audit.id, source_file_id=notes_file.id,
-                        row_sequence=item.row_sequence, original_text=item.original_text
+                        row_sequence=item.row_sequence,
+                        cells=json.dumps(item.cells),
+                        image_refs=json.dumps([
+                            {"blob_sha1": r.blob_sha1, "content_type": r.content_type, "cell_index": r.cell_index, "order": r.order}
+                            for r in item.images
+                        ]),
+                        source_table_index=item.source_table_index
                     ) for item in intent.eco_items
                 ])
 

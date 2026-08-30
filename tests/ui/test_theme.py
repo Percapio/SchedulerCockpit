@@ -64,6 +64,22 @@ def valid_theme_data():
                 "fill_rgb": "#3A3A3A", "fill_hover_rgb": "#4A4A4A", "text_rgb": "#E8E8E8", "text_selected_rgb": "#FFFF00",
                 "corner_radius_px": 3, "vertical_padding_px": 3, "horizontal_padding_px": 6, "flow_spacing_px": 4
             }
+        },
+        "pane": {
+            "chamfer_px": 6,
+            "gap_px": 8,
+            "inset_px": 6,
+            "fill_rgb": "#1E1E1E"
+        },
+        "notes": {
+            "image": {
+                "inline_max_height_px": 64,
+                "max_decoded_pixels": 16000000
+            },
+            "column": {
+                "min_width_px": 24,
+                "max_content_width_px": 480
+            }
         }
     }
 
@@ -381,6 +397,8 @@ def test_Theme_Qss_RefdesChipNoLongerEmitsMarginRight(valid_theme_data):
         _right_panel=valid_theme_data["right_panel"],
         _canvas=valid_theme_data["canvas"],
         _bom_panel=valid_theme_data["bom_panel"],
+        _pane=valid_theme_data["pane"],
+        _notes=valid_theme_data["notes"],
     )
     qss = theme.qss()
     assert "QLabel[class=\"refdes-chip\"]" in qss
@@ -394,6 +412,8 @@ def test_Theme_Qss_ReturnsNonEmptyString(valid_theme_data):
         _right_panel=valid_theme_data["right_panel"],
         _canvas=valid_theme_data["canvas"],
         _bom_panel=valid_theme_data["bom_panel"],
+        _pane=valid_theme_data["pane"],
+        _notes=valid_theme_data["notes"],
     )
     qss = theme.qss()
     assert isinstance(qss, str)
@@ -407,6 +427,8 @@ def test_Theme_Qss_IsIdempotent(valid_theme_data):
         _right_panel=valid_theme_data["right_panel"],
         _canvas=valid_theme_data["canvas"],
         _bom_panel=valid_theme_data["bom_panel"],
+        _pane=valid_theme_data["pane"],
+        _notes=valid_theme_data["notes"],
     )
     qss1 = theme.qss()
     qss2 = theme.qss()
@@ -420,6 +442,8 @@ def test_Theme_Qss_ContainsExpectedSelectorsFromEverySection(valid_theme_data):
         _right_panel=valid_theme_data["right_panel"],
         _canvas=valid_theme_data["canvas"],
         _bom_panel=valid_theme_data["bom_panel"],
+        _pane=valid_theme_data["pane"],
+        _notes=valid_theme_data["notes"],
     )
     qss = theme.qss()
     assert "DropArea { background-color: #FAFAFA; }" in qss
@@ -437,6 +461,8 @@ def test_Theme_Frozen_AttributeMutationRaisesFrozenInstanceError(valid_theme_dat
         _right_panel=valid_theme_data["right_panel"],
         _canvas=valid_theme_data["canvas"],
         _bom_panel=valid_theme_data["bom_panel"],
+        _pane=valid_theme_data["pane"],
+        _notes=valid_theme_data["notes"],
     )
     with pytest.raises(Exception):
         theme._base = {}

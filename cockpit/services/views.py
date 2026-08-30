@@ -138,12 +138,37 @@ class PendingPdf:
     path: pathlib.Path
 
 
+from cockpit.ingestion.parsers.results import EcoImageRef
+from cockpit.services.image_cache import CachedImagePath, ImageUnavailable
+
+ImageSlotState = CachedImagePath | ImageUnavailable
+
+@dataclass(frozen=True)
+class ImageSlotView:
+    ref: EcoImageRef
+    state: ImageSlotState
+
+@dataclass(frozen=True)
+class NotesCellView:
+    text: str
+    images: tuple[ImageSlotView, ...]
+
+@dataclass(frozen=True)
+class NotesRowView:
+    key: ChecklistRowKey
+    row_sequence: int
+    cells: tuple[NotesCellView, ...]
+    table_index: int
+
+    def flat_text(self) -> str:
+        return "\n".join(c.text for c in self.cells)
+
+
 @dataclass(frozen=True)
 class ChecklistRowView:
     key: ChecklistRowKey
     primary_label: str
     secondary_label: str | None = None
-    is_verified: bool = False
     find_number: int | None = None
     ref_des_list: tuple[str, ...] = ()
 
@@ -161,7 +186,7 @@ class ActiveAuditView:
     has_pdf: bool
     tht_placement_count: int = 0
     tht_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
-    notes_rows: Sequence[ChecklistRowView] = field(default_factory=tuple)
+    notes_rows: Sequence[NotesRowView] = field(default_factory=tuple)
     ship_date: str | None = None
     ops_per_board_min: float | None = None
     has_secondary_pdf: bool = False
@@ -169,20 +194,7 @@ class ActiveAuditView:
     are_photos_uploaded: bool = False
 
 
-    def with_row_replaced(self, updated: ChecklistRowView) -> "ActiveAuditView":
-        tht = list(self.tht_rows)
-        notes = list(self.notes_rows)
-        
-        target = tht if updated.key.kind == ChecklistRowKind.THT else notes
-        
-        for i, row in enumerate(target):
-            if row.key == updated.key:
-                target[i] = updated
-                break
-        else:
-            raise KeyError(f"Row {updated.key} not found in view")
-            
-        return replace(self, tht_rows=tht, notes_rows=notes)
+
 
 @dataclass(frozen=True)
 class AuditIdentityBanner:

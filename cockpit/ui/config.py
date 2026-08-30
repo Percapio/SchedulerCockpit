@@ -59,6 +59,7 @@ class AppConfig:
     app_data_root: pathlib.Path
     db_path: pathlib.Path
     file_storage_root: pathlib.Path
+    notes_media_root: pathlib.Path
     coord_map_path: pathlib.Path | None
     log_path: pathlib.Path
     log_level: str
@@ -71,6 +72,13 @@ class AppConfig:
     # frozen install the second copy lands inside the installation directory.
     # Defaults off; the primary log at log_path is unaffected either way.
     log_duplicate_to_install_dir: bool = False
+
+    # Phase 42: Media cache budget
+    max_documents: int = 50
+    max_total_bytes: int = 536_870_912      # 512 MiB
+    max_document_bytes: int = 67_108_864    # 64 MiB
+    max_image_bytes: int = 16_777_216       # 16 MiB
+    max_images_per_doc: int = 200
 
 
 @dataclass(frozen=True)
@@ -232,6 +240,8 @@ def resolve_config(root: pathlib.Path | None = None, probe_history: tuple[ProbeA
         root.mkdir(parents=True, exist_ok=True)
         file_storage_root = root / "uploads"
         file_storage_root.mkdir(exist_ok=True)
+        notes_media_root = root / "notes_media"
+        notes_media_root.mkdir(exist_ok=True)
         log_dir = root / "logs"
         log_dir.mkdir(exist_ok=True)
     except Exception as e:
@@ -248,6 +258,7 @@ def resolve_config(root: pathlib.Path | None = None, probe_history: tuple[ProbeA
         app_data_root=root,
         db_path=root / "local_audit.db",
         file_storage_root=file_storage_root,
+        notes_media_root=notes_media_root,
         coord_map_path=coord_map_path,
         log_path=log_dir / "cockpit.log",
         log_level=log_level,

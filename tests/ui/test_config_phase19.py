@@ -173,3 +173,13 @@ def test_scenario_13_probe_cleanup(tmp_path):
     assert attempt.success
     leftovers = list(target_dir.glob(".cockpit_probe_*"))
     assert not leftovers
+
+
+def test_resolve_config_creates_notes_media(tmp_path):
+    from cockpit.ui.config import resolve_config
+    root = tmp_path / "appdata"
+    cfg = resolve_config(root)
+    assert cfg.notes_media_root == root / "notes_media"
+    assert cfg.notes_media_root.exists()
+    assert cfg.notes_media_root.is_dir()
+    assert cfg.max_document_bytes == 67_108_864

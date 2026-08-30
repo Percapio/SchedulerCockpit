@@ -9,7 +9,6 @@ from .audit_identity_bar import AuditIdentityBar
 from .audit_actions_bar import AuditActionsBar
 from .audit_session import AuditSession
 from .center_pager import CenterPager
-from .checklist_row import ChecklistRow
 from .checklist_view import ChecklistView
 from .split_dialog import SplitDialog
 from .audit_view import AuditView

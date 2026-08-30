@@ -91,6 +91,31 @@ class StartupReconciler:
                     logger.exception('Exception caught in startup_reconciler')
                     pass
 
+        # 3. Notes media sweep
+        notes_media_root = self._file_storage_root.parent / "notes_media"
+        if notes_media_root.exists():
+            cur = self._audit_repo.conn.cursor()
+            cur.execute("SELECT notes_file_hash FROM notes_media_cache")
+            known_hashes = {row["notes_file_hash"] for row in cur.fetchall()}
+            
+            seen_hashes = set()
+            for d in notes_media_root.iterdir():
+                if d.is_dir():
+                    if d.name.startswith(".staging-") or d.name not in known_hashes:
+                        import shutil
+                        try:
+                            shutil.rmtree(d)
+                            pruned.append(d)
+                        except OSError as exc:
+                            logger.exception("Failed to remove unreferenced notes media directory")
+                    else:
+                        seen_hashes.add(d.name)
+            
+            missing_hashes = known_hashes - seen_hashes
+            if missing_hashes:
+                cur.executemany("DELETE FROM notes_media_cache WHERE notes_file_hash = ?", [(h,) for h in missing_hashes])
+                self._audit_repo.conn.commit()
+
         return ReconciliationReport(
             cleaned=cleaned,
             partial=partial,

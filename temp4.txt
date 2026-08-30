@@ -1,0 +1,149 @@
+   `notes-img:<blob-sha1>`, and `QTextImageFormat.setName` puts that string back
+   out verbatim. So the rewrite is a lookup over a known set of names — for each
+   name registered while rendering, replace it with the base64 PNG of
+   `QTextDocument.resource(ImageResource, name)` — not a regex against whatever
+   shape Qt's HTML writer happens to have this version. That distinction is the
+   difference between a rewrite that survives a Qt upgrade and one that silently
+   stops matching.
+4. The plain-text arm strips `U+FFFC` rather than shipping it.
+
+Re-encoding is bounded by §3.4: the stored `QImage` is already at display size.
+
+The context menu is a single "Copy cell" action, opened from
+`QTextEdit.customContextMenuRequested`. Resolving the click to a cell is a
+`cursorForPosition` → `currentTable()` → `cellAt(cursor)` chain; a click outside
+any table yields no table and the menu is not shown.
+
+Two things this is deliberately not:
+
+- **Not a replacement for normal selection copy.** Ctrl+C over a manual
+  selection keeps Qt's behaviour, image URLs and all. The right-click action is
+  the supported path for getting content out intact.
+- **Not `image/png` on the clipboard for image-only cells.** That was offered
+  and not taken; a cell whose entire content is the serial-label example pastes
+  as HTML carrying that image, which Word, Outlook, and browsers accept. Image
+  editors and some chat clients will not take it. If that turns out to matter,
+  adding a third format to `cell_mime_data` is additive and changes nothing else.
+
+---
+
+## 5. Search
+
+`AuditView.search_input` currently filters build-note rows by hiding widgets
+([audit_view.py:203](../cockpit/ui/widgets/audit_view.py#L203)). With no rows,
+row filtering has no meaning.
+
+`BuildNotesPane.apply_filter(query)` is replaced by
+`highlight_matches(query) -> int`, which walks `QTextDocument.find` from the
+start and applies a `QTextEdit.setExtraSelections` list — every match
+highlighted at once, not a find-next cursor, because the existing search box is
+an incremental filter and has no next/previous affordance. An empty query clears
+the selections.
+
+```
+# Highlights every occurrence of query in the rendered document.
+# post: returns the number of matches; clears all extra selections and returns
+#       0 for an empty query or when no document has been rendered
+def highlight_matches(self, query: str) -> int
+```
+
+**It returns 0 when the pane is in `Empty` state**, rather than relying on the
+caller not to ask. Today the only caller is guarded by Phase 41's
+page-visibility condition ([audit_view.py:202](../cockpit/ui/widgets/audit_view.py#L202)),
+but that guard lives in `AuditView` and this method is public on the pane; a
+pane that raises when asked to search nothing is a landmine for the next caller.
+
+**The search is debounced on the notes path.** There is no debounce anywhere
+today — `search_input.textChanged` runs `_on_search_changed` synchronously on
+every keystroke ([audit_view.py:81](../cockpit/ui/widgets/audit_view.py#L81)) —
+which is fine for the BOM and THT panes, where filtering toggles widget
+visibility. A full `QTextDocument.find` walk from position zero per character is
+a different cost, and it grows with the document rather than with the number of
+matches. A single-shot `QTimer` inside `BuildNotesPane`, restarted on each call
+and firing once the typing pauses, keeps the change local to this pane; adding a
+debounce to `_on_search_changed` would change BOM and THT search behaviour,
+which nothing has asked for.
+
+The three call sites in `AuditView` keep their shape and their conditions,
+including Phase 41's rule that notes are searched only while the notes page is
+visible ([audit_view.py:206-209](../cockpit/ui/widgets/audit_view.py#L206-L209)).
+The placeholder text stays "Search BOM & Build Notes...".
+
+One behavioural change to accept: a search that matches nothing in the BOM and
+nothing in the notes previously emptied the notes pane, which read as "no
+results". Highlighting shows the full document with nothing highlighted. The
+match count returned by `highlight_matches` exists so the pane can show a
+"no matches" indicator if that reads badly in use.
+
+Highlight colour is a new `notes.search_highlight_rgb` theme token — the only
+addition to a `notes` section otherwise emptied by §2. `theme.schema.json` is
+`"additionalProperties": false` with an explicit `required` list on `notes`, so
+the schema's `notes` object must be rewritten, not just trimmed.
+
+---
+
+## 6. Schema v16
+
+```sql
+DROP INDEX IF EXISTS ix_notes_audit_seq;
+DROP INDEX IF EXISTS ix_notes_media_lru;
+DROP TABLE IF EXISTS build_notes_checklist;
+DROP TABLE IF EXISTS notes_media_cache;
+```
+
+```
+# Removes the build-notes storage tables. Content is re-derived from the .docx.
+# pre:  schema_version >= 15
+# post: neither table exists; schema_version >= 16. Returns False without
+#       touching the database when already >= 16.
+# raises: SchemaMismatch when version < 15
+def migrate_to_v16(conn: Connection) -> bool
+```
+
+Appended to `migrate()` at
+[schema.py:604](../cockpit/persistence/schema.py#L604). It takes no
+`parser_registry` and contributes nothing to `needs_backfill`. The `>= 15`
+pre-condition and the early return at `>= 16` follow the file's re-entrancy
+convention — `migrate()` runs the whole chain on every launch.
+
+**No data is lost that cannot be re-derived.** `build_notes_checklist` held
+parsed cell text and image references; both come from the `.docx`, which is
+retained under `uploads/` with a `source_files` row and a non-zero
+`reference_count`. `is_verified` was already dropped in v15. This is the first
+migration in the file that deletes a table whose content is fully reproducible
+from a file the application still holds.
+
+**The two tables are created at different points, and neither creation is
+edited.** `build_notes_checklist` is in `DDL_STATEMENTS`, so a fresh database
+creates it at v1; `notes_media_cache` is created by `migrate_to_v14`
+([schema.py:942](../cockpit/persistence/schema.py#L942)), so a fresh database
+creates it partway along the chain. Both are left exactly as they are, and v16
+drops both. The convention is the same — history is not rewritten, the chain
+runs forward — but it is worth stating that it applies to a mid-chain `CREATE`
+as well as to the bootstrap DDL, because the two look different in the file and
+the temptation is to delete the v14 statement instead.
+
+`DROP TABLE IF EXISTS` covers the case where a database never reached v14.
+
+**A separate cleanup, not part of the migration:** `notes_media/` still exists
+on disk in every installed data root. Bootstrap deletes the tree once, guarded
+by its own existence, after v16 has applied. It is not done inside the
+migration transaction — a filesystem delete cannot participate in one, which is
+the same reasoning Phase 42 §3.2 recorded in the other direction.
+
+**That delete is best-effort and must not be able to block startup.** A locked
+or in-use file makes `shutil.rmtree` raise partway through, leaving a partial
+tree. So it is wrapped, logs at warning, and returns: a partial tree is inert
+after v16 because no code reads from `notes_media/` any more, the existence
+guard sees it on the next launch, and the delete is retried then. Worst case it
+is never fully removed and some megabytes sit unreferenced — which is a
+housekeeping annoyance, not a fault, and is strictly better than an application
+that will not start because a file was open.
+
+---
+
+## 7. Failure paths
+
+Every one of these must render a message inside the pane. None may raise into
+audit load, and none may leave the pane blank — a blank Build Notes page is
+indistinguishable from a document with no content.

@@ -1,3 +1,4 @@
+from unittest.mock import Mock
 import pytest
 import sqlite3
 import pathlib
@@ -70,6 +71,8 @@ def env(tmp_path):
         notes_repo=notes_repo,
         source_file_repo=source_file_repo,
         bom_component_repo=bom_repo,
+        image_cache_service=Mock(),
+        app_config=Mock()
     )
 
     read_svc = AuditReadService(audit_repo=audit_repo)

@@ -74,12 +74,7 @@ class SourceFileNotFound(PersistenceError, LookupError):
         self.source_file_id = source_file_id
 
 
-class ChecklistItemNotFound(PersistenceError, LookupError):
-    """Raised by either checklist repository's set_verification when item_id is unknown."""
-    def __init__(self, item_id: int, table: Literal["tht", "notes"]):
-        super().__init__(f"Checklist item id={item_id} not found in {table}_checklist.")
-        self.item_id = item_id
-        self.table = table
+
 
 
 # ---------- invariant violations ----------

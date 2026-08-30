@@ -4,15 +4,16 @@ import pathlib
 import re
 
 import docx
+from docx.document import Document
+from docx.table import _Cell
+from docx.parts.document import DocumentPart
 
 from ..errors import MalformedEcoError
-from .results import EcoItem, EcoResult
+from .results import EcoItem, EcoResult, EcoImageRef
 
 
 CANONICAL_XRAY_HEADER = ["Find#", "PartNum", "Count", "Ref_Des", "Description"]
 
-# Phase 32 (3.4): some Build Notes already carry hardcoded numeric bullets
-# ("1.", "2)") which duplicate the checklist's native "{row_sequence}." label.
 _LEADING_BULLET_RE = re.compile(r"^\s*\d+\s*[.)]\s+")
 
 
@@ -20,6 +21,33 @@ def _strip_leading_bullet(text: str) -> str:
     """Strip a hardcoded leading numeric bullet; keep text that is only a bullet."""
     stripped = _LEADING_BULLET_RE.sub("", text, count=1)
     return stripped if stripped else text
+
+
+def collect_cell_image_refs(
+    cell: _Cell,
+    cell_index: int,
+    document_part: DocumentPart
+) -> list[EcoImageRef]:
+    """Collect media parts referenced from one table cell in document order."""
+    refs = []
+    
+    for elem in cell._element.iter():
+        rel_id = None
+        if elem.tag.endswith('}blip'):
+            rel_id = elem.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed')
+        elif elem.tag.endswith('}imagedata'):
+            rel_id = elem.get('{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id')
+            
+        if rel_id and rel_id in document_part.related_parts:
+            part = document_part.related_parts[rel_id]
+            if hasattr(part, 'sha1') and hasattr(part, 'content_type'):
+                refs.append(EcoImageRef(
+                    blob_sha1=part.sha1,
+                    content_type=part.content_type,
+                    cell_index=cell_index,
+                    order=len(refs)
+                ))
+    return refs
 
 
 def parse(path: pathlib.Path) -> EcoResult:
@@ -41,7 +69,6 @@ def parse(path: pathlib.Path) -> EcoResult:
     build_tables = []
     xray_table = None
 
-    # Identify tables by inspecting headers
     for idx, tbl in enumerate(doc.tables):
         if len(tbl.rows) == 0:
             continue
@@ -49,7 +76,6 @@ def parse(path: pathlib.Path) -> EcoResult:
         header_cells = [cell.text.strip() for cell in tbl.rows[0].cells]
         non_empty_cells = [c for c in header_cells if c]
         
-        # Check for X-Ray table first (stricter header)
         observed_xray_header = header_cells[:len(CANONICAL_XRAY_HEADER)]
         while len(observed_xray_header) < len(CANONICAL_XRAY_HEADER):
             observed_xray_header.append("")
@@ -58,13 +84,12 @@ def parse(path: pathlib.Path) -> EcoResult:
             xray_table = (idx, tbl)
             continue
             
-        # All other tables are treated as build tables
         build_tables.append((idx, tbl))
 
-    # --- Build Instructions Tables ---
+    document_part = doc.part
+
     for tbl_idx, tbl in build_tables:
         if len(tbl.rows) > 0:
-            # Header sniff on row 0
             row0_cells = [cell.text.strip() for cell in tbl.rows[0].cells]
             non_empty_cells = [c for c in row0_cells if c]
             
@@ -78,75 +103,82 @@ def parse(path: pathlib.Path) -> EcoResult:
 
             for r_idx in range(start_row, len(tbl.rows)):
                 row = tbl.rows[r_idx]
-                # Get cell texts, preserve newlines within cells
                 cell_texts = [cell.text.strip() for cell in row.cells]
                 
-                # Drop empty leading cells
-                while cell_texts and not cell_texts[0]:
-                    cell_texts.pop(0)
-                # Drop empty trailing cells
-                while cell_texts and not cell_texts[-1]:
-                    cell_texts.pop()
+                start_idx = 0
+                while start_idx < len(cell_texts) and not cell_texts[start_idx]:
+                    start_idx += 1
                     
-                if not cell_texts:
+                end_idx = len(cell_texts)
+                while end_idx > start_idx and not cell_texts[end_idx - 1]:
+                    end_idx -= 1
+                    
+                if start_idx == end_idx:
                     continue
 
-                # Join remaining cells with ' / '
-                original_text = " / ".join(c for c in cell_texts if c)
-                original_text = _strip_leading_bullet(original_text)
-                if original_text:
-                    items.append(EcoItem(
-                        row_sequence=row_sequence,
-                        original_text=original_text,
-                        source_table_index=tbl_idx
-                    ))
-                    row_sequence += 1
+                final_cells = list(cell_texts[start_idx:end_idx])
+                
+                if final_cells:
+                    final_cells[0] = _strip_leading_bullet(final_cells[0])
 
-    # --- Table 1 (X-Ray Parts) ---
+                row_images = []
+                for i in range(start_idx, end_idx):
+                    returned_idx = i - start_idx
+                    images = collect_cell_image_refs(row.cells[i], returned_idx, document_part)
+                    row_images.extend(images)
+                
+                items.append(EcoItem(
+                    row_sequence=row_sequence,
+                    cells=tuple(final_cells),
+                    images=tuple(row_images),
+                    source_table_index=tbl_idx
+                ))
+                row_sequence += 1
+
     if xray_table is not None:
         tbl_idx, tbl = xray_table
         if len(tbl.rows) > 0:
-            # Header row is REQUIRED
-            header_cells = [cell.text.strip() for cell in tbl.rows[0].cells]
-            # Pad or trim to match canonical
-            observed_header = header_cells[:len(CANONICAL_XRAY_HEADER)]
+            observed_header = [cell.text.strip() for cell in tbl.rows[0].cells][:len(CANONICAL_XRAY_HEADER)]
             while len(observed_header) < len(CANONICAL_XRAY_HEADER):
                 observed_header.append("")
-                
             if observed_header != CANONICAL_XRAY_HEADER:
                 raise MalformedEcoError(path, "XRAY_HEADER_DRIFT", {
                     "expected": CANONICAL_XRAY_HEADER,
                     "observed": observed_header
                 })
-                
+
             for r_idx in range(1, len(tbl.rows)):
                 row = tbl.rows[r_idx]
-                cells = [cell.text.strip() for cell in row.cells]
+                cells_text = [cell.text.strip() for cell in row.cells]
                 
-                # Need at least PartNum(1), Ref_Des(3), Description(4)
-                part_num = cells[1] if len(cells) > 1 else ""
-                ref_des = cells[3] if len(cells) > 3 else ""
-                description = cells[4] if len(cells) > 4 else ""
+                part_num = cells_text[1] if len(cells_text) > 1 else ""
+                ref_des = cells_text[3] if len(cells_text) > 3 else ""
+                description = cells_text[4] if len(cells_text) > 4 else ""
                 
                 if not part_num and not ref_des and not description:
                     continue
                     
-                # Clean ref_des marker (case-insens)
                 ref_des_cleaned = ref_des
                 marker = "*please x-ray*"
                 if marker in ref_des_cleaned.lower():
-                    # Remove it using case-insensitive replace
                     idx = ref_des_cleaned.lower().find(marker)
                     ref_des_cleaned = ref_des_cleaned[:idx] + ref_des_cleaned[idx+len(marker):]
                 ref_des_cleaned = ref_des_cleaned.strip()
-                    
-                original_text = f"X-ray {ref_des_cleaned} ({part_num}): {description}".strip()
-                # Clean up double spaces if any component was empty
-                original_text = original_text.replace(" ():", ":").replace("  ", " ")
+                
+                final_cells = cells_text[:5]
+                while len(final_cells) < 5:
+                    final_cells.append("")
+                final_cells[3] = ref_des_cleaned
+                
+                row_images = []
+                for i in range(min(len(row.cells), 5)):
+                    images = collect_cell_image_refs(row.cells[i], i, document_part)
+                    row_images.extend(images)
                 
                 items.append(EcoItem(
                     row_sequence=row_sequence,
-                    original_text=original_text,
+                    cells=tuple(final_cells),
+                    images=tuple(row_images),
                     source_table_index=tbl_idx
                 ))
                 row_sequence += 1

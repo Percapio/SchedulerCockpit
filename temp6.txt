@@ -1,0 +1,50 @@
+# Patch 08 — Render the Build Notes `.docx` instead of reconstructing it
+
+## 1. Scope
+
+Replace the reconstructed build-notes grid with a direct render of the source
+`.docx`, and delete the parse → persist → reassemble pipeline that fed it.
+
+`BuildNotesPane` stops consuming `NotesRowView` rows and instead builds a
+`QTextDocument` from the Word document on disk: real tables, real column widths,
+real merged cells, images at the size Word displays them. Right-clicking a table
+cell copies that cell to the clipboard in a form other applications can paste.
+
+### 1.1 Why the reconstruction is being abandoned
+
+The current pane is the fourth iteration of an approximation, and the first
+render against a real document shows the failure mode directly.
+
+**The `1. 1.` in every row is Patch 07 §6.1's suppression rule missing.** That
+rule reads `cells[0].text.strip().isdigit()` to decide whether the document
+already supplies a row number
+([build_notes_pane.py:193](../cockpit/ui/widgets/build_notes_pane.py#L193)). The
+document's `#` column contains `"1."`, not `"1"`. `"1.".isdigit()` is `False`,
+so the view prefix is added on top. Patch 07 A3 anticipated `1a` and `A1` and
+missed a trailing period — the most likely form of all.
+
+Widening the predicate would fix that document and produce the next edge case,
+because **a reconstruction has no ground truth to check itself against**. The
+document does. The same applies to the two empty columns consuming half the
+pane, the 64-pixel image cap that renders the serial-label example illegibly,
+and the synthetic resize header that labels nothing.
+
+What the current stack does to display a file that is already on disk:
+
+```mermaid
+flowchart LR
+    D[".docx in uploads/"] --> P["eco_build_notes.parse<br/>flatten to cell tuples"]
+    P --> S["build_notes_checklist<br/>cells + image_refs as JSON"]
+    P --> X["ImageCacheService<br/>extract to notes_media/, LRU"]
+    S --> V["NotesRowView"]
+    X --> V
+    V --> G["QGridLayout + QHeaderView<br/>approximate the table"]
+    D -.->|"Patch 08"| R["QTextDocument"]
+    R -.-> E["read-only QTextEdit"]
+```
+
+Three lossy hops, none of which can add fidelity, plus a disk cache with an
+eviction policy, to approximate a document the orphan sweep already retains
+under `uploads/`.
+
+### 1.2 Non-goals

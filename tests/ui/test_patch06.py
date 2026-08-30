@@ -1,3 +1,5 @@
+from PyQt6.QtCore import QSettings
+from PyQt6.QtCore import QSettings
 import pytest
 from unittest.mock import Mock
 import pathlib
@@ -120,7 +122,7 @@ def test_audit_view_integration_populates_panes(qtbot, bootstrapped_app):
         bootstrapped_app.holiday_svc,
         Mock(),
         bootstrapped_app.pdf_renderer,
-        theme=theme
+        theme=theme, settings=Mock()
     )
     qtbot.addWidget(view)
     view.load(audit_id)

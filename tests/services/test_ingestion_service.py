@@ -175,11 +175,7 @@ def test_ingest_all_smt_board_persists_empty_tht_checklist(ingestion_service, mo
         )
     ]
     eco_items = [
-        EcoItem(
-            row_sequence=1,
-            original_text="Test note",
-            source_table_index=0
-        )
+        EcoItem(row_sequence=1, cells=("Test note",), images=(), source_table_index=0)
     ]
     
     intent_mock = IngestionIntent(
@@ -232,7 +228,7 @@ def test_ingest_mixed_board_reports_tht_count_not_bom_count(ingestion_service, m
         BomItem(component_mpn="THT-2", description="THT Component 2", mount_type="T", ref_des_raw="R2", ref_des_list=("R2",), find_number=5),
     ]
     eco_items = [
-        EcoItem(row_sequence=1, original_text="Test note", source_table_index=0)
+        EcoItem(row_sequence=1, cells=("Test note",), images=(), source_table_index=0)
     ]
     
     intent_mock = IngestionIntent(

@@ -1,0 +1,99 @@
+### 6.3 Interaction: content-fit until dragged
+
+A column is in one of two states, and the pinned set is per pane, not per audit:
+
+| State | Width source | Set by |
+| --- | --- | --- |
+| Auto | `measure_columns` on every populate | default |
+| Pinned | the user's dragged width | `sectionResized` |
+
+**Every programmatic `resizeSection` runs with the header's signals blocked** —
+that is `apply_column_widths`'s post-condition, and it holds for all three
+callers: populate, `resizeEvent`, and the settings restore (§6.4). Without the
+guard the programmatic sizing fires `sectionResized`, which pins every column on
+first load and permanently disables auto-fit. The failure is silent and reads as
+the auto-sizing never having worked. Routing all three through one function is
+what makes the guard hard to forget; a restore path that writes sections
+directly would reintroduce it.
+
+Only `sectionResized` emitted outside that guard pins a column, and only the one
+section it names.
+
+The header is `Interactive` for all sections, not movable, and does **not** set
+`setStretchLastSection` — §6.2 gives the last section an explicit computed
+width instead.
+
+### 6.4 Persistence
+
+Keyed per column count, as decided: `notes/column_widths_{column_count}`.
+
+**Store an explicit `{column_index: width}` map, not `header.saveState()`.**
+`saveState` is an opaque blob encoding *every* section, so restoring it pins all
+columns and destroys the auto/pinned distinction §6.3 just established. It also
+fails silently on a section-count mismatch. A map of only the pinned columns
+restores exactly what the user chose, ignores indices beyond the current column
+count, and is readable in the ini file.
+
+This differs from `OpenAuditPicker`'s `saveState` approach
+([open_audit_picker.py:472-487](../cockpit/ui/widgets/open_audit_picker.py#L472-L487))
+deliberately: that table has a fixed column set and no auto-fit state to
+preserve.
+
+**Serialization is a JSON object string**, one `QSettings` value per key —
+`{"2": 310, "4": 96}`, keys stringified because JSON object keys are strings.
+`QSettings` has no native mapping type, and the ini backend round-trips a plain
+string reliably where a `QVariantMap` does not. It is also readable and
+hand-editable in the ini file, which an opaque `saveState` blob is not.
+
+Reading is total: a missing key, a non-string value, malformed JSON, a
+non-integer width, or an index outside `range(column_count)` all resolve to "no
+pinned columns for this width," and the pane renders at its content-fit
+defaults. Nothing here raises, and nothing here logs an error — an unreadable
+layout preference is not a fault condition.
+
+```
+# Pinned widths for a document of this shape.
+# post: every key is in range(column_count) and every value is a positive int;
+#       returns an empty map for a missing, malformed, or out-of-range entry
+def load_pinned_widths(
+    settings:     QSettings,
+    column_count: int
+) -> map<int, int>
+```
+
+Restore applies only the keys present in the returned map. It does not iterate
+`range(column_count)`, which would convert every auto-fit column into a pinned
+one at its current width and quietly end auto-fitting for the pane — and it goes
+through `apply_column_widths`, so the signal guard of §6.3 covers it.
+
+**Two constructors gain a `QSettings` parameter**, not one: `AuditView` and
+`CenterPager`. `BuildNotesPane` is built inside `CenterPager`
+([center_pager.py:88](../cockpit/ui/widgets/center_pager.py#L88)), which is
+built inside `AuditView` ([audit_view.py:113](../cockpit/ui/widgets/audit_view.py#L113)).
+`CenterPager` has exactly one call site — verified by search across `cockpit/`
+and `tests/` — so widening it reaches nothing else.
+
+`MainWindow` already receives `settings` as a constructor parameter, so it is in
+scope at [main_window.py:98](../cockpit/ui/main_window.py#L98) where `AuditView`
+is built. Note that `self._settings` is not assigned until line 123: the
+constructor parameter must be used, not the attribute. This is the same
+injected-`QSettings` pattern `OpenAuditPicker` uses; Phase 41 §10.3 flagged
+`AuditView`'s lack of one as the blocker for splitter persistence, and this
+patch removes that blocker as a side effect without acting on it.
+
+### 6.5 Scroll synchronisation
+
+When the summed column widths exceed the viewport the `QScrollArea` scrolls
+horizontally and the header must follow:
+`scroll.horizontalScrollBar().valueChanged → header.setOffset`. Omitting this is
+the single most visible defect available here — the grips drift away from the
+columns they resize.
+
+**The connection is made once, in `BuildNotesPane.__init__`, and never in
+`populate_section`.** `QScrollArea` creates its scroll bars once and reuses them
+across repopulates, so a connection made per populate accumulates a duplicate
+every time an audit is loaded; `setOffset` then runs N times per scroll event
+and the count grows for the life of the process. Nothing disconnects it, because
+nothing needs to: the scroll bar and the header share the pane's lifetime, and
+`purge_widget_subtree` only ever drains the grid's row widgets, never the
+scroll area or the header.

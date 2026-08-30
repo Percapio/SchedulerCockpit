@@ -17,11 +17,11 @@ def test_bootstrap_probe_history_logging(tmp_path, monkeypatch):
     
     p1 = ProbeAttempt(candidate_path=pathlib.Path("C:/failed1"), candidate_label="A", success=False, error="Permission denied", pre_existing_db=False)
     p2 = ProbeAttempt(candidate_path=root.parent, candidate_label="B", success=True, error=None, pre_existing_db=False)
-    
     config = AppConfig(
         app_data_root=root,
         db_path=db_path,
         file_storage_root=root / "uploads",
+        notes_media_root=root / "notes_media",
         coord_map_path=None,
         log_path=root / "logs" / "cockpit.log",
         log_level="INFO",

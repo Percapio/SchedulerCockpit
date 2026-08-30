@@ -599,8 +599,10 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     migrate_to_v10(conn)
     v11_migrated = migrate_to_v11(conn)
     migrate_to_v12(conn)
-    migrate_to_v13(conn)
-    return v7_migrated or v8_migrated or v9_migrated or v11_migrated
+    v13_migrated = migrate_to_v13(conn)
+    v14_migrated = migrate_to_v14(conn, parser_registry)
+    v15_migrated = migrate_to_v15(conn)
+    return v7_migrated or v8_migrated or v9_migrated or v11_migrated or v13_migrated or v14_migrated or v15_migrated
 
 SCHEMA_V5_DDL_DROP_SHIP_DATE: str = """
 ALTER TABLE active_audits DROP COLUMN ship_date
@@ -920,3 +922,177 @@ def migrate_to_v13(conn: sqlite3.Connection) -> bool:
         except Exception as e:
             logger.error("Failed to restore foreign_keys in v13 migration finally block.")
             raise PersistenceError("Database state corrupted: failed to re-enable foreign keys") from e
+
+SCHEMA_V14_DDL_NEW_TABLE: str = """
+CREATE TABLE build_notes_checklist_v14 (
+    id                 INTEGER PRIMARY KEY,
+    audit_id           INTEGER NOT NULL,
+    source_file_id     INTEGER,
+    row_sequence       INTEGER NOT NULL,
+    cells              TEXT    NOT NULL,              -- JSON array of strings
+    image_refs         TEXT    NOT NULL DEFAULT '[]', -- JSON array of EcoImageRef
+    source_table_index INTEGER NOT NULL DEFAULT 0,
+    is_verified        BOOLEAN NOT NULL DEFAULT 0,
+    FOREIGN KEY(audit_id) REFERENCES active_audits(id) ON DELETE CASCADE,
+    FOREIGN KEY(source_file_id) REFERENCES source_files(id) ON DELETE CASCADE
+);
+"""
+
+SCHEMA_V14_DDL_CACHE: str = """
+CREATE TABLE notes_media_cache (
+    notes_file_hash TEXT    PRIMARY KEY,  -- SourceFile.file_hash of the .docx
+    extracted_at    TEXT    NOT NULL,
+    last_used_at    TEXT    NOT NULL,
+    byte_size       INTEGER NOT NULL,
+    image_count     INTEGER NOT NULL
+);
+"""
+
+SCHEMA_V14_DDL_CACHE_INDEX: str = """
+CREATE INDEX ix_notes_media_lru ON notes_media_cache(last_used_at);
+"""
+
+def migrate_to_v14(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=13)
+        
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=13)
+        
+    current_version = row["version"]
+    if current_version >= 14:
+        return False
+    if current_version < 13:
+        raise SchemaMismatch(found_version=current_version, expected_version=13)
+
+    cur.execute("SELECT id, audit_id, local_storage_path FROM source_files WHERE file_category = 'Notes'")
+    notes_files = cur.fetchall()
+    
+    staged_items = {}
+    
+    for sf in notes_files:
+        path = pathlib.Path(sf["local_storage_path"])
+        if not path.exists():
+            raise BackfillSourceMissing(statement="v14 notes backfill", cause=Exception(f"Missing notes file {path} for audit {sf['audit_id']}"))
+            
+        try:
+            eco_result = parser_registry.eco_parser.parse(path)
+        except Exception as e:
+            raise SchemaInitializationError(statement="v14 notes backfill", cause=e)
+            
+        cur.execute("SELECT COUNT(*) as c FROM build_notes_checklist WHERE audit_id = ? AND source_file_id = ?", (sf["audit_id"], sf["id"]))
+        db_count = cur.fetchone()["c"]
+        
+        if len(eco_result.items) != db_count:
+            from .errors import MigrationError
+            raise MigrationError(f"row_sequence drift: audit {sf['audit_id']} has {db_count} rows but parsed {len(eco_result.items)}")
+            
+        staged_items[(sf["audit_id"], sf["id"])] = eco_result.items
+        
+    cur.execute("SELECT id FROM build_notes_checklist WHERE source_file_id IS NULL")
+    if cur.fetchone():
+        from .errors import MigrationError
+        raise MigrationError("unattributable notes row found with source_file_id IS NULL")
+        
+    cur.execute("PRAGMA foreign_keys = OFF")
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        cur.execute(SCHEMA_V14_DDL_NEW_TABLE)
+        cur.execute(SCHEMA_V14_DDL_CACHE)
+        cur.execute(SCHEMA_V14_DDL_CACHE_INDEX)
+        
+        cur.execute("SELECT audit_id, source_file_id, row_sequence, is_verified FROM build_notes_checklist")
+        verified_state = {}
+        for r in cur.fetchall():
+            verified_state[(r["audit_id"], r["source_file_id"], r["row_sequence"])] = r["is_verified"]
+            
+        for (audit_id, sf_id), items in staged_items.items():
+            for item in items:
+                is_verified = verified_state.get((audit_id, sf_id, item.row_sequence), 0)
+                images_json = json.dumps([
+                    {"blob_sha1": img.blob_sha1, "content_type": img.content_type, "cell_index": img.cell_index, "order": img.order}
+                    for img in item.images
+                ])
+                cells_json = json.dumps(item.cells)
+                cur.execute(
+                    """
+                    INSERT INTO build_notes_checklist_v14 (
+                        audit_id, source_file_id, row_sequence, cells, image_refs, source_table_index, is_verified
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (audit_id, sf_id, item.row_sequence, cells_json, images_json, item.source_table_index, is_verified)
+                )
+                
+        cur.execute("DROP TABLE build_notes_checklist")
+        cur.execute("ALTER TABLE build_notes_checklist_v14 RENAME TO build_notes_checklist")
+        cur.execute("CREATE INDEX IF NOT EXISTS ix_notes_audit_seq ON build_notes_checklist(audit_id, row_sequence)")
+        
+        cur.execute("PRAGMA foreign_key_check")
+        violations = cur.fetchall()
+        if violations:
+            raise SchemaInitializationError(
+                statement="v14 foreign_key_check",
+                cause=RuntimeError(f"Foreign key violations found: {violations}")
+            )
+            
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 14, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+        except Exception as e:
+            logger.error("Failed to restore foreign_keys in v14 migration finally block.")
+            raise PersistenceError("Database state corrupted: failed to re-enable foreign keys") from e
+
+
+def migrate_to_v15(conn: sqlite3.Connection) -> bool:
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=14)
+        
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=14)
+        
+    current_version = row[0] if isinstance(row, tuple) and not hasattr(row, 'keys') else row["version"]
+    if current_version >= 15:
+        return False
+    if current_version < 14:
+        raise SchemaMismatch(found_version=current_version, expected_version=14)
+
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        try:
+            cur.execute("ALTER TABLE build_notes_checklist DROP COLUMN is_verified")
+        except sqlite3.OperationalError:
+            pass
+        
+        try:
+            cur.execute("ALTER TABLE tht_verification_checklist DROP COLUMN is_verified")
+        except sqlite3.OperationalError:
+            pass
+
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 15, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception:
+        conn.rollback()
+        raise

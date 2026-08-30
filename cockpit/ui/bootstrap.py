@@ -22,6 +22,7 @@ from cockpit.ingestion.service import IngestionService
 from cockpit.ingestion.parsers.coordinate_map import load as load_map
 from cockpit.services.audit_read import AuditReadService
 from cockpit.services.checklist import ChecklistService
+from cockpit.services.image_cache import ImageCacheService
 from cockpit.services.split import AuditSplitService
 
 from cockpit.services.storage_reaper import StorageReaper
@@ -203,7 +204,8 @@ def bootstrap(
     holiday_svc = HolidayService(holiday_repo)
     
     audit_read_svc = AuditReadService(audit_repo, holiday_svc=holiday_svc)
-    checklist_svc = ChecklistService(conn, audit_repo, tht_repo, notes_repo, source_file_repo, bom_component_repo)
+    image_cache_svc = ImageCacheService(conn, config)
+    checklist_svc = ChecklistService(conn, audit_repo, tht_repo, notes_repo, source_file_repo, bom_component_repo, image_cache_svc, config)
     split_svc = AuditSplitService(conn, audit_repo, runtime_calc_svc=runtime_calc_svc)
     
     storage_reaper = StorageReaper(source_file_repo)

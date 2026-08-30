@@ -104,7 +104,8 @@ class MainWindow(QMainWindow):
             release_service=self._bootstrapped.release_svc,
             setup_bom_service=self._bootstrapped.setup_bom_svc,
             pdf_renderer=pdf_renderer,
-            theme=self._theme
+            theme=self._theme,
+            settings=settings
         )
         self._audit_view.exit_requested.connect(self._on_dashboard_exit)
         self._audit_view.error_occurred.connect(self._on_failed)
@@ -131,14 +132,7 @@ class MainWindow(QMainWindow):
             # Apply the persisted font scale + preset overrides at startup.
             self._font_scale.reapply()
         
-        def on_scale_changed(pt: int) -> None:
-            pct = int(round(pt / self._font_scale._bounds.default_pt * 100))
-            self._audit_view.apply_font_scale(pct)
-            
-        self._font_scale.scale_changed.connect(on_scale_changed)
-        self._audit_view.font_scale_change_requested.connect(self._font_scale.request_delta)
         self.picker.font_scale_change_requested.connect(self._font_scale.request_delta)
-        on_scale_changed(self._font_scale.current_pt())
         
         self._render_thread = QThread()
         self._render_worker = RenderWorker(pdf_renderer)

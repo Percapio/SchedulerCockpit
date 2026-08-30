@@ -53,6 +53,8 @@ class Theme:
     _right_panel: Mapping[str, Any]
     _canvas:     Mapping[str, Any]
     _bom_panel:  Mapping[str, Any]
+    _pane:       Mapping[str, Any]
+    _notes:      Mapping[str, Any]
 
     def font_scale_bounds(self) -> FontScaleBounds:
         block = self._application["font_scale"]
@@ -136,6 +138,11 @@ class Theme:
         # LayoutCanvas hint label
         qss_lines.append(f"QLabel[class~=\"hint-label\"] {{ background-color: {cv['colour']['hint_label_background']['rgb']}; color: {cv['colour']['hint_label_text']['rgb']}; padding: {cv['hint_label']['padding_px']}px; border: {cv['hint_label']['border_width_px']}px solid {cv['colour']['hint_label_border']['rgb']}; }}")
         
+        # ChamferedPane enclosed widget backgrounds
+        pane_fill = self._pane.get('fill_rgb', '#1E1E1E') if hasattr(self, '_pane') else '#1E1E1E'
+        qss_lines.append(f"ChamferedPane > QWidget {{ background-color: {pane_fill}; }}")
+        qss_lines.append("QSplitter::handle { background: transparent; }")
+        
         return "\n".join(qss_lines)
 
     def canvas_colour(self, role: str) -> QColor:
@@ -214,6 +221,30 @@ class Theme:
     def splitter_default_sizes(self) -> list[int]:
         return list(self._right_panel.get('splitter', {}).get('default_sizes', [1, 1]))
 
+    def pane_chamfer_px(self) -> int:
+        return int(self._pane.get('chamfer_px', 6))
+
+    def pane_gap_px(self) -> int:
+        return int(self._pane.get('gap_px', 8))
+
+    def pane_inset_px(self) -> int:
+        return int(self._pane.get('inset_px', 6))
+
+    def pane_fill_rgb(self) -> str:
+        return self._pane.get('fill_rgb', '#1E1E1E')
+
+    def notes_image_inline_max_height_px(self) -> int:
+        return int(self._notes.get('image', {}).get('inline_max_height_px', 64))
+
+    def notes_image_max_decoded_pixels(self) -> int:
+        return int(self._notes.get('image', {}).get('max_decoded_pixels', 16000000))
+
+    def notes_column_min_width_px(self) -> int:
+        return int(self._notes.get('column', {}).get('min_width_px', 24))
+
+    def notes_column_max_content_width_px(self) -> int:
+        return int(self._notes.get('column', {}).get('max_content_width_px', 480))
+
     def _compose_bom_grouping(self, grouping_tokens: Mapping[str, Any]) -> str:
         lines = [
             "QFrame[class=\"bom-grouping\"] {",
@@ -265,7 +296,7 @@ class Theme:
         return "\n".join(lines)
 
     @classmethod
-    def for_testing(cls, application=None, base=None, checklist_panel=None, right_panel=None, canvas=None, bom_panel=None) -> 'Theme':
+    def for_testing(cls, application=None, base=None, checklist_panel=None, right_panel=None, canvas=None, bom_panel=None, pane=None, notes=None) -> 'Theme':
         """
         Intent:   Construct a Theme for unit tests. Bypasses file I/O and
                   schema validation. Unprovided sections default to empty dicts.
@@ -281,7 +312,9 @@ class Theme:
             _checklist_panel=checklist_panel or {},
             _right_panel=right_panel or {},
             _canvas=canvas or {},
-            _bom_panel=bom_panel or {}
+            _bom_panel=bom_panel or {},
+            _pane=pane or {},
+            _notes=notes or {}
         )
 
 
@@ -343,7 +376,9 @@ class ThemeLoader:
             _checklist_panel=theme_data["checklist_panel"],
             _right_panel=theme_data["right_panel"],
             _canvas=theme_data["canvas"],
-            _bom_panel=theme_data["bom_panel"]
+            _bom_panel=theme_data["bom_panel"],
+            _pane=theme_data.get("pane", {}),
+            _notes=theme_data.get("notes", {})
         )
 
     @classmethod

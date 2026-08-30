@@ -90,7 +90,6 @@ class ThtChecklistItem:
     source_file_id: int | None
     component_mpn: str
     description: str | None
-    is_verified: bool
 
 
 @dataclass(frozen=True)
@@ -99,8 +98,9 @@ class BuildNoteItem:
     audit_id: int
     source_file_id: int | None
     row_sequence: int
-    original_text: str
-    is_verified: bool
+    cells: str               # JSON array
+    image_refs: str          # JSON array
+    source_table_index: int
 
 
 # ---------- draft types (consumed by repositories on insert) ----------
@@ -130,16 +130,16 @@ class ThtChecklistItemDraft:
     component_mpn: str
     source_file_id: int | None = None
     description: str | None = None
-    is_verified: bool = False
 
 
 @dataclass(frozen=True)
 class BuildNoteItemDraft:
     audit_id: int
     row_sequence: int
-    original_text: str
+    cells: str               # JSON array
+    image_refs: str          # JSON array
+    source_table_index: int
     source_file_id: int | None = None
-    is_verified: bool = False
 
 
 @dataclass(frozen=True)

@@ -26,7 +26,6 @@ from cockpit.services.views import ChecklistRowKey, ChecklistRowKind, ChecklistR
 from cockpit.ui.canvas.page_switcher import PageSwitcher, SwitcherMode
 from cockpit.ui.theme import Theme
 from cockpit.ui.widgets.audit_bom_panel import AuditBomRow
-from cockpit.ui.widgets.checklist_row import ChecklistRow
 from cockpit.ui.widgets.component_row import ClickableLabel, ComponentRowCore, ComponentRowFields
 from cockpit.ui.widgets.refdes_chip import RefDesChip
 
@@ -159,17 +158,6 @@ def test_component_row_core_is_reclaimed_by_refcount(qapp, no_cycle_collector, t
     assert ref() is None
 
 
-def test_checklist_row_tht_is_reclaimed_by_refcount(qapp, no_cycle_collector, theme):
-    """Site 3: refdes_chip_clicked was connected to a lambda closing over self."""
-    ref = dropped_ref(lambda: ChecklistRow(_tht_row_view(), theme))
-
-    assert ref() is None
-
-
-def test_checklist_row_notes_is_reclaimed_by_refcount(qapp, no_cycle_collector, theme):
-    ref = dropped_ref(lambda: ChecklistRow(_notes_row_view(), theme))
-
-    assert ref() is None
 
 
 def test_audit_bom_row_is_reclaimed_by_refcount(qapp, no_cycle_collector, theme):
@@ -267,17 +255,6 @@ def test_audit_bom_row_reports_its_own_mpn_not_the_signal_argument(qtbot, theme)
 
     assert emitted == ["MPN-1", "MPN-1"]
 
-
-def test_checklist_row_chip_click_emits_body_clicked_with_row_key(qtbot, theme):
-    view = _tht_row_view()
-    row = ChecklistRow(view, theme)
-    qtbot.addWidget(row)
-    emitted: list[object] = []
-    row.body_clicked.connect(emitted.append)
-
-    row.core.refdes_chip_clicked.emit("R2")
-
-    assert emitted == [view.key]
 
 
 def test_page_switcher_segment_click_reports_the_right_index(qtbot, theme):

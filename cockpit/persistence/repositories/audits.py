@@ -371,36 +371,35 @@ class AuditRepository:
             cur.execute(
                 """
                 INSERT INTO tht_verification_checklist (
-                    audit_id, source_file_id, component_mpn, description,
-                    is_verified
-                ) VALUES (?, ?, ?, ?, ?)
+                    audit_id, source_file_id, component_mpn, description
+                ) VALUES (?, ?, ?, ?)
                 """,
                 (
                     sibling_id,
                     file_id_map[tr["source_file_id"]],
                     tr["component_mpn"],
-                    tr["description"],
-                    0
+                    tr["description"]
                 )
             )
             
         # Clone Notes rows
+        from .notes_checklist import NOTES_COLUMNS_INSERT
         cur.execute("SELECT * FROM build_notes_checklist WHERE audit_id = ?", (source_audit_id,))
         notes_rows = cur.fetchall()
         for nr in notes_rows:
             cur.execute(
-                """
+                f"""
                 INSERT INTO build_notes_checklist (
-                    audit_id, source_file_id, row_sequence, original_text,
-                    is_verified
-                ) VALUES (?, ?, ?, ?, ?)
+                    {NOTES_COLUMNS_INSERT}
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     sibling_id,
                     file_id_map[nr["source_file_id"]],
                     nr["row_sequence"],
-                    nr["original_text"],
-                    0
+                    nr["cells"],
+                    nr["image_refs"],
+                    nr["source_table_index"]
                 )
             )
             

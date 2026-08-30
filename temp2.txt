@@ -1,0 +1,150 @@
+## 3. The renderer
+
+### 3.1 Seams
+
+```
+# Colours the renderer needs that the document does not supply. Snapshotted
+# from Theme at the call site and passed by value: the renderer never reads
+# live theme state, so a preset change mid-render cannot produce a half-themed
+# document. A theme change invalidates the render (§3.3).
+struct RenderPalette:
+    page_background_rgb:  ColourHex   # the document's own ground, not the app's
+    default_text_rgb:     ColourHex   # for runs with no explicit w:color
+    placeholder_border_rgb: ColourHex
+    placeholder_text_rgb: ColourHex
+
+# Something in the source that could not be reproduced. Carried out of the
+# renderer so the pane can surface it and the tests can assert on it.
+struct RenderAnomaly:
+    reason:       AnomalyReason   # UndecodableMedium(content_type)
+                                  # | DegenerateImage | MergeConflict
+    relationship: RelId | None    # the r:embed of the medium, when it has one
+    table_index:  int
+    row:          int
+    column:       int
+
+# Builds a Qt document from the tables of a Word build-note file.
+# pre:  docx_path exists and is readable
+# post: on success the document contains one QTextTable per source table, in
+#       document order, with every decodable image registered as a document
+#       resource under a name this module chose (§4.2); every irreproducible
+#       element is both replaced by an inline placeholder and listed in
+#       anomalies
+# raises: nothing -- every failure is returned as a value
+def render_build_notes(
+    docx_path: Path,
+    palette:   RenderPalette
+) -> Result<RenderedNotes, NotesRenderFailure>
+
+struct RenderedNotes:
+    document:      QTextDocument
+    natural_width: int                 # px; see below
+    anomalies:     list<RenderAnomaly>
+
+# Discriminated failure, because the pane renders a different message for each.
+# DocumentMissing | DocumentUnreadable(reason) | NoTablesFound
+```
+
+The renderer is a pure function of a file and a value. It touches no repository,
+no cache, no widget, and no live theme, so it is testable without a `QTextEdit`
+and without a database.
+
+**`natural_width` counts only fixed-width tables.** It is
+`max(sum(column widths))` over the tables whose widths came from `tblGrid`
+(§3.2). A table that fell back to percentage widths has no pixel extent until it
+is laid out — it sizes to whatever viewport it is given, by definition — so
+including it in a pixel maximum is undefined. When *every* table falls back,
+`natural_width` is 0 and §3.2's scroll rule degenerates to ordinary
+wrap-to-width, which is the correct behaviour for a document that declares no
+widths.
+
+**Rendering is lazy, and a load always discards.**
+
+```mermaid
+stateDiagram-v2
+    [*] --> Empty
+    Empty --> Empty: load(audit) — store path, discard any document
+    Empty --> Rendered: page becomes visible (or is already visible)
+    Rendered --> Rendered: switch away and back
+    Rendered --> Empty: load(audit) — discard, then re-render if visible
+    Rendered --> Empty: unload()
+```
+
+`load()` always returns the pane to `Empty` and stores the new path, whether or
+not the notes page is showing. Rendering is then driven by visibility alone —
+one trigger, not two — so opening a second audit while the notes page is on
+screen re-renders immediately, and opening one while the PDF is showing defers
+until the page is switched to. A `load()` that tried to decide for itself
+whether to re-render would need to know the pager's current page, which is
+`CenterPager`'s state, not the pane's.
+
+**`unload()` has three callers, all through one path.**
+`CenterPager.unload()` ([center_pager.py:134](../cockpit/ui/widgets/center_pager.py#L134))
+calls `BuildNotesPane.unload()`, and `AuditView.unload()` calls that — reached
+from `_on_exit_requested` (Back), from `load()` at the start of opening any
+audit, and from `discard_if_showing` when the displayed audit is completed or
+split away.
+
+**Releasing the document takes more than dropping the reference.** Every
+registered image is C++ heap held by the `QTextDocument`; a Python `= None`
+leaves it alive until the interpreter collects it, which can be after the next
+document has been built. `unload()` therefore:
+
+1. gives the `QTextEdit` a fresh empty `QTextDocument`, so the editor never
+   holds the old one;
+2. calls `clear()` on the old document, which drops both its content and its
+   resource cache;
+3. then releases the Python reference.
+
+`setDocument(None)` is not the mechanism — a `QTextEdit` always has a document,
+and the ownership rules for one passed in are not what that call implies.
+
+This laziness is a deliberate departure from Phase 41 A9, which accepted
+rebuilding notes rows on every `reload()` because building rows creates no
+expensive objects. Parsing a `.docx` and decoding its images does.
+
+### 3.2 Table geometry
+
+Column widths come from `w:tblGrid`, in twentieths of a point:
+
+```
+px = twips / 15          # 1440 twips per inch, 96 px per inch
+```
+
+applied as `QTextTableFormat.setColumnWidthConstraints` with
+`QTextLength.Type.FixedLength`.
+
+`tblGrid` coverage is not all-or-nothing, and the three cases are distinct:
+
+| `tblGrid` | Rule |
+| --- | --- |
+| Every `gridCol` carries a `w` | Fixed widths throughout |
+| Some carry `w`, others are absent or zero | Fixed widths for those that specify; the remainder of the table's declared width (`w:tblW`) split evenly among those that do not. With no `w:tblW`, the unspecified columns take the mean of the specified ones |
+| No `tblGrid`, or `autofit` | `QTextLength.Type.PercentageLength` split evenly — Qt's own default, and the only honest answer when the document declares nothing |
+
+Only the first two contribute to `natural_width` (§3.1).
+
+Merged cells come from the two mechanisms Word uses, which are not
+interchangeable:
+
+Merged cells come from the two mechanisms Word uses, which are not
+interchangeable:
+
+| Word | Read from | Applied as |
+| --- | --- | --- |
+| Horizontal merge | `CT_Tc.grid_span` | `QTextTable.mergeCells(row, col, 1, span)` |
+| Vertical merge | `CT_Tc.vMerge` — `restart` opens a run, `continue` extends it | `mergeCells(startRow, col, rowSpan, 1)` after the run closes |
+
+`vMerge` cannot be applied cell-by-cell: the row span is only known when the
+run of `continue` cells ends, so vertical merges are collected during the walk
+and applied after the table is fully populated. Applying them during the walk
+shifts the cell indices under the walker — this is the single most likely place
+for the renderer to produce a scrambled table.
+
+**A merge that conflicts is skipped, not raised and not aborted.** Qt refuses a
+`mergeCells` whose region overlaps an existing merge, and a malformed document
+can produce exactly that — a `vMerge` run crossing a region already claimed by a
+`gridSpan`, or a `continue` with no `restart` above it. Before each deferred
+merge the renderer checks the region against the merges already applied; a
+conflicting one is dropped and recorded as `MergeConflict` in `anomalies`
+(§3.1), naming the table, row, and column.

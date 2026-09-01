@@ -57,6 +57,7 @@ class BootstrappedApp:
     reconciliation_report: ReconciliationReport
     runtime_calc_svc: RuntimeCalcService
     source_file_repo: SourceFileRepository
+    audit_bom_component_repo: AuditBomComponentRepository
     storage_reaper: StorageReaper
 
 
@@ -264,5 +265,6 @@ def bootstrap(
         reconciliation_report=report,
         runtime_calc_svc=runtime_calc_svc,
         source_file_repo=source_file_repo,
+        audit_bom_component_repo=bom_component_repo,
         storage_reaper=storage_reaper
     )

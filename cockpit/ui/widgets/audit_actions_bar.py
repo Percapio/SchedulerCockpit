@@ -23,6 +23,7 @@ class AuditActionsBar(QWidget):
     reload_requested = pyqtSignal(int)
     ops_per_board_change_requested = pyqtSignal(int, object)
     exit_requested = pyqtSignal()
+    second_ops_requested = pyqtSignal(int)
 
     def __init__(
         self,
@@ -87,6 +88,9 @@ class AuditActionsBar(QWidget):
         
         setup_action = self.actions_menu.addAction("Setup…")
         setup_action.triggered.connect(self._on_setup_clicked)
+        
+        second_ops_action = self.actions_menu.addAction("2nd OPS…")
+        second_ops_action.triggered.connect(self._on_second_ops_clicked)
         
         ops_action = self.actions_menu.addAction("OPS per board…")
         ops_action.triggered.connect(self._on_ops_per_board_clicked)
@@ -202,6 +206,14 @@ class AuditActionsBar(QWidget):
         dialog = OpsPerBoardDialog(view.ops_per_board_min, self)
         if dialog.exec():
             self.ops_per_board_change_requested.emit(view.audit_id, dialog.result_value())
+
+    def _on_second_ops_clicked(self) -> None:
+        if not self._session:
+            return
+        view = self._session.current_view()
+        if not view:
+            return
+        self.second_ops_requested.emit(view.audit_id)
 
     def _on_complete_clicked(self) -> None:
         if not self._session:

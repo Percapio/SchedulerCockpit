@@ -51,7 +51,8 @@ class MainWindow(QMainWindow):
         theme: Theme,
         settings: QSettings,
         style_controller=None,
-        runtime_settings_controller=None
+        runtime_settings_controller=None,
+        second_ops_settings_controller=None
     ) -> None:
         super().__init__()
         self._theme = theme
@@ -91,6 +92,7 @@ class MainWindow(QMainWindow):
         self.picker.photos_toggle_requested.connect(self._on_photos_toggle_requested)
         self.picker.new_audit_requested.connect(self._on_picker_new_audit_requested)
         self.picker.holidays_requested.connect(self._on_holidays_requested)
+        self.picker.second_ops_requested.connect(self._on_overview_second_ops_requested)
         self.stacked.addWidget(self.picker)
         
         self._load_epoch = 0
@@ -109,12 +111,14 @@ class MainWindow(QMainWindow):
         self._audit_view.exit_requested.connect(self._on_dashboard_exit)
         self._audit_view.error_occurred.connect(self._on_failed)
         self._audit_view.ops_per_board_change_requested.connect(self._on_ops_per_board_change_requested)
+        self._audit_view.second_ops_requested.connect(self._on_audit_second_ops_requested)
         self.stacked.addWidget(self._audit_view)
         
         self.toast = Toast(self)
 
         self._style_controller = style_controller
         self._runtime_settings_controller = runtime_settings_controller
+        self._second_ops_settings_controller = second_ops_settings_controller
         if runtime_settings_controller is not None:
             runtime_settings_controller.changed.connect(self._on_runtime_constants_changed)
         self._runtime_constants_dirty = False
@@ -186,6 +190,7 @@ class MainWindow(QMainWindow):
                 self._style_controller,
                 self._font_scale,
                 self._runtime_settings_controller,
+                self._second_ops_settings_controller,
                 self._bootstrapped.config,
                 self
             )
@@ -383,6 +388,46 @@ class MainWindow(QMainWindow):
         dialog = HolidayDialog(self._holiday_svc, self)
         dialog.exec()
         self._reload_list()
+
+    def _on_overview_second_ops_requested(self) -> None:
+        if self._second_ops_settings_controller is None:
+            return
+            
+        from cockpit.ui.widgets.second_ops_dialog import SecondOpsOverviewDialog
+        dialog = SecondOpsOverviewDialog(
+            self._bootstrapped.audit_bom_component_repo,
+            self._second_ops_settings_controller,
+            self
+        )
+        if dialog.exec():
+            audit_id = dialog.chosen_audit_id()
+            if audit_id is not None:
+                self._on_picker_audit_selected(audit_id)
+                # _on_picker_audit_selected defers the load through
+                # singleShot(0); this one is queued behind it, so the modal
+                # opens over a loaded AuditView. The epoch guard drops it if a
+                # newer navigation superseded this one in between.
+                epoch = self._load_epoch
+
+                def do_open_second_ops():
+                    if epoch != self._load_epoch:
+                        return
+                    self._on_audit_second_ops_requested(audit_id)
+
+                QTimer.singleShot(0, do_open_second_ops)
+
+    def _on_audit_second_ops_requested(self, audit_id: int) -> None:
+        if self._second_ops_settings_controller is None:
+            return
+            
+        from cockpit.ui.widgets.second_ops_dialog import SecondOpsAuditDialog
+        dialog = SecondOpsAuditDialog(
+            audit_id,
+            self._bootstrapped.source_file_repo,
+            self._second_ops_settings_controller,
+            self
+        )
+        dialog.exec()
 
     def _on_drop_received(self, paths: list[pathlib.Path]) -> None:
         if self._worker_in_flight:

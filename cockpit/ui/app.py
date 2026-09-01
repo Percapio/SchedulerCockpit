@@ -124,12 +124,16 @@ def main() -> None:
         )
     )
 
+    from cockpit.services.second_ops import SecondOpsSettingsController
+    second_ops_settings_controller = SecondOpsSettingsController()
+
     window = MainWindow(
         theme=theme,
         app=app,
         settings=settings,
         style_controller=style_controller,
         runtime_settings_controller=runtime_settings_controller,
+        second_ops_settings_controller=second_ops_settings_controller,
         bootstrapped_app=bootstrapped,
         audit_read_svc=bootstrapped.audit_read_svc,
         checklist_svc=bootstrapped.checklist_svc,

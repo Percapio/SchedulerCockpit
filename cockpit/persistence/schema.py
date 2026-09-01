@@ -603,7 +603,9 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     v14_migrated = migrate_to_v14(conn, parser_registry)
     v15_migrated = migrate_to_v15(conn)
     v16_migrated = migrate_to_v16(conn)
-    return v7_migrated or v8_migrated or v9_migrated or v11_migrated or v13_migrated or v14_migrated or v15_migrated or v16_migrated
+    v17_migrated = migrate_to_v17(conn, parser_registry)
+    return (v7_migrated or v8_migrated or v9_migrated or v11_migrated or v13_migrated
+            or v14_migrated or v15_migrated or v16_migrated or v17_migrated)
 
 SCHEMA_V5_DDL_DROP_SHIP_DATE: str = """
 ALTER TABLE active_audits DROP COLUMN ship_date
@@ -1140,3 +1142,96 @@ def migrate_to_v16(conn: sqlite3.Connection) -> bool:
     except Exception:
         conn.rollback()
         raise
+
+
+def migrate_to_v17(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
+    """Repairs audit_bom_components.find_number on databases created before it existed.
+
+    The column was added to the v3 CREATE TABLE rather than as its own
+    migration, so a database that had already passed v3 never received it.
+    Every BOM read path selects the column, so such a database fails on any BOM
+    query -- including the 2nd OPS candidate scan.
+
+    pre:  schema_version >= 16
+    post: audit_bom_components has find_number; rows are backfilled from the
+          stored Audit BOM wherever it can still be parsed and left at 0 where
+          it cannot. schema_version >= 17.
+    raises: SchemaMismatch when version < 16
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=16)
+
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=16)
+
+    current_version = row[0] if isinstance(row, tuple) and not hasattr(row, 'keys') else row["version"]
+    if current_version >= 17:
+        return False
+    if current_version < 16:
+        raise SchemaMismatch(found_version=current_version, expected_version=16)
+
+    cur.execute("PRAGMA table_info(audit_bom_components)")
+    has_find_number = any(
+        (r[1] if isinstance(r, tuple) and not hasattr(r, 'keys') else r["name"]) == "find_number"
+        for r in cur.fetchall()
+    )
+
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        if not has_find_number:
+            cur.execute(
+                "ALTER TABLE audit_bom_components "
+                "ADD COLUMN find_number INTEGER NOT NULL DEFAULT 0"
+            )
+            _backfill_find_numbers(cur, parser_registry)
+
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 17, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def _backfill_find_numbers(cur: sqlite3.Cursor, parser_registry: ParserRegistry) -> None:
+    """Best-effort find_number recovery from the stored Audit BOM workbooks.
+
+    Unlike the v3 backfill this never aborts the migration: an upload that has
+    since been deleted or edited leaves those rows at 0, which degrades
+    ordering but keeps every BOM read path working. Refusing to start because
+    one workbook is unreadable is the worse failure.
+    """
+    cur.execute(
+        "SELECT DISTINCT id, local_storage_path FROM source_files WHERE file_category = 'BOM'"
+    )
+    bom_files = cur.fetchall()
+
+    for sf in bom_files:
+        is_tuple = isinstance(sf, tuple) and not hasattr(sf, 'keys')
+        sf_id = sf[0] if is_tuple else sf["id"]
+        raw_path = sf[1] if is_tuple else sf["local_storage_path"]
+        path = pathlib.Path(raw_path)
+        if not path.exists():
+            logger.warning("v17 backfill: BOM file missing for source_file %s at %s", sf_id, path)
+            continue
+
+        try:
+            bom_result = parser_registry.bom_parser.parse(path)
+        except Exception as exc:
+            logger.warning("v17 backfill: could not parse BOM for source_file %s: %s", sf_id, exc)
+            continue
+
+        for item in bom_result.items:
+            cur.execute(
+                "UPDATE audit_bom_components SET find_number = ? "
+                "WHERE source_file_id = ? AND component_mpn = ?",
+                (item.find_number, sf_id, item.component_mpn)
+            )

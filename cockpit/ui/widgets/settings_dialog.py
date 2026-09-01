@@ -59,6 +59,7 @@ class SettingsDialog(QDialog):
         style_controller: StyleController,
         font_scale_controller: FontScaleController,
         runtime_settings_controller: RuntimeCalcSettingsController | None,
+        second_ops_settings_controller, # from cockpit.services.second_ops import SecondOpsSettingsController
         config,
         parent: QWidget | None = None,
     ) -> None:
@@ -106,6 +107,11 @@ class SettingsDialog(QDialog):
         if runtime_settings_controller is not None:
             calc_group = self._build_calculation_settings(runtime_settings_controller)
             layout.addWidget(calc_group)
+            layout.addSpacing(12)
+            
+        if second_ops_settings_controller is not None:
+            second_ops_group = self._build_second_ops_settings(second_ops_settings_controller)
+            layout.addWidget(second_ops_group)
             layout.addSpacing(12)
             
         reset_group = QGroupBox("Application Data")
@@ -195,3 +201,32 @@ class SettingsDialog(QDialog):
                 spin.setToolTip("Applies once OPS is computed (a later phase)")
             form.addRow(spec.label + ":", spin)
         return group
+
+    def _build_second_ops_settings(self, controller) -> QGroupBox:
+        from PyQt6.QtWidgets import QLineEdit
+        group = QGroupBox("2nd OPS")
+        layout = QVBoxLayout(group)
+        
+        terms_edit = QLineEdit()
+        terms_edit.setText(", ".join(controller.terms()))
+        terms_edit.editingFinished.connect(lambda: controller.set_terms_from_text(terms_edit.text()))
+        layout.addWidget(terms_edit)
+        
+        restore_btn = QPushButton("Restore defaults")
+        restore_btn.clicked.connect(controller.restore_defaults)
+        
+        # update edit on restore or other external changes
+        def _update_edit():
+            terms_edit.setText(", ".join(controller.terms()))
+            
+        controller.changed.connect(_update_edit)
+        
+        layout.addWidget(restore_btn)
+        
+        info = QLabel("Matched against part number and description, whole words only, case-insensitive")
+        info.setWordWrap(True)
+        # Maybe use small font?
+        layout.addWidget(info)
+        
+        return group
+

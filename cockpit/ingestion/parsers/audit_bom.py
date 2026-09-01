@@ -5,6 +5,7 @@ import pathlib
 import re
 import time
 import zipfile
+from dataclasses import dataclass
 
 import openpyxl
 from typing import Any, Final
@@ -216,22 +217,26 @@ def _split_ref_des(raw: str | None) -> tuple[str, ...]:
     return tuple(tokens)
 
 
+def _open_workbook(path: pathlib.Path) -> openpyxl.Workbook:
+    # data_only=True to get values, not formulas.
+    # rich_text=True (openpyxl >= 3.1) so word-level strikethrough is
+    # visible. Read-only mode flattens rich text, so workbooks that
+    # actually contain strike runs are loaded in normal mode instead
+    # (detected via a cheap sharedStrings.xml scan).
+    load_kwargs = dict(filename=str(path), data_only=True, read_only=True)
+    if CellRichText is not None:
+        load_kwargs["rich_text"] = True
+        if _workbook_has_strike_runs(path):
+            load_kwargs["read_only"] = False
+    return openpyxl.load_workbook(**load_kwargs)
+
+
 def parse(path: pathlib.Path) -> BomResult:
     """Parse the Audit BOM Excel file and extract THT items."""
     declared_part_number = derive_part_number_from_filename(path)
 
     try:
-        # data_only=True to get values, not formulas.
-        # rich_text=True (openpyxl >= 3.1) so word-level strikethrough is
-        # visible. Read-only mode flattens rich text, so workbooks that
-        # actually contain strike runs are loaded in normal mode instead
-        # (detected via a cheap sharedStrings.xml scan).
-        load_kwargs = dict(filename=str(path), data_only=True, read_only=True)
-        if CellRichText is not None:
-            load_kwargs["rich_text"] = True
-            if _workbook_has_strike_runs(path):
-                load_kwargs["read_only"] = False
-        wb = openpyxl.load_workbook(**load_kwargs)
+        wb = _open_workbook(path)
     except Exception as e:
         raise MalformedBomError(path, "UNREADABLE_WORKBOOK", {"error": str(e)})
 
@@ -338,5 +343,86 @@ def parse(path: pathlib.Path) -> BomResult:
             excluded_pcb_count=excluded_pcb_count,
             header_layout=header_layout,
         )
+    finally:
+        wb.close()
+
+
+CANONICAL_COLUMNS: tuple[str, ...] = (
+    "Find#", "PartNum", "Count", "Ref_Des", "Package", "Description",
+    "SMT/THT", "Qty Need", "Qty On hand", "Qty short", "comment",
+    "MSL level", "Date code", "Baked date",
+)
+
+
+@dataclass(frozen=True)
+class RawBomRow:
+    sheet_ordinal: int          # 1-based physical row index; sheet order
+    cells: tuple[str, ...]      # exactly 14, CANONICAL_COLUMNS order, "" absent
+    part_number: str            # PartNum, stripped
+    description: str            # Description, struck words removed
+
+
+def read_raw_rows(workbook_path: pathlib.Path) -> list[RawBomRow]:
+    try:
+        wb = _open_workbook(workbook_path)
+    except Exception as e:
+        raise MalformedBomError(workbook_path, "UNREADABLE_WORKBOOK", {"error": str(e)})
+
+    try:
+        declared_part_number = derive_part_number_from_filename(workbook_path)
+        selected_sheet_name = choose_bom_sheet(workbook_path, wb.sheetnames, declared_part_number)
+        ws = wb[selected_sheet_name]
+        
+        header_row = [cell.value for cell in ws[1]]
+        observed_labels = [str(v).strip() if v is not None else "" for v in header_row]
+        
+        # Fails only when neither anchor label is present -- at that point the
+        # sheet is not an Audit BOM. A legacy sheet missing one of the two is
+        # still worth showing.
+        anchors_found = 0
+        for anchor in ("Find#", "PartNum"):
+            try:
+                resolve_column_index(observed_labels, anchor)
+                anchors_found += 1
+            except ValueError:
+                pass
+        if anchors_found == 0:
+            raise MalformedBomError(workbook_path, "MISSING_REQUIRED_COLUMNS", {"observed": observed_labels})
+
+        column_indices: list[int | None] = []
+        for col_name in CANONICAL_COLUMNS:
+            try:
+                column_indices.append(resolve_column_index(observed_labels, col_name))
+            except ValueError:
+                column_indices.append(None)
+                
+        results: list[RawBomRow] = []
+        # sheet_ordinal is 1-based physical row index
+        sheet_ordinal = 1
+        for row_cells in ws.iter_rows(min_row=2):
+            sheet_ordinal += 1
+            
+            cells: list[str] = []
+            for col_idx in column_indices:
+                if col_idx is None or col_idx >= len(row_cells):
+                    cells.append("")
+                else:
+                    text = _visible_cell_text(row_cells[col_idx])
+                    cells.append(text.strip() if text else "")
+
+            if not any(cells):
+                continue
+                
+            part_number = cells[1]
+            description = cells[5]
+            
+            results.append(RawBomRow(
+                sheet_ordinal=sheet_ordinal,
+                cells=tuple(cells),
+                part_number=part_number,
+                description=description
+            ))
+            
+        return results
     finally:
         wb.close()

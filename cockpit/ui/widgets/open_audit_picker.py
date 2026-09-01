@@ -355,6 +355,7 @@ class OpenAuditPicker(QWidget):
     settings_requested = pyqtSignal()
     label_toggle_requested = pyqtSignal(int, bool)
     photos_toggle_requested = pyqtSignal(int, bool)
+    second_ops_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None, *, settings: QSettings | None = None) -> None:
         super().__init__(parent)
@@ -428,6 +429,10 @@ class OpenAuditPicker(QWidget):
         layout.addWidget(self.holidays_btn)
         layout.addWidget(minus)
         layout.addWidget(plus)
+
+        self.second_ops_btn = QPushButton("2nd OPS...")
+        self.second_ops_btn.clicked.connect(self.second_ops_requested.emit)
+        layout.addWidget(self.second_ops_btn)
 
         self.settings_btn = QPushButton("Settings...")
         self.settings_btn.clicked.connect(self.settings_requested.emit)

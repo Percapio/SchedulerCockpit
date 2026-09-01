@@ -31,7 +31,7 @@ def test_settings_dialog_size_spin_type_only(qtbot, theme, tmp_path):
     style_ctrl = StyleController(app, theme, settings)
     font_ctrl = FontScaleController(app, theme, settings)
 
-    dialog = SettingsDialog(style_ctrl, font_ctrl, None, None)
+    dialog = SettingsDialog(style_ctrl, font_ctrl, None, None, None)
     qtbot.addWidget(dialog)
 
     assert dialog.size_spin.buttonSymbols() == QAbstractSpinBox.ButtonSymbols.NoButtons
@@ -48,7 +48,7 @@ def test_settings_dialog_size_spin_sync_and_clamp(qtbot, theme, tmp_path):
     style_ctrl = StyleController(app, theme, settings)
     font_ctrl = FontScaleController(app, theme, settings)
 
-    dialog = SettingsDialog(style_ctrl, font_ctrl, None, None)
+    dialog = SettingsDialog(style_ctrl, font_ctrl, None, None, None)
     qtbot.addWidget(dialog)
 
     # Test controller -> dialog sync

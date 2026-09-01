@@ -2,9 +2,22 @@
 
 import sqlite3
 from typing import Sequence
+from dataclasses import dataclass
 
 from ..errors import DuplicateRefDesError, InvalidArgumentError, PersistenceUnavailable
 from ..types import AuditBomComponent, AuditBomComponentDraft
+
+@dataclass(frozen=True)
+class PersistedBomLine:
+    audit_id: int
+    source_file_id: int
+    part_number: str
+    split_suffix: str
+    work_order_ref: str
+    find_number: int
+    component_mpn: str
+    description: str | None
+
 
 
 class AuditBomComponentRepository:
@@ -92,3 +105,38 @@ class AuditBomComponentRepository:
             raise PersistenceUnavailable(self._conn, e) from e
         except sqlite3.Error as e:
             raise PersistenceUnavailable(self._conn, e) from e
+
+    def list_bom_lines_for_all_active_audits(self) -> list[PersistedBomLine]:
+        try:
+            cur = self._conn.cursor()
+            cur.execute("""
+                SELECT DISTINCT
+                    a.id as audit_id,
+                    abc.source_file_id,
+                    a.part_number,
+                    a.split_suffix,
+                    a.work_order_ref,
+                    abc.find_number,
+                    abc.component_mpn,
+                    abc.description
+                FROM active_audits a
+                JOIN source_files sf ON a.id = sf.audit_id AND sf.file_category = 'BOM'
+                JOIN audit_bom_components abc ON sf.id = abc.source_file_id
+                ORDER BY a.id ASC, abc.find_number ASC
+            """)
+            return [
+                PersistedBomLine(
+                    audit_id=row["audit_id"],
+                    source_file_id=row["source_file_id"],
+                    part_number=row["part_number"],
+                    split_suffix=row["split_suffix"],
+                    work_order_ref=row["work_order_ref"],
+                    find_number=row["find_number"],
+                    component_mpn=row["component_mpn"],
+                    description=row["description"],
+                )
+                for row in cur.fetchall()
+            ]
+        except sqlite3.Error as e:
+            raise PersistenceUnavailable(self._conn, e) from e
+

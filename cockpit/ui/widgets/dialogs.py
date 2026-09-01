@@ -3,7 +3,7 @@ from datetime import date
 from PyQt6.QtCore import QDate
 from PyQt6.QtWidgets import (
     QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QDateEdit, QLabel,
-    QDoubleSpinBox, QWidget
+    QDoubleSpinBox, QWidget, QLineEdit
 )
 
 
@@ -134,3 +134,45 @@ class OpsPerBoardDialog(QDialog):
         if self._cleared:
             return None
         return float(self.spin_box.value())
+
+
+class TypedConfirmationDialog(QDialog):
+    def __init__(self, title: str, expected_audit_count: int, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        
+        layout = QVBoxLayout(self)
+        
+        body = QLabel(
+            f"You are about to delete {expected_audit_count} active audits.\n\n"
+            "This will clear all audit data and remove their associated files. "
+            "Holidays, schema version, settings, logs, and crash reports will be retained.\n\n"
+            "To confirm, type 'DELETE' below:"
+        )
+        body.setWordWrap(True)
+        layout.addWidget(body)
+        
+        self.input_field = QLineEdit()
+        self.input_field.textChanged.connect(self._on_text_changed)
+        layout.addWidget(self.input_field)
+        
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        
+        self.cancel_btn = QPushButton("Cancel")
+        self.cancel_btn.clicked.connect(self.reject)
+        
+        self.confirm_btn = QPushButton("Confirm")
+        self.confirm_btn.setEnabled(False)
+        self.confirm_btn.clicked.connect(self.accept)
+        
+        buttons.addWidget(self.cancel_btn)
+        buttons.addWidget(self.confirm_btn)
+        
+        self.cancel_btn.setDefault(True)
+        
+        layout.addLayout(buttons)
+        
+    def _on_text_changed(self, text: str) -> None:
+        self.confirm_btn.setEnabled(text == "DELETE")

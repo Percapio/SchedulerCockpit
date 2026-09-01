@@ -6,6 +6,7 @@ import pathlib
 from dataclasses import dataclass
 from functools import partial
 
+from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QHBoxLayout, QComboBox, QFontComboBox,
     QSpinBox, QDoubleSpinBox, QGroupBox, QPushButton, QLabel, QFileDialog, QMessageBox, QWidget,
@@ -50,6 +51,8 @@ class SettingsDialog(QDialog):
 
     Changes apply live and persist via the controllers' QSettings backing.
     """
+
+    reset_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -104,6 +107,17 @@ class SettingsDialog(QDialog):
             calc_group = self._build_calculation_settings(runtime_settings_controller)
             layout.addWidget(calc_group)
             layout.addSpacing(12)
+            
+        reset_group = QGroupBox("Application Data")
+        reset_layout = QVBoxLayout(reset_group)
+        reset_label = QLabel("Clear all audit data. Holidays, schema version, and logs are retained.")
+        reset_label.setWordWrap(True)
+        reset_layout.addWidget(reset_label)
+        reset_btn = QPushButton("Reset application data...")
+        reset_btn.clicked.connect(self.reset_requested.emit)
+        reset_layout.addWidget(reset_btn)
+        layout.addWidget(reset_group)
+        layout.addSpacing(12)
 
         diag_label = QLabel("Trouble? Package the logs for the development team:")
         diag_label.setWordWrap(True)

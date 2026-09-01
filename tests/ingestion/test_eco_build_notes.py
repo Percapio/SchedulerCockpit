@@ -107,7 +107,17 @@ def test_three_tables_are_accepted(tmp_path):
     assert eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx")).raw_table_count == 3
 
 
-def test_xray_header_drift_is_rejected(tmp_path):
+def test_xray_header_drift_is_rejected_exact_arity_not_prefix(tmp_path):
+    document = docx.Document()
+    table = document.add_table(2, 5)
+    # 4-col prefix + Qty
+    fill_row(table, 0, ["Find#", "PartNum", "Ref_Des", "Description", "Qty"])
+
+    with pytest.raises(MalformedEcoError) as excinfo:
+        eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
+    assert "XRAY_HEADER_DRIFT" in str(excinfo.value)
+
+def test_xray_header_drift_is_rejected_existing_case(tmp_path):
     document = docx.Document()
     table = document.add_table(2, 5)
     fill_row(table, 0, ["Find#", "PartNumber", "Count", "Ref_Des", "Description"])
@@ -116,13 +126,43 @@ def test_xray_header_drift_is_rejected(tmp_path):
         eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
     assert "XRAY_HEADER_DRIFT" in str(excinfo.value)
 
+def test_xray_header_drift_short_header(tmp_path):
+    document = docx.Document()
+    table = document.add_table(2, 1)
+    fill_row(table, 0, ["Find#"])
 
-def test_the_canonical_xray_header_passes(tmp_path):
+    with pytest.raises(MalformedEcoError) as excinfo:
+        eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
+    assert "XRAY_HEADER_DRIFT" in str(excinfo.value)
+
+def test_drift_detail_names_every_accepted_variant(tmp_path):
+    document = docx.Document()
+    table = document.add_table(2, 1)
+    fill_row(table, 0, ["Find#"])
+
+    with pytest.raises(MalformedEcoError) as excinfo:
+        eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
+    
+    payload = excinfo.value.detail
+    assert payload["accepted"] == eco_build_notes.ACCEPTED_XRAY_HEADERS
+    assert payload["observed"] == ["Find#"]
+    assert payload["observed_column_count"] == 1
+
+
+def test_the_canonical_five_column_xray_header_passes(tmp_path):
     document = docx.Document()
     table = document.add_table(2, 5)
-    fill_row(table, 0, XRAY_HEADER)
+    fill_row(table, 0, ["Find#", "PartNum", "Count", "Ref_Des", "Description"])
 
     assert eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx")).row_count == 1
+
+
+def test_the_four_column_xray_header_passes_and_reports_correct_row_count(tmp_path):
+    document = docx.Document()
+    table = document.add_table(3, 4)
+    fill_row(table, 0, ["Find#", "PartNum", "Ref_Des", "Description"])
+
+    assert eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx")).row_count == 2
 
 
 def test_a_build_table_is_not_held_to_the_xray_header(tmp_path):
@@ -134,9 +174,8 @@ def test_a_build_table_is_not_held_to_the_xray_header(tmp_path):
 
 
 @pytest.mark.parametrize("name", [
-    "B140002 Artis (ITAR)/B140002 ECO (ITAR).docx",
-    "B142000 Atlas Devices (ITAR)/B142000 ECO (ITAR).docx",
-    "B142006 Angel Aerial Systems/B142006 ECO.docx",
+    "B141383 ECO.docx",
+    "B141553 ECO update2 08-17-2026.docx",
 ])
 def test_real_build_notes_pass_every_gate(name):
     import pathlib

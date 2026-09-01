@@ -13,7 +13,10 @@ import docx
 from ..errors import MalformedEcoError
 from .results import EcoResult
 
-CANONICAL_XRAY_HEADER = ["Find#", "PartNum", "Count", "Ref_Des", "Description"]
+ACCEPTED_XRAY_HEADERS = (
+    ("Find#", "PartNum", "Count", "Ref_Des", "Description"),
+    ("Find#", "PartNum", "Ref_Des", "Description"),
+)
 
 MAX_TABLE_COUNT = 3
 
@@ -24,10 +27,8 @@ def _header_of(table) -> list[str]:
     return [cell.text.strip() for cell in table.rows[0].cells]
 
 
-def _is_xray_header(header: list[str]) -> bool:
-    observed = header[:len(CANONICAL_XRAY_HEADER)]
-    observed += [""] * (len(CANONICAL_XRAY_HEADER) - len(observed))
-    return observed == CANONICAL_XRAY_HEADER
+def is_accepted_xray_header(observed_header: list[str]) -> bool:
+    return tuple(observed_header) in ACCEPTED_XRAY_HEADERS
 
 
 def _looks_like_xray_table(header: list[str]) -> bool:
@@ -74,15 +75,14 @@ def parse(path: pathlib.Path) -> EcoResult:
         if not header:
             continue
 
-        if _looks_like_xray_table(header) and not _is_xray_header(header):
-            observed = header[:len(CANONICAL_XRAY_HEADER)]
-            observed += [""] * (len(CANONICAL_XRAY_HEADER) - len(observed))
+        if _looks_like_xray_table(header) and not is_accepted_xray_header(header):
             raise MalformedEcoError(path, "XRAY_HEADER_DRIFT", {
-                "expected": CANONICAL_XRAY_HEADER,
-                "observed": observed,
+                "accepted": ACCEPTED_XRAY_HEADERS,
+                "observed": header,
+                "observed_column_count": len(header),
             })
 
-        has_header_row = _is_xray_header(header) or header[0].strip() in {"#", "Ref des", "Ref des (P/N)"}
+        has_header_row = is_accepted_xray_header(header) or header[0].strip() in {"#", "Ref des", "Ref des (P/N)"}
         row_count += len(table.rows) - (1 if has_header_row else 0)
 
     return EcoResult(

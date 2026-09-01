@@ -56,6 +56,8 @@ class BootstrappedApp:
     pdf_renderer: PdfRenderer
     reconciliation_report: ReconciliationReport
     runtime_calc_svc: RuntimeCalcService
+    source_file_repo: SourceFileRepository
+    storage_reaper: StorageReaper
 
 
 def remove_notes_media_tree(app_data_root: pathlib.Path) -> bool:
@@ -260,5 +262,7 @@ def bootstrap(
         holiday_svc=holiday_svc,
         pdf_renderer=pdf_renderer,
         reconciliation_report=report,
-        runtime_calc_svc=runtime_calc_svc
+        runtime_calc_svc=runtime_calc_svc,
+        source_file_repo=source_file_repo,
+        storage_reaper=storage_reaper
     )

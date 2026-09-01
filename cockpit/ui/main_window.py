@@ -189,10 +189,67 @@ class MainWindow(QMainWindow):
                 self._bootstrapped.config,
                 self
             )
+            dialog.reset_requested.connect(self._on_reset_requested)
             dialog.exec()
         finally:
             if self._runtime_constants_dirty and self._runtime_settings_controller is not None:
                 self._recompute_and_refresh()
+
+    def _on_reset_requested(self) -> None:
+        if self._worker_in_flight:
+            QMessageBox.warning(self, "Cannot Reset", "An ingestion is currently in flight. Please wait for it to finish.")
+            return
+
+        expected_audit_count = len(self._audit_read_svc.list_open())
+
+        from cockpit.ui.widgets.dialogs import TypedConfirmationDialog
+        confirm = TypedConfirmationDialog("Reset Application Data", expected_audit_count, self)
+        if not confirm.exec():
+            return
+
+        self._audit_view.unload()
+
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            from cockpit.services.reset_service import reset_application_data, ResetAborted, ResetAbortCause
+            outcome_or_aborted = reset_application_data(
+                self._bootstrapped.audit_repo,
+                self._bootstrapped.source_file_repo,
+                self._bootstrapped.storage_reaper,
+                self._bootstrapped.conn,
+                expected_audit_count
+            )
+
+            if isinstance(outcome_or_aborted, ResetAborted):
+                QApplication.restoreOverrideCursor()
+                aborted = outcome_or_aborted
+                if aborted.cause == ResetAbortCause.CAPTURE_FAILED:
+                    msg = f"The reset did not run; no audit or file was changed.\n\n{aborted.underlying}"
+                elif aborted.cause == ResetAbortCause.DELETE_FAILED:
+                    msg = f"The reset was rolled back; no audit or file was changed.\n\n{aborted.underlying}"
+                elif aborted.cause == ResetAbortCause.COUNT_MISMATCH:
+                    msg = f"The audit count changed from {expected_audit_count} to {aborted.observed_count}. Nothing was changed."
+                else:
+                    msg = "Reset aborted."
+                QMessageBox.critical(self, "Reset Aborted", msg)
+                return
+
+            outcome = outcome_or_aborted
+            sender = self.sender()
+            if hasattr(sender, "accept"):
+                sender.accept()
+
+            self._show_drop_area()
+            self.drop_area.set_back_visible(False)
+
+            if outcome.unreaped:
+                self.toast.show_toast(
+                    "Reset incomplete",
+                    f"{len(outcome.unreaped)} files could not be deleted. They will be cleared on the next launch."
+                )
+        finally:
+            if QApplication.overrideCursor() is not None:
+                QApplication.restoreOverrideCursor()
 
     def _on_style_changed(self) -> None:
         # Preset/font change: regenerate stylesheet at the current scale and

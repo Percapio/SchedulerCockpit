@@ -6,11 +6,11 @@ import pathlib
 from dataclasses import dataclass
 from functools import partial
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QHBoxLayout, QComboBox, QFontComboBox,
     QSpinBox, QDoubleSpinBox, QGroupBox, QPushButton, QLabel, QFileDialog, QMessageBox, QWidget,
-    QAbstractSpinBox
+    QAbstractSpinBox, QLineEdit
 )
 from PyQt6.QtGui import QFont
 
@@ -66,9 +66,12 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Settings")
         self.setModal(True)
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._style = style_controller
         self._font_scale = font_scale_controller
         self._config = config
+        self.terms_edit: QLineEdit | None = None
+        self._second_ops_controller = None
 
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -203,23 +206,19 @@ class SettingsDialog(QDialog):
         return group
 
     def _build_second_ops_settings(self, controller) -> QGroupBox:
-        from PyQt6.QtWidgets import QLineEdit
         group = QGroupBox("2nd OPS")
         layout = QVBoxLayout(group)
         
-        terms_edit = QLineEdit()
-        terms_edit.setText(", ".join(controller.terms()))
-        terms_edit.editingFinished.connect(lambda: controller.set_terms_from_text(terms_edit.text()))
-        layout.addWidget(terms_edit)
+        self._second_ops_controller = controller
+        self.terms_edit = QLineEdit()
+        self.terms_edit.setText(", ".join(controller.terms()))
+        self.terms_edit.editingFinished.connect(lambda: controller.set_terms_from_text(self.terms_edit.text()))
+        layout.addWidget(self.terms_edit)
         
         restore_btn = QPushButton("Restore defaults")
         restore_btn.clicked.connect(controller.restore_defaults)
         
-        # update edit on restore or other external changes
-        def _update_edit():
-            terms_edit.setText(", ".join(controller.terms()))
-            
-        controller.changed.connect(_update_edit)
+        controller.changed.connect(self._update_edit)
         
         layout.addWidget(restore_btn)
         
@@ -229,4 +228,13 @@ class SettingsDialog(QDialog):
         layout.addWidget(info)
         
         return group
+
+    def _update_edit(self) -> None:
+        if self._second_ops_controller and self.terms_edit:
+            self.terms_edit.setText(", ".join(self._second_ops_controller.terms()))
+
+    def done(self, result_code: int) -> None:
+        if self._second_ops_controller and self.terms_edit:
+            self._second_ops_controller.set_terms_from_text(self.terms_edit.text())
+        super().done(result_code)
 

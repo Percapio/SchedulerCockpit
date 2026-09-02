@@ -68,6 +68,8 @@ class MainWindow(QMainWindow):
         self._close_requested = False
         self._worker = None
         self._thread = None
+        self._second_ops_review_dialogs = {}
+        self._next_registration_serial = 0
         
         self.stacked = QStackedWidget()
         self.setCentralWidget(self.stacked)
@@ -205,12 +207,20 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Cannot Reset", "An ingestion is currently in flight. Please wait for it to finish.")
             return
 
+        for audit_id, (serial, dialog) in self._second_ops_review_dialogs.items():
+            if dialog.is_read_in_flight():
+                QMessageBox.warning(self, "Cannot Reset", f"A 2nd OPS review window is currently reading audit {audit_id}'s workbook.")
+                return
+
         expected_audit_count = len(self._audit_read_svc.list_open())
 
         from cockpit.ui.widgets.dialogs import TypedConfirmationDialog
         confirm = TypedConfirmationDialog("Reset Application Data", expected_audit_count, self)
         if not confirm.exec():
             return
+
+        for serial, dialog in list(self._second_ops_review_dialogs.values()):
+            dialog.close()
 
         self._audit_view.unload()
 
@@ -319,6 +329,11 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(0, do_load)
         
     def _on_complete_requested(self, audit_id: int) -> None:
+        entry = self._second_ops_review_dialogs.get(audit_id)
+        if entry is not None and entry[1].is_read_in_flight():
+            QMessageBox.warning(self, "Cannot Complete", "A 2nd OPS review window is currently reading this audit's workbook.")
+            return
+
         if not confirm_destructive(
             title="Complete audit",
             body="This permanently deletes the audit and its source files. This cannot be undone.",
@@ -327,6 +342,9 @@ class MainWindow(QMainWindow):
         ):
             return
             
+        if entry is not None:
+            entry[1].close()
+
         try:
             self._bootstrapped.completion_svc.complete_and_cleanup(audit_id)
         except (CleanupFailedError, PersistenceError) as e:
@@ -397,16 +415,14 @@ class MainWindow(QMainWindow):
         dialog = SecondOpsOverviewDialog(
             self._bootstrapped.audit_bom_component_repo,
             self._second_ops_settings_controller,
+            self._settings,
             self
         )
         if dialog.exec():
             audit_id = dialog.chosen_audit_id()
+            dialog.deleteLater()
             if audit_id is not None:
                 self._on_picker_audit_selected(audit_id)
-                # _on_picker_audit_selected defers the load through
-                # singleShot(0); this one is queued behind it, so the modal
-                # opens over a loaded AuditView. The epoch guard drops it if a
-                # newer navigation superseded this one in between.
                 epoch = self._load_epoch
 
                 def do_open_second_ops():
@@ -415,19 +431,40 @@ class MainWindow(QMainWindow):
                     self._on_audit_second_ops_requested(audit_id)
 
                 QTimer.singleShot(0, do_open_second_ops)
+        else:
+            dialog.deleteLater()
+
+    def _unregister_review_dialog(self, audit_id: int, serial: int) -> None:
+        entry = self._second_ops_review_dialogs.get(audit_id)
+        if entry is not None and entry[0] == serial:
+            self._second_ops_review_dialogs.pop(audit_id)
 
     def _on_audit_second_ops_requested(self, audit_id: int) -> None:
         if self._second_ops_settings_controller is None:
             return
             
+        entry = self._second_ops_review_dialogs.get(audit_id)
+        if entry is not None:
+            dialog = entry[1]
+            dialog.raise_()
+            dialog.activateWindow()
+            return
+
         from cockpit.ui.widgets.second_ops_dialog import SecondOpsAuditDialog
         dialog = SecondOpsAuditDialog(
             audit_id,
             self._bootstrapped.source_file_repo,
             self._second_ops_settings_controller,
+            self._settings,
             self
         )
-        dialog.exec()
+        serial = self._next_registration_serial
+        self._next_registration_serial += 1
+        self._second_ops_review_dialogs[audit_id] = (serial, dialog)
+        
+        dialog.finished.connect(lambda result_code, a=audit_id, s=serial: self._unregister_review_dialog(a, s))
+        dialog.destroyed.connect(lambda obj=None, a=audit_id, s=serial: self._unregister_review_dialog(a, s))
+        dialog.show()
 
     def _on_drop_received(self, paths: list[pathlib.Path]) -> None:
         if self._worker_in_flight:
@@ -531,6 +568,9 @@ class MainWindow(QMainWindow):
                 if self._worker:
                     self._worker.request_cancel()
         else:
+            for serial, dialog in list(self._second_ops_review_dialogs.values()):
+                dialog.close()
+
             try:
                 self._audit_view.flush_pending_writes()
             except Exception:

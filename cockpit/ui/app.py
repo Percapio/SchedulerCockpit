@@ -125,7 +125,7 @@ def main() -> None:
     )
 
     from cockpit.services.second_ops import SecondOpsSettingsController
-    second_ops_settings_controller = SecondOpsSettingsController()
+    second_ops_settings_controller = SecondOpsSettingsController(settings)
 
     window = MainWindow(
         theme=theme,

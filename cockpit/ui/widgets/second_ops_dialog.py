@@ -1,7 +1,7 @@
 from typing import Any
 import pathlib
 
-from PyQt6.QtCore import Qt, QThread, QModelIndex, QAbstractTableModel, QObject
+from PyQt6.QtCore import Qt, QThread, QModelIndex, QAbstractTableModel, QObject, QSettings
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QTreeWidget, QTreeWidgetItem, QMenu, QTableView,
     QLabel, QPushButton, QHBoxLayout, QWidget, QAbstractItemView,
@@ -19,14 +19,35 @@ from ...ingestion.hashing import sha256_hex, HashingError
 from ..workers.second_ops_worker import SecondOpsReadWorker
 from .open_audit_picker import CenteredCheckDelegate, RowKind
 from ...ingestion.parsers.audit_bom import CANONICAL_COLUMNS, RawBomRow
+from PyQt6.QtWidgets import QStyledItemDelegate, QStyleOptionViewItem
+from PyQt6.QtGui import QTextDocument
+from PyQt6.QtCore import QSize
+
+class WrappingDelegate(QStyledItemDelegate):
+    def sizeHint(self, option: QStyleOptionViewItem, index: QModelIndex) -> QSize:
+        options = QStyleOptionViewItem(option)
+        self.initStyleOption(options, index)
+        text = options.text
+        if not text:
+            return super().sizeHint(option, index)
+            
+        doc = QTextDocument()
+        doc.setDefaultFont(options.font)
+        width = option.rect.width()
+        if width > 0:
+            doc.setTextWidth(width)
+            
+        doc.setPlainText(text)
+        # +8 for cell padding
+        return QSize(width, int(doc.size().height()) + 8)
 
 
 # A QThread with no Qt parent is owned by its Python wrapper. Once the dialog
 # that started a read is destroyed, nothing else holds the thread, and a
 # garbage-collected QThread that is still running aborts the process. Reads
 # outlive the dialog by design (openpyxl is not interruptible), so the thread
-# is anchored here for the duration and released on `finished`.
-_READS_IN_FLIGHT: set[QThread] = set()
+# and the unparented worker are anchored here for the duration and released on `finished`.
+_READS_IN_FLIGHT: set[tuple[QThread, SecondOpsReadWorker]] = set()
 
 
 def _is_checked(value: Any) -> bool:
@@ -39,17 +60,59 @@ def _is_checked(value: Any) -> bool:
     return value in (Qt.CheckState.Checked, Qt.CheckState.Checked.value, 2, True)
 
 
+import re
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class DialogSize:
+    width: int
+    height: int
+
+def stored_dialog_size(settings: QSettings | None, key: str) -> DialogSize | None:
+    if settings is None:
+        return None
+        
+    screens = QApplication.screens()
+    if not screens:
+        return None
+        
+    largest_geom = max((s.availableGeometry() for s in screens), key=lambda g: g.width() * g.height())
+    
+    val = settings.value(key)
+    if not val or not isinstance(val, str):
+        return None
+        
+    m = re.fullmatch(r"(\d+)x(\d+)", val.strip())
+    if not m:
+        return None
+        
+    w, h = int(m.group(1)), int(m.group(2))
+    if w <= 0 or h <= 0:
+        return None
+        
+    if w > largest_geom.width() or h > largest_geom.height():
+        return None
+        
+    return DialogSize(w, h)
+
 class SecondOpsOverviewDialog(QDialog):
     def __init__(
         self,
         bom_repo: AuditBomComponentRepository,
         settings_controller: SecondOpsSettingsController,
+        settings: QSettings | None = None,
         parent: QWidget | None = None
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("2nd OPS Candidates")
-        self.resize(800, 600)
+        self._settings = settings
         self.setModal(True)
+        
+        stored = stored_dialog_size(self._settings, "second_ops/overview_size")
+        if stored is not None:
+            self.resize(stored.width, stored.height)
+        else:
+            self.resize(800, 600)
 
         self._chosen_audit_id: int | None = None
         self.tree: QTreeWidget | None = None
@@ -79,29 +142,39 @@ class SecondOpsOverviewDialog(QDialog):
         layout.addWidget(info)
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Identity", "Lines / Details"])
+        self.tree.setHeaderLabels(["Line", "Mount", "Description"])
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._on_context_menu)
         self.tree.itemDoubleClicked.connect(self._on_item_double_clicked)
+        self.tree.setWordWrap(True)
+        self.tree.setUniformRowHeights(False)
+        self.tree.setItemDelegateForColumn(2, WrappingDelegate(self.tree))
+
+        from ...services.second_ops import mount_label
 
         for audit_c in candidates:
             audit_item = QTreeWidgetItem([
                 f"{audit_c.part_number} (WO: {audit_c.work_order_ref})",
-                f"{len(audit_c.candidates)} candidate lines"
+                f"{len(audit_c.candidates)} candidate lines",
+                ""
             ])
             audit_item.setData(0, Qt.ItemDataRole.UserRole, audit_c.audit_id)
 
             for line in audit_c.candidates:
                 child = QTreeWidgetItem([
-                    f"Find {line.find_number}: {line.component_mpn}",
+                    str(line.find_number),
+                    mount_label(line.mount_type),
                     line.description or ""
                 ])
                 audit_item.addChild(child)
 
             self.tree.addTopLevelItem(audit_item)
+            audit_item.setFirstColumnSpanned(True)
 
         layout.addWidget(self.tree)
         self.tree.expandAll()
+        self.tree.resizeColumnToContents(0)
+        self.tree.resizeColumnToContents(1)
         self._add_close_button(layout)
 
     def _add_message(self, layout: QVBoxLayout, text: str) -> None:
@@ -146,6 +219,15 @@ class SecondOpsOverviewDialog(QDialog):
     def _select_and_accept(self, audit_id: int) -> None:
         self._chosen_audit_id = audit_id
         self.accept()
+
+    def done(self, result_code: int) -> None:
+        if self._settings is not None:
+            self._settings.setValue("second_ops/overview_size", f"{self.width()}x{self.height()}")
+            self._settings.sync()
+            if self._settings.status() != QSettings.Status.NoError:
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to write second_ops/overview_size (status: {self._settings.status()})")
+        super().done(result_code)
 
     def chosen_audit_id(self) -> int | None:
         return self._chosen_audit_id
@@ -307,12 +389,19 @@ class SecondOpsAuditDialog(QDialog):
         audit_id: int,
         source_file_repo: SourceFileRepository,
         settings_controller: SecondOpsSettingsController,
+        settings: QSettings | None = None,
         parent: QWidget | None = None
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("2nd OPS Review")
-        self.resize(1000, 600)
-        self.setModal(True)
+        self._settings = settings
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+
+        stored = stored_dialog_size(self._settings, "second_ops/review_size")
+        if stored is not None:
+            self.resize(stored.width, stored.height)
+        else:
+            self.resize(800, 600)
 
         self._audit_id = audit_id
         self._source_file_repo = source_file_repo
@@ -359,6 +448,8 @@ class SecondOpsAuditDialog(QDialog):
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._on_table_context_menu)
         self.table.setItemDelegateForColumn(0, CenteredCheckDelegate(self.table))
+        self.table.setItemDelegateForColumn(6, WrappingDelegate(self.table))
+        self.table.setWordWrap(True)
         self.table.verticalHeader().setVisible(False)
         self.table.hide()
         layout.addWidget(self.table, stretch=1)
@@ -395,6 +486,9 @@ class SecondOpsAuditDialog(QDialog):
         bom_files = [f for f in files if f.file_category == "BOM"]
         return bom_files[0].file_hash if bom_files else None
 
+    def is_read_in_flight(self) -> bool:
+        return self._worker is not None
+
     # ---- worker lifecycle -------------------------------------------------
 
     def _start_worker(self, path: pathlib.Path) -> None:
@@ -413,9 +507,10 @@ class SecondOpsAuditDialog(QDialog):
 
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        # Anchors the thread past the dialog's own lifetime; see _READS_IN_FLIGHT.
-        _READS_IN_FLIGHT.add(thread)
-        thread.finished.connect(lambda t=thread: _READS_IN_FLIGHT.discard(t))
+        # Anchors the thread and worker past the dialog's own lifetime; see _READS_IN_FLIGHT.
+        pair = (thread, worker)
+        _READS_IN_FLIGHT.add(pair)
+        thread.finished.connect(lambda p=pair: _READS_IN_FLIGHT.discard(p))
 
         self._thread = thread
         self._worker = worker
@@ -447,6 +542,15 @@ class SecondOpsAuditDialog(QDialog):
     def reject(self) -> None:
         self._detach_worker()
         super().reject()
+
+    def done(self, result_code: int) -> None:
+        if self._settings is not None:
+            self._settings.setValue("second_ops/review_size", f"{self.width()}x{self.height()}")
+            self._settings.sync()
+            if self._settings.status() != QSettings.Status.NoError:
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to write second_ops/review_size (status: {self._settings.status()})")
+        super().done(result_code)
 
     def _on_rows_ready(self, rows: list[SecondOpsRow]) -> None:
         self._detach_worker()
@@ -523,10 +627,8 @@ class SecondOpsAuditDialog(QDialog):
     # ---- view -------------------------------------------------------------
 
     def _apply_column_visibility(self) -> None:
-        """Hides canonical columns with no content in the rows on show.
-
-        Legacy workbooks carry none of the three optional columns, and a
-        matched hardware row typically leaves half the rest blank.
+        """Hides canonical columns with no content in the rows on show, sizes the rest,
+        and re-measures row heights for the wrapped Description column.
         """
         if self._model is None:
             return
@@ -535,7 +637,22 @@ class SecondOpsAuditDialog(QDialog):
         for col in range(len(CANONICAL_COLUMNS)):
             populated = any(row.cells[col].strip() for row in basis) if basis else True
             self.table.setColumnHidden(col + 1, not populated)
+            
+        DESCRIPTION_MIN_WIDTH_PX = 80
         self.table.resizeColumnsToContents()
+        
+        desc_col = 6
+        viewport_w = self.table.viewport().width()
+        other_w = 0
+        for i in range(self._model.columnCount()):
+            if i != desc_col and not self.table.isColumnHidden(i):
+                other_w += self.table.columnWidth(i)
+                
+        leftover = viewport_w - other_w
+        desc_w = max(leftover, DESCRIPTION_MIN_WIDTH_PX)
+        self.table.setColumnWidth(desc_col, desc_w)
+        
+        self.table.resizeRowsToContents()
 
     def _on_show_all_toggled(self, checked: bool) -> None:
         if self._model is None:
@@ -582,7 +699,11 @@ class SecondOpsAuditDialog(QDialog):
         self._copy_to_clipboard(rows)
 
     def _copy_to_clipboard(self, rows: list[RawBomRow]) -> None:
-        QApplication.clipboard().setText(render_tsv(rows))
+        from ...services.second_ops import render_tsv
+        
+        tsv = render_tsv(rows)
+        QApplication.clipboard().setText(tsv)
+        
         plural = "row" if len(rows) == 1 else "rows"
         self.status_line.setText(f"Copied {len(rows)} {plural}")
 

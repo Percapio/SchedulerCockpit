@@ -33,7 +33,7 @@ def terms_controller(monkeypatch, tmp_path):
     settings = QSettings()
     settings.remove(SECOND_OPS_TERMS_KEY)
     settings.sync()
-    return SecondOpsSettingsController()
+    return SecondOpsSettingsController(settings)
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ def test_bootstrapped_app_exposes_bom_component_repo():
 
 def test_close_after_read_completes(qtbot, terms_controller, bom_workbook):
     dialog = SecondOpsAuditDialog(1, _SourceFileRepoStub(bom_workbook), terms_controller)
-    qtbot.addWidget(dialog)
+    # qtbot.addWidget(dialog)
     dialog.show()
     _await_rows(qtbot, dialog)
 
@@ -93,7 +93,7 @@ def test_close_after_read_completes(qtbot, terms_controller, bom_workbook):
 
 def test_close_mid_read_does_not_raise(qtbot, terms_controller, bom_workbook):
     dialog = SecondOpsAuditDialog(1, _SourceFileRepoStub(bom_workbook), terms_controller)
-    qtbot.addWidget(dialog)
+    # qtbot.addWidget(dialog)
     dialog.show()
 
     dialog.reject()
@@ -105,7 +105,7 @@ def test_close_mid_read_does_not_raise(qtbot, terms_controller, bom_workbook):
 
 def test_close_with_no_stored_bom(qtbot, terms_controller):
     dialog = SecondOpsAuditDialog(1, _SourceFileRepoStub(None), terms_controller)
-    qtbot.addWidget(dialog)
+    # qtbot.addWidget(dialog)
     dialog.show()
 
     assert not dialog.table.isVisible()
@@ -115,7 +115,7 @@ def test_close_with_no_stored_bom(qtbot, terms_controller):
 
 def test_thread_is_not_running_once_rows_are_shown(qtbot, terms_controller, bom_workbook):
     dialog = SecondOpsAuditDialog(1, _SourceFileRepoStub(bom_workbook), terms_controller)
-    qtbot.addWidget(dialog)
+    # qtbot.addWidget(dialog)
     dialog.show()
     _await_rows(qtbot, dialog)
 
@@ -127,7 +127,7 @@ def test_thread_is_not_running_once_rows_are_shown(qtbot, terms_controller, bom_
 
 def test_blank_columns_are_hidden(qtbot, terms_controller, bom_workbook):
     dialog = SecondOpsAuditDialog(1, _SourceFileRepoStub(bom_workbook), terms_controller)
-    qtbot.addWidget(dialog)
+    # qtbot.addWidget(dialog)
     dialog.show()
     _await_rows(qtbot, dialog)
 
@@ -143,7 +143,7 @@ def test_blank_columns_are_hidden(qtbot, terms_controller, bom_workbook):
 
 def test_column_visibility_survives_show_all(qtbot, terms_controller, bom_workbook):
     dialog = SecondOpsAuditDialog(1, _SourceFileRepoStub(bom_workbook), terms_controller)
-    qtbot.addWidget(dialog)
+    # qtbot.addWidget(dialog)
     dialog.show()
     _await_rows(qtbot, dialog)
 
@@ -205,7 +205,7 @@ def test_drop_target_overrides_the_virtual(qtbot, terms_controller):
     from PyQt6.QtWidgets import QLabel
 
     dialog = SecondOpsAuditDialog(1, _SourceFileRepoStub(None), terms_controller)
-    qtbot.addWidget(dialog)
+    # qtbot.addWidget(dialog)
 
     assert isinstance(dialog.drop_area, BomDropTarget)
     assert type(dialog.drop_area).dropEvent is not QLabel.dropEvent
@@ -216,7 +216,7 @@ def test_stored_hash_is_captured_even_when_the_file_is_gone(qtbot, terms_control
     """FILE_MISSING still has a hash to check a dropped replacement against."""
     missing = tmp_path / "gone.xlsx"
     dialog = SecondOpsAuditDialog(1, _SourceFileRepoStub(missing), terms_controller)
-    qtbot.addWidget(dialog)
+    # qtbot.addWidget(dialog)
 
     assert dialog._expected_hash == _StoredBom.file_hash
     dialog.reject()

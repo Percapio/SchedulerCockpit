@@ -1,11 +1,13 @@
 """Audit BOM components repository."""
 
 import sqlite3
-from typing import Sequence
+from typing import Sequence, Literal
 from dataclasses import dataclass
 
 from ..errors import DuplicateRefDesError, InvalidArgumentError, PersistenceUnavailable
 from ..types import AuditBomComponent, AuditBomComponentDraft
+
+MountCode = Literal['T', 'S']
 
 @dataclass(frozen=True)
 class PersistedBomLine:
@@ -17,6 +19,7 @@ class PersistedBomLine:
     find_number: int
     component_mpn: str
     description: str | None
+    mount_type: MountCode
 
 
 
@@ -118,7 +121,8 @@ class AuditBomComponentRepository:
                     a.work_order_ref,
                     abc.find_number,
                     abc.component_mpn,
-                    abc.description
+                    abc.description,
+                    abc.mount_type
                 FROM active_audits a
                 JOIN source_files sf ON a.id = sf.audit_id AND sf.file_category = 'BOM'
                 JOIN audit_bom_components abc ON sf.id = abc.source_file_id
@@ -134,6 +138,7 @@ class AuditBomComponentRepository:
                     find_number=row["find_number"],
                     component_mpn=row["component_mpn"],
                     description=row["description"],
+                    mount_type=row["mount_type"]
                 )
                 for row in cur.fetchall()
             ]

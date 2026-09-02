@@ -353,6 +353,34 @@ CANONICAL_COLUMNS: tuple[str, ...] = (
     "MSL level", "Date code", "Baked date",
 )
 
+# The Audit BOM sheet's physical column order: the same fourteen labels as
+# CANONICAL_COLUMNS, positioned as they appear in the workbook rather than in
+# canonical emission order. The three optional labels sit at 3-5; see
+# Patch 09b section 2.2 for the derivation.
+SHEET_COLUMN_ORDER: tuple[str, ...] = (
+    "Find#", "PartNum", "Count", "MSL level", "Date code", "Baked date",
+    "Ref_Des", "Package", "Description", "SMT/THT", "Qty Need", "Qty On hand",
+    "Qty short", "comment",
+)
+
+def sheet_column_order_is_consistent() -> bool:
+    """Holds when SHEET_COLUMN_ORDER describes a layout validate_header would accept."""
+    without_optionals = [label for label in SHEET_COLUMN_ORDER if label not in OPTIONAL_HEADER]
+    if without_optionals != REQUIRED_HEADER:
+        return False
+    
+    if set(SHEET_COLUMN_ORDER) != set(CANONICAL_COLUMNS):
+        return False
+        
+    if len(set(SHEET_COLUMN_ORDER)) != len(SHEET_COLUMN_ORDER):
+        return False
+        
+    return True
+
+if not sheet_column_order_is_consistent():
+    raise RuntimeError("SHEET_COLUMN_ORDER invariant broken: It does not match REQUIRED_HEADER/CANONICAL_COLUMNS expectations.")
+
+
 
 @dataclass(frozen=True)
 class RawBomRow:

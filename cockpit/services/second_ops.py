@@ -21,15 +21,15 @@ SECOND_OPS_TERMS_KEY: str = "second_ops/terms"
 class SecondOpsSettingsController(QObject):
     changed = pyqtSignal()
 
-    def __init__(self, parent: QObject | None = None) -> None:
+    def __init__(self, settings: QSettings, parent: QObject | None = None) -> None:
         super().__init__(parent)
+        self._settings = settings
 
     def terms(self) -> tuple[str, ...]:
-        settings = QSettings()
-        if not settings.contains(SECOND_OPS_TERMS_KEY):
+        if not self._settings.contains(SECOND_OPS_TERMS_KEY):
             return DEFAULT_SECOND_OPS_TERMS
             
-        val = settings.value(SECOND_OPS_TERMS_KEY)
+        val = self._settings.value(SECOND_OPS_TERMS_KEY)
         if val is None:
             return ()
         
@@ -56,22 +56,20 @@ class SecondOpsSettingsController(QObject):
                 
         new_val = ", ".join(normalized) if normalized else ""
         
-        settings = QSettings()
-        if settings.contains(SECOND_OPS_TERMS_KEY):
-            current_val = settings.value(SECOND_OPS_TERMS_KEY)
+        if self._settings.contains(SECOND_OPS_TERMS_KEY):
+            current_val = self._settings.value(SECOND_OPS_TERMS_KEY)
             # handle cases where current_val might be null if QSettings is weird
             if current_val is None:
                 current_val = ""
             if isinstance(current_val, str) and current_val == new_val:
                 return
                 
-        settings.setValue(SECOND_OPS_TERMS_KEY, new_val)
+        self._settings.setValue(SECOND_OPS_TERMS_KEY, new_val)
         self.changed.emit()
 
     def restore_defaults(self) -> None:
-        settings = QSettings()
-        if settings.contains(SECOND_OPS_TERMS_KEY):
-            settings.remove(SECOND_OPS_TERMS_KEY)
+        if self._settings.contains(SECOND_OPS_TERMS_KEY):
+            self._settings.remove(SECOND_OPS_TERMS_KEY)
             self.changed.emit()
 
 
@@ -106,11 +104,21 @@ def matches_any_term(part_number: str, description: str | None, terms: tuple[str
     return False
 
 
+from ..persistence.repositories.bom_components import AuditBomComponentRepository, MountCode
+
+def mount_label(code: MountCode) -> str:
+    if code == 'T':
+        return "THT"
+    if code == 'S':
+        return "SMT"
+    return ""
+
 @dataclass(frozen=True)
 class SecondOpsCandidate:
     find_number: int
     component_mpn: str
     description: str | None
+    mount_type: MountCode
 
 
 @dataclass(frozen=True)
@@ -160,7 +168,8 @@ def list_candidates_for_open_audits(
                 SecondOpsCandidate(
                     find_number=line.find_number,
                     component_mpn=line.component_mpn,
-                    description=line.description
+                    description=line.description,
+                    mount_type=line.mount_type
                 )
             )
 
@@ -213,12 +222,20 @@ def read_second_ops_rows(
     ]
 
 
+from ..ingestion.parsers.audit_bom import CANONICAL_COLUMNS, SHEET_COLUMN_ORDER
+
 def render_tsv(rows: list[RawBomRow]) -> str:
     lines = []
     for row in rows:
-        normalized_cells = []
-        for cell in row.cells:
-            norm = re.sub(r'[\t\r\n]', ' ', str(cell)).strip()
-            normalized_cells.append(norm)
-        lines.append("\t".join(normalized_cells))
+        normalized = []
+        for label in SHEET_COLUMN_ORDER:
+            idx = CANONICAL_COLUMNS.index(label)
+            cell = row.cells[idx]
+            if cell is None:
+                normalized.append("")
+            else:
+                norm = re.sub(r'[\t\r\n]+', ' ', str(cell)).strip()
+                normalized.append(norm)
+        lines.append("\t".join(normalized))
     return "\r\n".join(lines)
+

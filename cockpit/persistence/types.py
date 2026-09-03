@@ -127,7 +127,7 @@ class AuditBomComponent:
     ref_des: str
     mount_type: str  # Literal['T', 'S']
     description: str | None
-    find_number: int
+    find_number: str
 
 
 @dataclass(frozen=True)
@@ -136,7 +136,7 @@ class AuditBomComponentDraft:
     component_mpn: str
     ref_des: str
     mount_type: str  # Literal['T', 'S']
-    find_number: int
+    find_number: str
     description: str | None = None
 
 

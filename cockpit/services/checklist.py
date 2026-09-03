@@ -1,3 +1,4 @@
+from cockpit.utils.sorting import natural_sort_key
 """Checklist service."""
 
 import logging
@@ -91,7 +92,7 @@ class ChecklistService:
         for mpn, data in grouped.items():
             if not data["ref_des_list"]:
                 continue
-            index[mpn] = (data["find_number"], tuple(sorted(data["ref_des_list"])))
+            index[mpn] = (data["find_number"], tuple(sorted(data["ref_des_list"], key=natural_sort_key)))
             
         return index
 
@@ -129,15 +130,19 @@ class ChecklistService:
                 ref_des_list=ref_des_list
             ))
 
-        def sort_key(row_view: ChecklistRowView) -> tuple[bool, int, int]:
-            return (row_view.find_number is None, row_view.find_number or 0, row_view.key.item_id)
+        def sort_key(row_view: ChecklistRowView) -> tuple:
+            return (row_view.find_number is None, natural_sort_key(row_view.find_number), row_view.key.item_id)
             
         tht_views.sort(key=sort_key)
 
         notes_sf = next((sf for sf in source_files if sf.file_category == SourceFileCategory.NOTES.value), None)
         notes_docx_path = pathlib.Path(notes_sf.local_storage_path) if notes_sf else None
 
-        tht_placement_count: int = sum(len(ref_des_list) for _, ref_des_list in tht_index.values())
+        tht_placement_count: int = len({
+            ref_des
+            for _, ref_des_list in tht_index.values()
+            for ref_des in ref_des_list
+        })
 
         return ActiveAuditView(
             audit_id=audit.id,

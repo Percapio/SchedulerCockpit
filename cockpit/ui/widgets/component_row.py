@@ -25,7 +25,7 @@ class ClickableLabel(QLabel):
 
 @dataclass(frozen=True)
 class ComponentRowFields:
-    find_number: int | None
+    find_number: str | None
     mpn: str
     description: str | None
     ref_des_list: tuple[str, ...]

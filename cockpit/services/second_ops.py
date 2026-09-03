@@ -1,3 +1,4 @@
+from cockpit.utils.sorting import natural_sort_key
 import re
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -115,7 +116,7 @@ def mount_label(code: MountCode) -> str:
 
 @dataclass(frozen=True)
 class SecondOpsCandidate:
-    find_number: int
+    find_number: str
     component_mpn: str
     description: str | None
     mount_type: MountCode
@@ -176,6 +177,7 @@ def list_candidates_for_open_audits(
     result = []
     for audit_id, data in grouped.items():
         if data["candidates"]:
+            data["candidates"].sort(key=lambda c: natural_sort_key(c.find_number))
             result.append(AuditCandidates(
                 audit_id=audit_id,
                 part_number=data["part_number"],

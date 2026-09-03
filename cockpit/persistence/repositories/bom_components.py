@@ -16,7 +16,7 @@ class PersistedBomLine:
     part_number: str
     split_suffix: str
     work_order_ref: str
-    find_number: int
+    find_number: str
     component_mpn: str
     description: str | None
     mount_type: MountCode
@@ -32,6 +32,13 @@ class AuditBomComponentRepository:
         if not drafts:
             raise InvalidArgumentError("drafts", drafts, "Cannot insert empty drafts list")
 
+        seen = set()
+        for d in drafts:
+            key = (d.source_file_id, d.find_number, d.ref_des)
+            if key in seen:
+                raise DuplicateRefDesError(d.source_file_id, d.ref_des)
+            seen.add(key)
+        
         try:
             cur = self._conn.cursor()
             cur.executemany(
@@ -126,7 +133,7 @@ class AuditBomComponentRepository:
                 FROM active_audits a
                 JOIN source_files sf ON a.id = sf.audit_id AND sf.file_category = 'BOM'
                 JOIN audit_bom_components abc ON sf.id = abc.source_file_id
-                ORDER BY a.id ASC, abc.find_number ASC
+                ORDER BY a.id ASC
             """)
             return [
                 PersistedBomLine(

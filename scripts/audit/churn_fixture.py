@@ -140,7 +140,7 @@ def seed_churn_fixture(destination_root: pathlib.Path, reference_page_count: int
         for idx, (mpn, rd, mount) in enumerate(placements):
             bom_drafts.append(AuditBomComponentDraft(
                 source_file_id=bom_sf.id, component_mpn=mpn,
-                ref_des=rd, mount_type=mount, description="Test component", find_number=idx+1
+                ref_des=rd, mount_type=mount, description="Test component", find_number=str(idx+1)
             ))
             if mount == 'T':
                 tht_drafts.append(ThtChecklistItemDraft(

@@ -122,18 +122,39 @@ def choose_bom_sheet(path: pathlib.Path, available_sheet_names: list[str], decla
     })
 
 
-def coerce_find_number(raw: Any, path: pathlib.Path, mpn: str) -> int:
-    if raw is None or str(raw).strip() == "":
-        raise MalformedBomError(path, "MISSING_FIND_NUMBER", {"mpn": mpn})
-    try:
-        fval = float(raw)
-        ival = int(fval)
-        if fval != ival or ival < 1:
-            raise MalformedBomError(path, "INVALID_FIND_NUMBER", {"mpn": mpn, "raw": raw})
-        return ival
-    except (ValueError, TypeError):
-        raise MalformedBomError(path, "INVALID_FIND_NUMBER", {"mpn": mpn, "raw": raw})
 
+FIND_NUMBER_GRAMMAR = re.compile(r"^[0-9]+[A-Za-z]?$")
+
+def is_number(raw) -> bool:
+    if isinstance(raw, bool):
+        return False
+    return isinstance(raw, (int, float))
+
+def text_of(raw) -> str:
+    return str(raw)
+
+def leading_digits_of(candidate: str) -> int:
+    m = re.match(r"^([0-9]+)", candidate)
+    return int(m.group(1))
+
+def coerce_find_number(raw, path, mpn: str) -> str:
+    if raw is None or text_of(raw).strip() == "":
+        raise MalformedBomError(path, "MISSING_FIND_NUMBER", {"mpn": mpn})
+
+    if is_number(raw):
+        whole = int(raw)
+        if whole != raw or whole < 1:
+            raise MalformedBomError(path, "INVALID_FIND_NUMBER", {"mpn": mpn, "raw": raw})
+        return text_of(whole)
+
+    candidate = text_of(raw).strip().upper()
+    if not FIND_NUMBER_GRAMMAR.match(candidate):
+        raise MalformedBomError(path, "INVALID_FIND_NUMBER", {"mpn": mpn, "raw": raw})
+    
+    if leading_digits_of(candidate) < 1:
+        raise MalformedBomError(path, "INVALID_FIND_NUMBER", {"mpn": mpn, "raw": raw})
+        
+    return candidate
 
 def _workbook_has_strike_runs(path: pathlib.Path) -> bool:
     """Cheap pre-check: does any string carry run-level strikethrough?

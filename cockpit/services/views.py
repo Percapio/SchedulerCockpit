@@ -147,7 +147,7 @@ class ChecklistRowView:
     key: ChecklistRowKey
     primary_label: str
     secondary_label: str | None = None
-    find_number: int | None = None
+    find_number: str | None = None
     ref_des_list: tuple[str, ...] = ()
 
 

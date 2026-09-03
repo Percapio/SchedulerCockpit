@@ -130,7 +130,7 @@ class ForeignKeyMismatch(PersistenceError):
 
 
 class DuplicateRefDesError(PersistenceError):
-    """UNIQUE(source_file_id, ref_des) violated on audit_bom_components."""
+    """UNIQUE(source_file_id, find_number, ref_des) violated on audit_bom_components."""
     def __init__(self, source_file_id: int, ref_des: str):
         super().__init__(f"Duplicate RefDes '{ref_des}' for source_file_id={source_file_id}")
         self.source_file_id = source_file_id

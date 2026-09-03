@@ -44,7 +44,7 @@ def test_schema_v13_initialization_and_constraints(tmp_path, dummy_registry):
     # Check version is 17
     cur = conn.cursor()
     cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
-    assert cur.fetchone()["version"] == 17
+    assert cur.fetchone()["version"] == 18
 
     # Test inserting new statuses (FSU, AOI, OPS)
     for status in [AuditStatus.FSU, AuditStatus.AOI, AuditStatus.OPS]:

@@ -41,7 +41,7 @@ def test_fresh_database_reaches_v17(tmp_path, null_registry):
 
     assert conn.execute(
         "SELECT version FROM schema_version WHERE singleton_guard = 1"
-    ).fetchone()["version"] == 17
+    ).fetchone()["version"] == 18
     assert "find_number" in _columns(conn, "audit_bom_components")
 
 
@@ -52,7 +52,30 @@ def test_v17_adds_the_missing_column(tmp_path, null_registry):
     migrate(conn, null_registry)
 
     # Reproduce the legacy shape: drop the column and wind the version back.
-    conn.execute("ALTER TABLE audit_bom_components DROP COLUMN find_number")
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    # For backfill tests, we need to preserve the inserted data
+    data = conn.execute("SELECT id, source_file_id, component_mpn, ref_des, mount_type, description FROM audit_bom_components").fetchall()
+    
+    conn.execute("DROP TABLE audit_bom_components")
+    conn.execute("""
+        CREATE TABLE audit_bom_components (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_file_id  INTEGER NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
+            component_mpn   TEXT    NOT NULL,
+            ref_des         TEXT    NOT NULL,
+            mount_type      TEXT    NOT NULL CHECK (mount_type IN ('T','S')),
+            description     TEXT    NULL,
+            UNIQUE (source_file_id, ref_des)
+        )
+    """)
+    for r in data:
+        conn.execute(
+            "INSERT INTO audit_bom_components (id, source_file_id, component_mpn, ref_des, mount_type, description) VALUES (?, ?, ?, ?, ?, ?)",
+            (r["id"], r["source_file_id"], r["component_mpn"], r["ref_des"], r["mount_type"], r["description"])
+        )
+    conn.execute("PRAGMA foreign_keys = ON")
+
     conn.execute("UPDATE schema_version SET version = 16 WHERE singleton_guard = 1")
     assert "find_number" not in _columns(conn, "audit_bom_components")
 
@@ -71,7 +94,7 @@ def test_v17_is_idempotent(tmp_path, null_registry):
     assert migrate_to_v17(conn, null_registry) is False
     assert conn.execute(
         "SELECT version FROM schema_version WHERE singleton_guard = 1"
-    ).fetchone()["version"] == 17
+    ).fetchone()["version"] == 18
 
 
 def test_bom_reads_work_after_the_repair(tmp_path, null_registry):
@@ -79,7 +102,30 @@ def test_bom_reads_work_after_the_repair(tmp_path, null_registry):
     conn = _open(tmp_path / "repaired.db")
     migrate(conn, null_registry)
 
-    conn.execute("ALTER TABLE audit_bom_components DROP COLUMN find_number")
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    # For backfill tests, we need to preserve the inserted data
+    data = conn.execute("SELECT id, source_file_id, component_mpn, ref_des, mount_type, description FROM audit_bom_components").fetchall()
+    
+    conn.execute("DROP TABLE audit_bom_components")
+    conn.execute("""
+        CREATE TABLE audit_bom_components (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_file_id  INTEGER NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
+            component_mpn   TEXT    NOT NULL,
+            ref_des         TEXT    NOT NULL,
+            mount_type      TEXT    NOT NULL CHECK (mount_type IN ('T','S')),
+            description     TEXT    NULL,
+            UNIQUE (source_file_id, ref_des)
+        )
+    """)
+    for r in data:
+        conn.execute(
+            "INSERT INTO audit_bom_components (id, source_file_id, component_mpn, ref_des, mount_type, description) VALUES (?, ?, ?, ?, ?, ?)",
+            (r["id"], r["source_file_id"], r["component_mpn"], r["ref_des"], r["mount_type"], r["description"])
+        )
+    conn.execute("PRAGMA foreign_keys = ON")
+
     conn.execute("UPDATE schema_version SET version = 16 WHERE singleton_guard = 1")
 
     repo = AuditBomComponentRepository(conn)
@@ -138,7 +184,30 @@ def test_v17_backfills_from_the_stored_workbook(tmp_path):
             (mpn, ref_des)
         )
 
-    conn.execute("ALTER TABLE audit_bom_components DROP COLUMN find_number")
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    # For backfill tests, we need to preserve the inserted data
+    data = conn.execute("SELECT id, source_file_id, component_mpn, ref_des, mount_type, description FROM audit_bom_components").fetchall()
+    
+    conn.execute("DROP TABLE audit_bom_components")
+    conn.execute("""
+        CREATE TABLE audit_bom_components (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_file_id  INTEGER NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
+            component_mpn   TEXT    NOT NULL,
+            ref_des         TEXT    NOT NULL,
+            mount_type      TEXT    NOT NULL CHECK (mount_type IN ('T','S')),
+            description     TEXT    NULL,
+            UNIQUE (source_file_id, ref_des)
+        )
+    """)
+    for r in data:
+        conn.execute(
+            "INSERT INTO audit_bom_components (id, source_file_id, component_mpn, ref_des, mount_type, description) VALUES (?, ?, ?, ?, ?, ?)",
+            (r["id"], r["source_file_id"], r["component_mpn"], r["ref_des"], r["mount_type"], r["description"])
+        )
+    conn.execute("PRAGMA foreign_keys = ON")
+
     conn.execute("UPDATE schema_version SET version = 16 WHERE singleton_guard = 1")
 
     migrate_to_v17(conn, registry)
@@ -184,7 +253,30 @@ def test_v17_tolerates_an_unreadable_workbook(tmp_path):
         "VALUES (5, 'X', 'R1', 'S', NULL, 3)"
     )
 
-    conn.execute("ALTER TABLE audit_bom_components DROP COLUMN find_number")
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    # For backfill tests, we need to preserve the inserted data
+    data = conn.execute("SELECT id, source_file_id, component_mpn, ref_des, mount_type, description FROM audit_bom_components").fetchall()
+    
+    conn.execute("DROP TABLE audit_bom_components")
+    conn.execute("""
+        CREATE TABLE audit_bom_components (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_file_id  INTEGER NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
+            component_mpn   TEXT    NOT NULL,
+            ref_des         TEXT    NOT NULL,
+            mount_type      TEXT    NOT NULL CHECK (mount_type IN ('T','S')),
+            description     TEXT    NULL,
+            UNIQUE (source_file_id, ref_des)
+        )
+    """)
+    for r in data:
+        conn.execute(
+            "INSERT INTO audit_bom_components (id, source_file_id, component_mpn, ref_des, mount_type, description) VALUES (?, ?, ?, ?, ?, ?)",
+            (r["id"], r["source_file_id"], r["component_mpn"], r["ref_des"], r["mount_type"], r["description"])
+        )
+    conn.execute("PRAGMA foreign_keys = ON")
+
     conn.execute("UPDATE schema_version SET version = 16 WHERE singleton_guard = 1")
 
     assert migrate_to_v17(conn, registry) is True

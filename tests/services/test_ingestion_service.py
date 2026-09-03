@@ -168,7 +168,7 @@ def test_ingest_all_smt_board_persists_empty_tht_checklist(ingestion_service, mo
             mount_type="S",
             ref_des_raw="C1",
             ref_des_list=("C1",),
-            find_number=1
+            find_number='1'
         )
     ]
     
@@ -212,7 +212,7 @@ def test_ingest_mixed_board_reports_tht_count_not_bom_count(ingestion_service, m
     monkeypatch.setattr("cockpit.ingestion.parsers.traveler.parse", lambda p, cm: None)
     
     bom_items = [
-        BomItem(component_mpn="SMT-1", description="SMT Component", mount_type="S", ref_des_raw="C1", ref_des_list=("C1",), find_number=1),
+        BomItem(component_mpn="SMT-1", description="SMT Component", mount_type="S", ref_des_raw="C1", ref_des_list=("C1",), find_number='1'),
         BomItem(component_mpn="SMT-2", description="SMT Component 2", mount_type="S", ref_des_raw="C2", ref_des_list=("C2",), find_number=2),
         BomItem(component_mpn="SMT-3", description="SMT Component 3", mount_type="S", ref_des_raw="C3", ref_des_list=("C3",), find_number=3),
         BomItem(component_mpn="THT-1", description="THT Component", mount_type="T", ref_des_raw="R1", ref_des_list=("R1",), find_number=4),

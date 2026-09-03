@@ -83,14 +83,14 @@ def _tht_row_view() -> ChecklistRowView:
         key=ChecklistRowKey(kind=ChecklistRowKind.THT, item_id=1),
         primary_label="MPN-1",
         secondary_label="a description",
-        find_number=1,
+        find_number='1',
         ref_des_list=("R1", "R2", "C7"),
     )
 
 
 def _bom_row_view() -> AuditBomRowView:
     return AuditBomRowView(
-        find_number=1,
+        find_number='1',
         component_mpn="MPN-1",
         description="a description",
         mount_type="S",
@@ -100,7 +100,7 @@ def _bom_row_view() -> AuditBomRowView:
 
 def _core_fields() -> ComponentRowFields:
     return ComponentRowFields(
-        find_number=1,
+        find_number='1',
         mpn="MPN-1",
         description="a description",
         ref_des_list=("R1", "R2", "C7"),

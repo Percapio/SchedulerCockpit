@@ -1,3 +1,4 @@
+from cockpit.utils.sorting import natural_sort_key
 from dataclasses import dataclass
 from typing import Tuple, List
 from cockpit.persistence.repositories.audits import AuditRepository
@@ -9,7 +10,7 @@ from cockpit.layout.constants import PAGE_SIDE_LABELS
 
 @dataclass(frozen=True)
 class SetupBomRow:
-    item_number: int
+    item_number: str
     part_number: str
     description: str | None
     reference_designators: Tuple[str, ...]
@@ -78,11 +79,11 @@ class SetupBomService:
                     item_number=find_number,
                     part_number=mpn,
                     description=desc,
-                    reference_designators=tuple(sorted(matching_refs))
+                    reference_designators=tuple(sorted(matching_refs, key=natural_sort_key))
                 ))
                 
         # sort by find_number
-        rows.sort(key=lambda r: r.item_number)
+        rows.sort(key=lambda r: natural_sort_key(r.item_number))
         return rows
 
     def print_bom(self, rows: List[SetupBomRow], printer: QPrinter) -> None:
@@ -98,7 +99,7 @@ class SetupBomService:
         for row in rows:
             desc = html.escape(row.description or "")
             refs = html.escape(" ".join(row.reference_designators))
-            html_content.append(f"<tr><td>{row.item_number}</td><td>{html.escape(row.part_number)}</td><td>{desc}</td><td>{refs}</td></tr>")
+            html_content.append(f"<tr><td>{html.escape(str(row.item_number))}</td><td>{html.escape(row.part_number)}</td><td>{desc}</td><td>{refs}</td></tr>")
             
         html_content.append("</table>")
         doc.setHtml("".join(html_content))

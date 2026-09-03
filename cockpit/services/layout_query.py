@@ -1,3 +1,4 @@
+from cockpit.utils.sorting import natural_sort_key
 """Service for layout and rendering queries."""
 
 from cockpit.persistence.repositories.source_files import SourceFileRepository
@@ -11,7 +12,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class AuditBomRowView:
-    find_number: int
+    find_number: str
     component_mpn: str
     description: str | None
     mount_type: str
@@ -67,6 +68,19 @@ class LayoutQueryService:
         return tuple(HighlightCoord(c.ref_des, c.page_index, c.x1, c.y1, c.x2, c.y2) for c in coords)
 
     def locate_refdes(self, audit_id: int, ref_des: str) -> RefDesLocation | None:
+        """
+        Resolves a Ref_Des to the BOM line that owns it. Where a split job lists the
+        designator on more than one line, the lowest Find# wins.
+
+        INVARIANT -- shared with SelectionCoordinator.on_renderer_refdes_clicked:
+          that caller re-resolves the THT branch itself, by taking the first row of
+          ActiveAuditView.tht_rows carrying the designator. It agrees with this
+          function ONLY because tht_rows is ordered by natural_sort_key(find_number)
+          (checklist.py sort_key, see 4.2) and this function selects by the same key.
+          Change either ordering and the two desynchronise silently: mount_type is
+          read off one BOM line while the row that gets selected and scrolled to
+          belongs to another. Neither path raises when they disagree.
+        """
         bom_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.BOM)
         if bom_sf is None:
             return None
@@ -76,8 +90,10 @@ class LayoutQueryService:
             return None
         if len(matches) > 1:
             import logging
-            logging.getLogger(__name__).warning("ref_des %s maps to %d components; routing to first", ref_des, len(matches))
-        return RefDesLocation(mpn=matches[0].component_mpn, mount_type=matches[0].mount_type)
+            logging.getLogger(__name__).debug("ref_des %s shared across %d split lines; routing to lowest Find#", ref_des, len(matches))
+        
+        owning_line = min(matches, key=lambda c: natural_sort_key(c.find_number))
+        return RefDesLocation(mpn=owning_line.component_mpn, mount_type=owning_line.mount_type)
 
     def list_bom_rows_for_audit(self, audit_id: int) -> tuple[AuditBomRowView, ...]:
         bom_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.BOM)
@@ -102,13 +118,13 @@ class LayoutQueryService:
             
         # Build views, sorting by Find#
         views = []
-        for mpn, data in sorted(grouped.items(), key=lambda item: item[1]["find_number"]):
+        for mpn, data in sorted(grouped.items(), key=lambda item: natural_sort_key(item[1]["find_number"])):
             views.append(AuditBomRowView(
                 find_number=data["find_number"],
                 component_mpn=mpn,
                 description=data["description"],
                 mount_type=data["mount_type"],
-                ref_des_list=tuple(sorted(data["ref_des_list"]))
+                ref_des_list=tuple(sorted(data["ref_des_list"], key=natural_sort_key))
             ))
             
         return tuple(views)

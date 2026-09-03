@@ -10,7 +10,7 @@ HeaderLayout = Literal["canonical", "legacy"]
 
 @dataclass(frozen=True)
 class BomItem:
-    find_number: int                    # Find# column (row[0]); BOM line ordinal
+    find_number: str                    # Find# column (row[0]); BOM line identifier
     component_mpn: str                  # PartNum column, stripped
     description: str | None             # Description column
     ref_des_raw: str | None             # Ref_Des column (original text)

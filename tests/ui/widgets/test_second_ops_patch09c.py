@@ -36,7 +36,7 @@ def test_overview_columns(qtbot, terms_controller, tmp_path):
     line1.part_number = 'PN1'
     line1.split_suffix = ''
     line1.work_order_ref = 'WO1'
-    line1.find_number = 10
+    line1.find_number = '10'
     line1.component_mpn = 'Fuse'
     line1.description = 'DESC1'
     line1.mount_type = 'T'
@@ -69,7 +69,7 @@ def test_dialog_no_stored_size(qtbot, terms_controller, tmp_path):
     line1.part_number = 'PN1'
     line1.split_suffix = ''
     line1.work_order_ref = 'WO1'
-    line1.find_number = 10
+    line1.find_number = '10'
     line1.component_mpn = 'Fuse'
     line1.description = 'DESC1'
     line1.mount_type = 'T'
@@ -87,7 +87,7 @@ def test_resize_then_close_then_reopen(qtbot, terms_controller, tmp_path):
     line1.part_number = 'PN1'
     line1.split_suffix = ''
     line1.work_order_ref = 'WO1'
-    line1.find_number = 10
+    line1.find_number = '10'
     line1.component_mpn = 'Fuse'
     line1.description = 'DESC1'
     line1.mount_type = 'T'
@@ -112,7 +112,7 @@ def test_malformed_size_fallback(qtbot, terms_controller, tmp_path):
     line1.part_number = 'PN1'
     line1.split_suffix = ''
     line1.work_order_ref = 'WO1'
-    line1.find_number = 10
+    line1.find_number = '10'
     line1.component_mpn = 'Fuse'
     line1.description = 'DESC1'
     line1.mount_type = 'T'

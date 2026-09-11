@@ -72,7 +72,7 @@ def ingestion_service(tmp_path):
     
     # create an audit
     audit = audit_repo.create(ActiveAuditDraft(
-        part_number="TEST-123",
+        part_number="B123456",
         work_order_ref="WO-001",
         quantity=10
     ))
@@ -146,11 +146,11 @@ def test_ingest_all_smt_board_persists_empty_tht_checklist(ingestion_service, mo
     from cockpit.persistence.types import ActiveAuditDraft
     
     # 1. Create files
-    bom_path = tmp_path / "TEST-123 AUDIT BOM.xlsx"
+    bom_path = tmp_path / "B123456 AUDIT BOM.xlsx"
     bom_path.write_text("a")
-    trav_path = tmp_path / "TEST-123 Traveler.xlsx"
+    trav_path = tmp_path / "B123456 Traveler.xlsx"
     trav_path.write_text("a")
-    eco_path = tmp_path / "TEST-123 ECO.docx"
+    eco_path = tmp_path / "B123456 ECO.docx"
     eco_path.write_text("a")
     
     paths = [bom_path, trav_path, eco_path]
@@ -173,7 +173,7 @@ def test_ingest_all_smt_board_persists_empty_tht_checklist(ingestion_service, mo
     ]
     
     intent_mock = IngestionIntent(
-        audit_draft=ActiveAuditDraft(part_number="TEST-123", work_order_ref="WO", quantity=1),
+        audit_draft=ActiveAuditDraft(part_number="B123456", work_order_ref="WO", quantity=1),
         bom_items=bom_items,
         )
     
@@ -198,11 +198,11 @@ def test_ingest_mixed_board_reports_tht_count_not_bom_count(ingestion_service, m
     from cockpit.ingestion.parsers.results import BomItem, IngestionIntent
     from cockpit.persistence.types import ActiveAuditDraft
     
-    bom_path = tmp_path / "TEST-123 AUDIT BOM.xlsx"
+    bom_path = tmp_path / "B123456 AUDIT BOM.xlsx"
     bom_path.write_text("a")
-    trav_path = tmp_path / "TEST-123 Traveler.xlsx"
+    trav_path = tmp_path / "B123456 Traveler.xlsx"
     trav_path.write_text("a")
-    eco_path = tmp_path / "TEST-123 ECO.docx"
+    eco_path = tmp_path / "B123456 ECO.docx"
     eco_path.write_text("a")
     
     paths = [bom_path, trav_path, eco_path]
@@ -220,7 +220,7 @@ def test_ingest_mixed_board_reports_tht_count_not_bom_count(ingestion_service, m
     ]
     
     intent_mock = IngestionIntent(
-        audit_draft=ActiveAuditDraft(part_number="TEST-123", work_order_ref="WO", quantity=1),
+        audit_draft=ActiveAuditDraft(part_number="B123456", work_order_ref="WO", quantity=1),
         bom_items=bom_items,
         )
     

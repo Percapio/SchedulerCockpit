@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 # Sized against one worst-case single-page rasterize at unscaled 4K (~3.6 s per
 # Patch01 section 8.2). Beyond this the worker is wrong, not slow, and the exit
 # path stops waiting on it.
+FETCH_WATCHDOG_TIMEOUT_MS = 20_000
 RENDER_SHUTDOWN_TIMEOUT_MS = 10_000
 
 
@@ -52,7 +53,8 @@ class MainWindow(QMainWindow):
         settings: QSettings,
         style_controller=None,
         runtime_settings_controller=None,
-        second_ops_settings_controller=None
+        second_ops_settings_controller=None,
+        source_root_controller=None,
     ) -> None:
         super().__init__()
         self._theme = theme
@@ -60,14 +62,16 @@ class MainWindow(QMainWindow):
         self._bootstrapped = bootstrapped_app
         self._audit_read_svc = audit_read_svc
         self._holiday_svc = holiday_svc
+        self._source_root_controller = source_root_controller
         
         self.setWindowTitle("Local Audit & Routing Checklist Utility")
         self.resize(800, 600)
         
-        self._worker_in_flight = False
+        self._operation_in_flight = False
         self._close_requested = False
         self._worker = None
         self._thread = None
+        self._orphaned_workers = []
         self._second_ops_review_dialogs = {}
         self._next_registration_serial = 0
         
@@ -93,6 +97,7 @@ class MainWindow(QMainWindow):
         self.picker.label_toggle_requested.connect(self._on_label_toggle_requested)
         self.picker.photos_toggle_requested.connect(self._on_photos_toggle_requested)
         self.picker.new_audit_requested.connect(self._on_picker_new_audit_requested)
+        self.picker.fetch_job_requested.connect(self._on_picker_fetch_job_requested)
         self.picker.holidays_requested.connect(self._on_holidays_requested)
         self.picker.second_ops_requested.connect(self._on_overview_second_ops_requested)
         self.stacked.addWidget(self.picker)
@@ -194,7 +199,8 @@ class MainWindow(QMainWindow):
                 self._runtime_settings_controller,
                 self._second_ops_settings_controller,
                 self._bootstrapped.config,
-                self
+                self,
+                source_root_controller=self._source_root_controller
             )
             dialog.reset_requested.connect(self._on_reset_requested)
             dialog.exec()
@@ -203,7 +209,7 @@ class MainWindow(QMainWindow):
                 self._recompute_and_refresh()
 
     def _on_reset_requested(self) -> None:
-        if self._worker_in_flight:
+        if self._operation_in_flight:
             QMessageBox.warning(self, "Cannot Reset", "An ingestion is currently in flight. Please wait for it to finish.")
             return
 
@@ -401,6 +407,165 @@ class MainWindow(QMainWindow):
     def _on_picker_new_audit_requested(self) -> None:
         self._show_drop_area()
 
+    def _on_picker_fetch_job_requested(self) -> None:
+        if self._source_root_controller is None:
+            return
+            
+        from cockpit.settings.source_root import SourceRootState
+        state, root_path = self._source_root_controller.source_root()
+        if state != SourceRootState.CONFIGURED:
+            QMessageBox.information(self, "Setup Required", "Please configure the source share root in Settings first.")
+            return
+            
+        last_job = self._settings.value("ingestion/last_job_number", "")
+        
+        from cockpit.ui.widgets.fetch_dialog import FetchJobDialog
+        self._fetch_dialog = FetchJobDialog(str(last_job), self)
+        self._fetch_dialog.fetch_requested.connect(lambda jn: self._start_job_fetch(jn, root_path))
+        self._fetch_dialog.rejected.connect(self._on_fetch_dialog_cancelled)
+        
+        # Don't use exec() here because we want to run the fetch concurrently and let the dialog close or update
+        # Wait, if it's a modal dialog and we show() it, we can't block. Wait, QDialog.exec() runs a nested event loop.
+        # If we use exec(), the signals still fire! So exec() is fine, we just close it from the signal handlers.
+        self._fetch_dialog.exec()
+
+    def _start_job_fetch(self, job_number: str, root_path: pathlib.Path) -> None:
+        if self._operation_in_flight:
+            return
+            
+        self._operation_in_flight = True
+        
+        from cockpit.ui.job_fetch_worker import JobFetchWorker
+        self._fetch_thread = QThread()
+        self._fetch_worker = JobFetchWorker(job_number, root_path)
+        self._fetch_worker.moveToThread(self._fetch_thread)
+        
+        self._fetch_thread.started.connect(self._fetch_worker.run)
+        
+        self._fetch_worker.succeeded_signal.connect(self._on_fetch_succeeded)
+        self._fetch_worker.failed_signal.connect(self._on_fetch_failed)
+        
+        self._fetch_watchdog = QTimer(self)
+        self._fetch_watchdog.setSingleShot(True)
+        self._fetch_watchdog.timeout.connect(self._on_fetch_watchdog_timeout)
+        self._fetch_watchdog.start(FETCH_WATCHDOG_TIMEOUT_MS)
+        
+        self._fetch_thread.start()
+
+    def _on_fetch_dialog_cancelled(self) -> None:
+        if self._operation_in_flight and hasattr(self, "_fetch_thread") and self._fetch_thread is not None:
+            self._abandon_fetch_worker()
+
+    def _abandon_fetch_worker(self) -> None:
+        # Phase 46 abandonment
+        self._operation_in_flight = False
+        if hasattr(self, "_fetch_watchdog"):
+            self._fetch_watchdog.stop()
+            
+        if hasattr(self, "_fetch_thread") and self._fetch_thread is not None:
+            # We don't quit() or wait() because network shares hang indefinitely
+            self._fetch_thread.finished.connect(self._fetch_worker.deleteLater)
+            self._fetch_thread.finished.connect(self._fetch_thread.deleteLater)
+            
+            self._orphaned_workers.append((self._fetch_thread, self._fetch_worker))
+            
+            # Disconnect signals so they don't do anything if they ever wake up
+            try:
+                self._fetch_worker.succeeded_signal.disconnect(self._on_fetch_succeeded)
+                self._fetch_worker.failed_signal.disconnect(self._on_fetch_failed)
+            except Exception:
+                pass
+                
+            self._fetch_thread = None
+            self._fetch_worker = None
+
+    def _on_fetch_watchdog_timeout(self) -> None:
+        self._abandon_fetch_worker()
+        
+        from cockpit.ingestion.errors import FetchTimedOut
+        state, root_path = self._source_root_controller.source_root()
+        err = FetchTimedOut(root_path, FETCH_WATCHDOG_TIMEOUT_MS)
+        
+        if hasattr(self, "_fetch_dialog") and self._fetch_dialog is not None:
+            self._fetch_dialog.reject()
+            
+        self._on_failed(FailurePayload.from_exception(err, "Fetch timed out"))
+
+    def _on_fetch_failed(self, payload: FailurePayload) -> None:
+        self._operation_in_flight = False
+        self._fetch_watchdog.stop()
+        
+        self._fetch_thread.quit()
+        self._fetch_thread.wait()
+        self._fetch_worker.deleteLater()
+        self._fetch_thread.deleteLater()
+        self._fetch_thread = None
+        self._fetch_worker = None
+        
+        if hasattr(self, "_fetch_dialog") and self._fetch_dialog is not None:
+            self._fetch_dialog.reject()
+            
+        self._on_failed(payload)
+
+    def _on_fetch_succeeded(self, outcome) -> None:
+        self._operation_in_flight = False
+        self._fetch_watchdog.stop()
+        
+        self._fetch_thread.quit()
+        self._fetch_thread.wait()
+        self._fetch_worker.deleteLater()
+        self._fetch_thread.deleteLater()
+        self._fetch_thread = None
+        self._fetch_worker = None
+        
+        if hasattr(self, "_fetch_dialog") and self._fetch_dialog is not None:
+            self._fetch_dialog.accept()
+            
+        self._settings.setValue("ingestion/last_job_number", outcome.job_number)
+        
+        from cockpit.ingestion.locator import PendingSelection, LocatedFiles
+        if isinstance(outcome, PendingSelection):
+            from cockpit.ui.widgets.fetch_dialog import SelectSourcesDialog
+            dialog = SelectSourcesDialog(outcome, self)
+            if not dialog.exec():
+                return
+            
+            from cockpit.ingestion.locator import resolve_selection
+            try:
+                outcome = resolve_selection(outcome, dialog.choices)
+            except Exception as e:
+                self._on_failed(FailurePayload.from_exception(e, "Resolution failed"))
+                return
+                
+        # Now we have LocatedFiles
+        self._verify_and_ingest_located(outcome)
+
+    def _verify_and_ingest_located(self, outcome) -> None:
+        from cockpit.ingestion.filename_rules import derive_part_number_from_filename
+        part_number = derive_part_number_from_filename(outcome.quartet.bom_path)
+        
+        open_audits = self._audit_read_svc.open_audits_for_part_number(part_number)
+        if open_audits:
+            msg = f"There are already {len(open_audits)} open audit(s) for part number {part_number}:\n\n"
+            for a in open_audits:
+                msg += f"• WO: {a.work_order_ref}"
+                if a.split_suffix:
+                    msg += f"{a.split_suffix}"
+                msg += "\n"
+            msg += "\nAre you sure you want to ingest another copy?"
+            
+            reply = QMessageBox.question(self, "Duplicate Part Number", msg, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.No:
+                return
+                
+        paths = []
+        if outcome.quartet.bom_path: paths.append(outcome.quartet.bom_path)
+        if outcome.quartet.traveler_path: paths.append(outcome.quartet.traveler_path)
+        if outcome.quartet.notes_path: paths.append(outcome.quartet.notes_path)
+        if outcome.quartet.pdf_path: paths.append(outcome.quartet.pdf_path)
+        
+        self._on_drop_received(paths)
+
     def _on_holidays_requested(self) -> None:
         from cockpit.ui.widgets.holiday_dialog import HolidayDialog
         dialog = HolidayDialog(self._holiday_svc, self)
@@ -467,10 +632,10 @@ class MainWindow(QMainWindow):
         dialog.show()
 
     def _on_drop_received(self, paths: list[pathlib.Path]) -> None:
-        if self._worker_in_flight:
+        if self._operation_in_flight:
             return
             
-        self._worker_in_flight = True
+        self._operation_in_flight = True
         self.drop_area.setEnabled(False)
         self.progress_view.reset()
         self.stacked.setCurrentWidget(self.progress_view)
@@ -546,7 +711,7 @@ class MainWindow(QMainWindow):
         self.toast.show_cancel()
 
     def _on_worker_finished(self) -> None:
-        self._worker_in_flight = False
+        self._operation_in_flight = False
         self._worker = None
         self._thread = None
         self.drop_area.setEnabled(True)
@@ -555,7 +720,7 @@ class MainWindow(QMainWindow):
             self.close()
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        if self._worker_in_flight:
+        if self._operation_in_flight:
             event.ignore()
             confirmed = QMessageBox.question(
                 self, 

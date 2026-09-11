@@ -10,7 +10,10 @@ from cockpit.persistence.errors import (
 from cockpit.ingestion.errors import (
     AnchorNotFound, CategorizationError, CoercionError, CoordinateMapError, CrossValidationError,
     FileStorageError, GatekeeperViolation, HashingError, MalformedBomError, MalformedEcoError,
-    MalformedTravelerError
+    MalformedTravelerError,
+    SourceRootNotConfigured, SourceRootMalformed, SourceRootUnreachable, JobNumberMalformed,
+    JobDirectoryNotFound, JobDirectoryEscapesRoot, RequiredRoleMissing, JobNumberMismatch,
+    FetchTimedOut
 )
 from cockpit.services.completion import CleanupFailedError
 from cockpit.services.errors import PrintError
@@ -25,6 +28,16 @@ class FailurePayload:
     summary: str
     detail: list[tuple[str, str]]
     reason_code: str | None
+
+    @classmethod
+    def from_exception(cls, exc: Exception, title: str):
+        return cls(
+            exception_class=exc.__class__.__name__,
+            title=title,
+            summary=str(exc),
+            detail=[],
+            reason_code=None
+        )
 
 
 def render(exc: Exception) -> FailurePayload:
@@ -248,6 +261,87 @@ def render(exc: Exception) -> FailurePayload:
             summary="The database was updated successfully, but some physical files could not be deleted. The system will retry deleting them on the next application startup.",
             detail=detail,
             reason_code="CLEANUP_FAILED"
+        )
+
+    if isinstance(exc, SourceRootNotConfigured):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Source share not configured",
+            summary="You must configure the source share root before fetching jobs.",
+            detail=[],
+            reason_code="SOURCE_ROOT_NOT_CONFIGURED"
+        )
+
+    if isinstance(exc, SourceRootMalformed):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Source share path is invalid",
+            summary=f"The configured path '{exc.stored_value}' is not an absolute path.",
+            detail=[("stored_value", str(exc.stored_value))],
+            reason_code="SOURCE_ROOT_MALFORMED"
+        )
+
+    if isinstance(exc, SourceRootUnreachable):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Source share is unreachable",
+            summary="Could not read the configured share directory.",
+            detail=[("root", str(exc.root)), ("cause", str(exc.cause))],
+            reason_code="SOURCE_ROOT_UNREACHABLE"
+        )
+
+    if isinstance(exc, JobNumberMalformed):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Job number is invalid",
+            summary=f"The job number '{exc.raw}' does not match the required format (e.g. B142123).",
+            detail=[("raw", exc.raw)],
+            reason_code="JOB_NUMBER_MALFORMED"
+        )
+
+    if isinstance(exc, JobDirectoryNotFound):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Job directory not found",
+            summary=f"Could not find a directory for job {exc.job_number}.",
+            detail=[("resolved_path", str(exc.resolved_path))],
+            reason_code="JOB_DIRECTORY_NOT_FOUND"
+        )
+
+    if isinstance(exc, JobDirectoryEscapesRoot):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Security violation",
+            summary=f"The job directory for {exc.job_number} resolves outside the allowed root.",
+            detail=[("resolved_path", str(exc.resolved_path)), ("root", str(exc.root))],
+            reason_code="JOB_DIRECTORY_ESCAPES_ROOT"
+        )
+
+    if isinstance(exc, RequiredRoleMissing):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Missing required files",
+            summary=f"The job folder is missing required roles: {', '.join(exc.missing_roles)}",
+            detail=[("job_number", exc.job_number), ("present_files", ", ".join(exc.present_file_names))],
+            reason_code="REQUIRED_ROLE_MISSING"
+        )
+
+    if isinstance(exc, JobNumberMismatch):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Job number mismatch",
+            summary=f"The requested job number ({exc.job_number}) does not match the BOM filename token ({exc.derived_token}).",
+            detail=[("bom_file_name", exc.bom_file_name)],
+            reason_code="JOB_NUMBER_MISMATCH"
+        )
+
+    if isinstance(exc, FetchTimedOut):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Fetch timed out",
+            summary="The connection to the share took too long and was abandoned.",
+            detail=[("root", str(exc.root)), ("elapsed_ms", str(exc.elapsed_ms))],
+            reason_code="FETCH_TIMED_OUT"
         )
 
     # Catch-all

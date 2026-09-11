@@ -17,20 +17,22 @@ class CategorizedQuartet:
 
 def categorize(paths: Sequence[pathlib.Path]) -> CategorizedQuartet:
     """Assign each path in the validated trio/quartet to a role."""
+    from .roles import role_of, SourceRole
+
     bom_path = None
     traveler_path = None
     notes_path = None
     pdf_path = None
 
     for p in paths:
-        name_lower = p.name.lower()
-        if "audit bom" in name_lower:
+        role = role_of(p.name)
+        if role == SourceRole.BOM:
             bom_path = p
-        elif "traveler" in name_lower:
+        elif role == SourceRole.TRAVELER:
             traveler_path = p
-        elif p.suffix.lower() == ".docx":
+        elif role == SourceRole.NOTES:
             notes_path = p
-        elif p.suffix.lower() == ".pdf":
+        elif role == SourceRole.PDF:
             pdf_path = p
 
     if not bom_path:

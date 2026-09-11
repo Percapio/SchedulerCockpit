@@ -122,3 +122,68 @@ class CrossValidationError(IngestionError):
         super().__init__(f"Cross-validation failed: {reason} - {observed}")
         self.reason = reason
         self.observed = observed
+
+
+# ---------- fetch / locator ----------
+
+class SourceRootNotConfigured(IngestionError):
+    def __init__(self):
+        super().__init__("Source root is not configured.")
+
+
+class SourceRootMalformed(IngestionError):
+    def __init__(self, stored_value: str):
+        super().__init__(f"Source root is malformed: {stored_value}")
+        self.stored_value = stored_value
+
+
+class SourceRootUnreachable(IngestionError):
+    def __init__(self, root: pathlib.Path, cause: Exception):
+        super().__init__(f"Source root unreachable: {root} - {cause}")
+        self.root = root
+        self.cause = cause
+
+
+class JobNumberMalformed(IngestionError):
+    def __init__(self, raw: str):
+        super().__init__(f"Job number malformed: {raw}")
+        self.raw = raw
+
+
+class JobDirectoryNotFound(IngestionError):
+    def __init__(self, job_number: str, resolved_path: pathlib.Path):
+        super().__init__(f"Job directory not found for {job_number}: {resolved_path}")
+        self.job_number = job_number
+        self.resolved_path = resolved_path
+
+
+class JobDirectoryEscapesRoot(IngestionError):
+    def __init__(self, job_number: str, resolved_path: pathlib.Path, root: pathlib.Path):
+        super().__init__(f"Job directory escapes root for {job_number}: {resolved_path}")
+        self.job_number = job_number
+        self.resolved_path = resolved_path
+        self.root = root
+
+
+class RequiredRoleMissing(IngestionError):
+    def __init__(self, job_number: str, missing_roles: list[str], present_file_names: list[str]):
+        super().__init__(f"Required role missing for {job_number}: {missing_roles}")
+        self.job_number = job_number
+        self.missing_roles = missing_roles
+        self.present_file_names = present_file_names
+
+
+class JobNumberMismatch(IngestionError):
+    def __init__(self, job_number: str, bom_file_name: str, derived_token: str):
+        super().__init__(f"Job number mismatch: {job_number} != {derived_token} in {bom_file_name}")
+        self.job_number = job_number
+        self.bom_file_name = bom_file_name
+        self.derived_token = derived_token
+
+
+class FetchTimedOut(IngestionError):
+    def __init__(self, root: pathlib.Path, elapsed_ms: int):
+        super().__init__(f"Fetch timed out waiting on {root} after {elapsed_ms}ms")
+        self.root = root
+        self.elapsed_ms = elapsed_ms
+

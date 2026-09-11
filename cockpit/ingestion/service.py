@@ -92,6 +92,12 @@ class IngestionService:
         # In case of mismatch, cross_validation will catch it, but we need
         # a directory name now.
         temp_part_number = derive_part_number_from_filename(quartet.bom_path)
+        
+        from .locator import JOB_NUMBER_GRAMMAR
+        from .errors import JobNumberMalformed
+        if not JOB_NUMBER_GRAMMAR.match(temp_part_number):
+            raise JobNumberMalformed(temp_part_number)
+            
         audit_dir = self.file_storage_root / temp_part_number / "unsplit"
 
         try:

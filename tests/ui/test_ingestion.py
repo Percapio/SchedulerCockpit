@@ -114,7 +114,7 @@ def test_successful_ingestion(qtbot, main_window):
     # Wait for the worker to finish and the success toast to appear
     # This requires the worker thread to complete the ingest.
     # We can wait for the worker thread to quit
-    qtbot.waitUntil(lambda: main_window._worker_in_flight is False, timeout=5000)
+    qtbot.waitUntil(lambda: main_window._operation_in_flight is False, timeout=5000)
     
     assert main_window.toast.isVisible()
     assert main_window.stacked.currentWidget() == main_window.dashboard

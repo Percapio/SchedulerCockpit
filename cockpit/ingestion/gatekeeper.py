@@ -22,21 +22,22 @@ def validate(paths: Sequence[pathlib.Path]) -> None:
         if ext not in {".xlsx", ".csv", ".docx", ".pdf"}:
             raise GatekeeperViolation("UNSUPPORTED_EXTENSION", {"path": str(p), "extension": ext})
 
+    from .roles import role_of, SourceRole
+
     bom_count = 0
     traveler_count = 0
     notes_count = 0
     pdf_count = 0
 
     for p in paths:
-        name_lower = p.name.lower()
-        ext = p.suffix.lower()
-        if "audit bom" in name_lower:
+        role = role_of(p.name)
+        if role == SourceRole.BOM:
             bom_count += 1
-        elif "traveler" in name_lower:
+        elif role == SourceRole.TRAVELER:
             traveler_count += 1
-        elif ext == ".docx":
+        elif role == SourceRole.NOTES:
             notes_count += 1
-        elif ext == ".pdf":
+        elif role == SourceRole.PDF:
             pdf_count += 1
 
     if bom_count == 0:

@@ -350,6 +350,7 @@ class OpenAuditPicker(QWidget):
     ship_date_change_requested = pyqtSignal(int, object)  # (audit_id, date | None)
     ops_per_board_change_requested = pyqtSignal(int, object)  # (audit_id, float | None)
     new_audit_requested = pyqtSignal()
+    fetch_job_requested = pyqtSignal()
     holidays_requested = pyqtSignal()
     font_scale_change_requested = pyqtSignal(int)
     settings_requested = pyqtSignal()
@@ -405,8 +406,12 @@ class OpenAuditPicker(QWidget):
         title = QLabel("Select an Audit")
         title.setProperty("class", "h1")
         
-        self.new_btn = QPushButton("+ New audit")
-        self.new_btn.clicked.connect(self.new_audit_requested.emit)
+        self.new_btn = QPushButton("New audit...")
+        from PyQt6.QtWidgets import QMenu
+        menu = QMenu(self.new_btn)
+        menu.addAction("Fetch by job number...").triggered.connect(self.fetch_job_requested.emit)
+        menu.addAction("Manual upload...").triggered.connect(self.new_audit_requested.emit)
+        self.new_btn.setMenu(menu)
         
         self.holidays_btn = QPushButton("Holidays...")
         self.holidays_btn.clicked.connect(self._on_holidays_clicked)

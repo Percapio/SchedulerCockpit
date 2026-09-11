@@ -62,6 +62,7 @@ class SettingsDialog(QDialog):
         second_ops_settings_controller, # from cockpit.services.second_ops import SecondOpsSettingsController
         config,
         parent: QWidget | None = None,
+        source_root_controller=None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
@@ -115,6 +116,11 @@ class SettingsDialog(QDialog):
         if second_ops_settings_controller is not None:
             second_ops_group = self._build_second_ops_settings(second_ops_settings_controller)
             layout.addWidget(second_ops_group)
+            layout.addSpacing(12)
+            
+        if source_root_controller is not None:
+            source_root_group = self._build_source_root_settings(source_root_controller)
+            layout.addWidget(source_root_group)
             layout.addSpacing(12)
             
         reset_group = QGroupBox("Application Data")
@@ -227,6 +233,79 @@ class SettingsDialog(QDialog):
         # Maybe use small font?
         layout.addWidget(info)
         
+        return group
+
+    def _build_source_root_settings(self, controller) -> QGroupBox:
+        from cockpit.settings.source_root import SourceRootState, probe_source_root, RootProbeResult
+        from PyQt6.QtCore import QThread, pyqtSignal, QObject
+        
+        class ProbeWorker(QObject):
+            finished = pyqtSignal(object)
+            def __init__(self, path: pathlib.Path):
+                super().__init__()
+                self.path = path
+            def run(self):
+                self.finished.emit(probe_source_root(self.path))
+                
+        group = QGroupBox("Source Root")
+        layout = QVBoxLayout(group)
+        
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Path:"))
+        edit = QLineEdit()
+        
+        state, path = controller.source_root()
+        if state == SourceRootState.CONFIGURED:
+            edit.setText(str(path))
+        elif state == SourceRootState.MALFORMED:
+            edit.setText(str(path))
+            
+        row.addWidget(edit)
+        layout.addLayout(row)
+        
+        status_lbl = QLabel("")
+        layout.addWidget(status_lbl)
+        
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        validate_btn = QPushButton("Validate")
+        btn_row.addWidget(validate_btn)
+        layout.addLayout(btn_row)
+        
+        edit.textChanged.connect(controller.set_source_root)
+        
+        self._probe_thread = None
+        self._probe_worker = None
+        
+        def on_validate():
+            current_state, current_path = controller.source_root()
+            if current_state != SourceRootState.CONFIGURED:
+                status_lbl.setText("Error: Path must be absolute.")
+                return
+                
+            validate_btn.setEnabled(False)
+            status_lbl.setText("Checking...")
+            
+            self._probe_thread = QThread()
+            self._probe_worker = ProbeWorker(current_path)
+            self._probe_worker.moveToThread(self._probe_thread)
+            self._probe_thread.started.connect(self._probe_worker.run)
+            
+            def on_finished(result: RootProbeResult):
+                validate_btn.setEnabled(True)
+                if result == RootProbeResult.REACHABLE:
+                    status_lbl.setText("Reachable.")
+                elif result == RootProbeResult.REACHABLE_BUT_NO_JOB_TREE:
+                    status_lbl.setText("Reachable, but no job tree found.")
+                else:
+                    status_lbl.setText("Unreachable.")
+                self._probe_thread.quit()
+                self._probe_thread.wait()
+                
+            self._probe_worker.finished.connect(on_finished)
+            self._probe_thread.start()
+            
+        validate_btn.clicked.connect(on_validate)
         return group
 
     def _update_edit(self) -> None:

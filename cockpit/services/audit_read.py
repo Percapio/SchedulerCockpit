@@ -33,67 +33,72 @@ class AuditReadService:
         self._audit_repo = audit_repo
         self._holiday_svc = holiday_svc
 
+    def _map_to_digest(self, a, holidays, today_val) -> OpenAuditDigest:
+        meta = a.traveler_metadata or {}
+        
+        classification = classification_display(meta)
+        is_itar_flag = is_itar(meta)
+        
+        ship_date_obj = None
+        if a.ship_date:
+            try:
+                ship_date_obj = date.fromisoformat(a.ship_date)
+            except ValueError:
+                pass
+                
+        total_runtime = None
+        if a.feeder_setuptime is not None and a.smt_runtime is not None and a.tht_runtime is not None:
+            total_runtime = (
+                a.feeder_setuptime + a.smt_runtime + a.tht_runtime
+                + (a.aoi_runtime or 0.0)
+                + (a.ops_runtime or 0.0)
+                + (a.shipping_runtime or 0.0)
+            )
+            
+        start_by_val = start_by(ship_date_obj, total_runtime, holidays)
+        start_by_urgency = classify_urgency(start_by_val, today_val, holidays)
+        ship_urgency = classify_urgency(ship_date_obj, today_val, holidays)
+        
+        return OpenAuditDigest(
+            audit_id=a.id,
+            part_number=a.part_number,
+            work_order_ref=a.work_order_ref,
+            split_suffix=a.split_suffix,
+            quantity=a.quantity,
+            status=a.status,
+            updated_at=a.updated_at,
+            date_ingested=a.created_at,
+            ship_date=ship_date_obj,
+            lead_time_days=meta.get("lead_time_days"),
+            repeat=derive_repeat(meta),
+            classification=classification,
+            assembly_class=meta.get("assembly_class"),
+            process=meta.get("process"),
+            feeder_setuptime=a.feeder_setuptime,
+            smt_runtime=a.smt_runtime,
+            tht_runtime=a.tht_runtime,
+            aoi_runtime=a.aoi_runtime,
+            ops_runtime=a.ops_runtime,
+            shipping_runtime=a.shipping_runtime,
+            start_by=start_by_val,
+            ops_per_board_min=a.ops_per_board_min,
+            is_itar=is_itar_flag,
+            is_labeled=a.is_labeled,
+            are_photos_uploaded=a.are_photos_uploaded,
+            start_by_urgency=start_by_urgency,
+            ship_urgency=ship_urgency,
+        )
+
     def list_open(self) -> list[OpenAuditDigest]:
         audits = self._audit_repo.list_open()
         
         holidays = self._holiday_svc.list_holidays() if self._holiday_svc else set()
         today_val = date.today()
         
-        digests = []
-        for a in audits:
-            meta = a.traveler_metadata or {}
-            
-            classification = classification_display(meta)
-            is_itar_flag = is_itar(meta)
-            
-            ship_date_obj = None
-            if a.ship_date:
-                try:
-                    ship_date_obj = date.fromisoformat(a.ship_date)
-                except ValueError:
-                    pass
-                    
-            total_runtime = None
-            if a.feeder_setuptime is not None and a.smt_runtime is not None and a.tht_runtime is not None:
-                total_runtime = (
-                    a.feeder_setuptime + a.smt_runtime + a.tht_runtime
-                    + (a.aoi_runtime or 0.0)
-                    + (a.ops_runtime or 0.0)
-                    + (a.shipping_runtime or 0.0)
-                )
-                
-            start_by_val = start_by(ship_date_obj, total_runtime, holidays)
-            start_by_urgency = classify_urgency(start_by_val, today_val, holidays)
-            ship_urgency = classify_urgency(ship_date_obj, today_val, holidays)
-            
-            digests.append(OpenAuditDigest(
-                audit_id=a.id,
-                part_number=a.part_number,
-                work_order_ref=a.work_order_ref,
-                split_suffix=a.split_suffix,
-                quantity=a.quantity,
-                status=a.status,
-                updated_at=a.updated_at,
-                date_ingested=a.created_at,
-                ship_date=ship_date_obj,
-                lead_time_days=meta.get("lead_time_days"),
-                repeat=derive_repeat(meta),
-                classification=classification,
-                assembly_class=meta.get("assembly_class"),
-                process=meta.get("process"),
-                feeder_setuptime=a.feeder_setuptime,
-                smt_runtime=a.smt_runtime,
-                tht_runtime=a.tht_runtime,
-                aoi_runtime=a.aoi_runtime,
-                ops_runtime=a.ops_runtime,
-                shipping_runtime=a.shipping_runtime,
-                start_by=start_by_val,
-                ops_per_board_min=a.ops_per_board_min,
-                is_itar=is_itar_flag,
-                is_labeled=a.is_labeled,
-                are_photos_uploaded=a.are_photos_uploaded,
-                start_by_urgency=start_by_urgency,
-                ship_urgency=ship_urgency,
-            ))
+        return [self._map_to_digest(a, holidays, today_val) for a in audits]
 
-        return digests
+    def open_audits_for_part_number(self, part_number: str) -> list[OpenAuditDigest]:
+        audits = self._audit_repo.list_open_by_part_number(part_number)
+        holidays = self._holiday_svc.list_holidays() if self._holiday_svc else set()
+        today_val = date.today()
+        return [self._map_to_digest(a, holidays, today_val) for a in audits]

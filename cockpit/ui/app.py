@@ -127,6 +127,9 @@ def main() -> None:
     from cockpit.services.second_ops import SecondOpsSettingsController
     second_ops_settings_controller = SecondOpsSettingsController(settings)
 
+    from cockpit.settings.source_root import SourceRootController
+    source_root_controller = SourceRootController(settings)
+
     window = MainWindow(
         theme=theme,
         app=app,
@@ -134,6 +137,7 @@ def main() -> None:
         style_controller=style_controller,
         runtime_settings_controller=runtime_settings_controller,
         second_ops_settings_controller=second_ops_settings_controller,
+        source_root_controller=source_root_controller,
         bootstrapped_app=bootstrapped,
         audit_read_svc=bootstrapped.audit_read_svc,
         checklist_svc=bootstrapped.checklist_svc,

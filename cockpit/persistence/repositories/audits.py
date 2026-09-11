@@ -231,6 +231,18 @@ class AuditRepository:
         )
         return [ActiveAudit(**{k: v for k, v in row.items() if k in _ACTIVE_AUDIT_FIELDS}) for row in cur.fetchall()]
 
+    def list_open_by_part_number(self, part_number: str) -> list[ActiveAudit]:
+        cur = self.conn.cursor()
+        cur.execute(
+            """
+            SELECT * FROM active_audits
+            WHERE part_number = ?
+            ORDER BY work_order_ref ASC, split_suffix ASC
+            """,
+            (part_number,)
+        )
+        return [ActiveAudit(**{k: v for k, v in row.items() if k in _ACTIVE_AUDIT_FIELDS}) for row in cur.fetchall()]
+
     def list_completed(self) -> list[ActiveAudit]:
         # Completed audits are hard-deleted, so this always returns empty.
         # Leaving the signature intact for backwards compatibility with call sites until they are removed.

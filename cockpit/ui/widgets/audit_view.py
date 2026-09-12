@@ -1,5 +1,7 @@
 """Audit view container."""
 
+import logging
+
 from PyQt6.QtCore import pyqtSignal, Qt, QSettings
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QSplitter, QLineEdit
 from PyQt6.QtGui import QKeySequence, QShortcut
@@ -24,6 +26,8 @@ from cockpit.ui.widgets.checklist_view import ChecklistView
 from cockpit.ui.widgets.selection_coordinator import SelectionCoordinator
 from cockpit.ui.widgets.chamfered_pane import ChamferedPane
 from cockpit.ui.theme import Theme
+
+logger = logging.getLogger(__name__)
 
 class AuditView(QWidget):
     """QSplitter container for the main application panes."""
@@ -50,11 +54,13 @@ class AuditView(QWidget):
         parent: QWidget | None = None,
         *,
         theme: Theme,
+        audit_bom_component_repo = None
         
     ) -> None:
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._theme = theme
+        self._bom_component_repo = audit_bom_component_repo
         
         self._session = AuditSession(checklist_service, build_identity_banner)
         self._session.error_occurred.connect(self.error_occurred.emit)
@@ -246,13 +252,32 @@ class AuditView(QWidget):
 
     def set_render_worker_alive(self, alive: bool) -> None:
         self._layout_canvas.set_render_worker_alive(alive)
+        
+    def bind_library(self, library_module) -> None:
+        self._center_pager.bind_library(library_module)
 
     def load(self, audit_id: int) -> None:
         self.unload()
         self._coordinator.on_audit_loaded()
         self._session.load(audit_id)
         self._bom_panel.load(audit_id)
-        self._center_pager.load(audit_id)
+        
+        self._center_pager.load(audit_id, self._library_bom_lines(audit_id))
+
+    def _library_bom_lines(self, audit_id: int) -> list:
+        """BOM lines for the optional library segment; never fails the audit load.
+
+        Only the library segment consumes these, so an unbound repository or a
+        read error degrades that one pane rather than aborting load() before the
+        canvas and notes have been loaded.
+        """
+        if self._bom_component_repo is None:
+            return []
+        try:
+            return self._bom_component_repo.list_bom_lines_for_audit(audit_id)
+        except Exception:
+            logger.exception("Could not read BOM lines for the MPN library segment")
+            return []
 
     def reload(self) -> None:
         self._session.reload()

@@ -17,6 +17,7 @@ from cockpit.ingestion.errors import (
 )
 from cockpit.services.completion import CleanupFailedError
 from cockpit.services.errors import PrintError
+from cockpit.services.library_errors import LibraryUnavailable, LibraryDisabled
 
 logger = logging.getLogger(__name__)
 
@@ -342,6 +343,24 @@ def render(exc: Exception) -> FailurePayload:
             summary="The connection to the share took too long and was abandoned.",
             detail=[("root", str(exc.root)), ("elapsed_ms", str(exc.elapsed_ms))],
             reason_code="FETCH_TIMED_OUT"
+        )
+
+    if isinstance(exc, LibraryUnavailable):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Library is unavailable",
+            summary="Could not create, open, or migrate the parts library database.",
+            detail=[("path", str(exc.path)), ("cause", exc.cause_class.__name__ if exc.cause_class else "Unknown")],
+            reason_code="LIBRARY_UNAVAILABLE"
+        )
+
+    if isinstance(exc, LibraryDisabled):
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Library is disabled",
+            summary="MPN Library is currently disabled. Please enable it in Settings.",
+            detail=[],
+            reason_code="LIBRARY_DISABLED"
         )
 
     # Catch-all

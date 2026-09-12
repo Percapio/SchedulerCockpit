@@ -12,9 +12,13 @@ a = Analysis(
         ('cockpit/ingestion/config/default_traveler_map.json', 'cockpit/ingestion/config'),
     ],
     hiddenimports=[
-        'cockpit.ingestion.parsers.bom_parser',
         'cockpit.ingestion.parsers.eco_build_notes',
         'cockpit.ingestion.parsers.audit_bom',
+        'cockpit.ingestion.parsers.traveler',
+        # Reached only through a function-level import in center_pager, so it is
+        # named here rather than relying on bytecode analysis of that call site.
+        'cockpit.services.mpn_library.module',
+        'cockpit.ui.widgets.library_segment',
         'sqlite3',
     ],
     hookspath=['build/hooks'],

@@ -63,7 +63,7 @@ def test_center_pager_opens_on_drawing(qtbot, bootstrapped_app, theme):
     qtbot.addWidget(view)
     
     pager = view._center_pager
-    pager._selector.set_segments(has_secondary=False)
+    pager._selector.set_segments(has_secondary=False, has_library=False)
     pager._selector.show_page(CenterPage.BUILD_NOTES)
     pager._stacked.setCurrentWidget(pager._notes_pane)
     

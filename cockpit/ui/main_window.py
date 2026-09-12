@@ -55,14 +55,21 @@ class MainWindow(QMainWindow):
         runtime_settings_controller=None,
         second_ops_settings_controller=None,
         source_root_controller=None,
+        mpn_library_controller=None,
     ) -> None:
         super().__init__()
         self._theme = theme
         self._app = app
         self._bootstrapped = bootstrapped_app
+        self._settings = settings
+        self._style_controller = style_controller
+        self._runtime_settings_controller = runtime_settings_controller
+        self._second_ops_settings_controller = second_ops_settings_controller
+        self._source_root_controller = source_root_controller
+        self._mpn_library_controller = mpn_library_controller
+        self._library_module = bootstrapped_app.library_module
         self._audit_read_svc = audit_read_svc
         self._holiday_svc = holiday_svc
-        self._source_root_controller = source_root_controller
         
         self.setWindowTitle("Local Audit & Routing Checklist Utility")
         self.resize(800, 600)
@@ -113,7 +120,8 @@ class MainWindow(QMainWindow):
             release_service=self._bootstrapped.release_svc,
             setup_bom_service=self._bootstrapped.setup_bom_svc,
             pdf_renderer=pdf_renderer,
-            theme=self._theme
+            theme=self._theme,
+            audit_bom_component_repo=self._bootstrapped.audit_bom_component_repo
         )
         self._audit_view.exit_requested.connect(self._on_dashboard_exit)
         self._audit_view.error_occurred.connect(self._on_failed)
@@ -200,7 +208,8 @@ class MainWindow(QMainWindow):
                 self._second_ops_settings_controller,
                 self._bootstrapped.config,
                 self,
-                source_root_controller=self._source_root_controller
+                source_root_controller=self._source_root_controller,
+                mpn_library_controller=self._mpn_library_controller
             )
             dialog.reset_requested.connect(self._on_reset_requested)
             dialog.exec()
@@ -330,10 +339,44 @@ class MainWindow(QMainWindow):
         def do_load():
             if epoch != self._load_epoch:
                 return
+            self._sync_mpn_library_state()
             self._audit_view.load(audit_id)
             
         QTimer.singleShot(0, do_load)
-        
+            
+    def _sync_mpn_library_state(self) -> None:
+        """Construct or release the optional MPN library module for this session.
+
+        The module is held here, not on BootstrappedApp: that is a frozen
+        dataclass, so assigning to its library_module field raised
+        FrozenInstanceError on the first audit opened with the feature on.
+        """
+        if not self._mpn_library_controller:
+            return
+
+        enabled = self._mpn_library_controller.is_enabled()
+
+        if enabled and self._library_module is None:
+            from cockpit.services.mpn_library.module import MpnLibraryModule
+            db_path = self._bootstrapped.config.app_data_root / "parts_library.db"
+            try:
+                self._library_module = MpnLibraryModule(db_path)
+            except Exception:
+                # Per Phase 47a section 4.3 an unusable library disables the
+                # feature for the session and leaves the rest of the
+                # application untouched. It must never fail an audit load.
+                logger.exception("MPN library unavailable at %s; feature disabled", db_path)
+                self._library_module = None
+            self._audit_view.bind_library(self._library_module)
+
+        elif not enabled and self._library_module is not None:
+            try:
+                self._library_module.teardown()
+            except Exception:
+                logger.exception("MPN library teardown failed")
+            self._library_module = None
+            self._audit_view.bind_library(None)
+
     def _on_complete_requested(self, audit_id: int) -> None:
         entry = self._second_ops_review_dialogs.get(audit_id)
         if entry is not None and entry[1].is_read_in_flight():
@@ -645,17 +688,23 @@ class MainWindow(QMainWindow):
         self._worker.moveToThread(self._thread)
         
         self._thread.started.connect(self._worker.run)
-        
+
+        # Cleanup is connected BEFORE the handlers below, and the order is
+        # load-bearing: Qt invokes slots in connection order and stops the
+        # emission if one raises. With cleanup last, an exception in
+        # _on_ingest_succeeded left the thread running, _operation_in_flight
+        # stuck true and the progress view on screen forever -- a silent hang
+        # rather than a reported error. Cleanup first makes the terminal
+        # transition unconditional.
+        self._worker.succeeded_signal.connect(self._thread.quit)
+        self._worker.failed_signal.connect(self._thread.quit)
+        self._worker.cancelled_signal.connect(self._thread.quit)
+
         self._worker.progress_signal.connect(self._on_progress)
         self._worker.succeeded_signal.connect(self._on_ingest_succeeded)
         self._worker.failed_signal.connect(self._on_failed)
         self._worker.cancelled_signal.connect(self._on_cancelled)
-        
-        # Cleanup
-        self._worker.succeeded_signal.connect(self._thread.quit)
-        self._worker.failed_signal.connect(self._thread.quit)
-        self._worker.cancelled_signal.connect(self._thread.quit)
-        
+
         self._thread.finished.connect(self._worker.deleteLater)
         self._thread.finished.connect(self._thread.deleteLater)
         self._thread.finished.connect(self._on_worker_finished)
@@ -677,6 +726,10 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_ingest_succeeded(self, summary: AuditSummary) -> None:
+        # Before load(), which hands the BOM lines to whatever segment
+        # bind_library created. Without this a freshly ingested job showed no
+        # Library segment while the same job reopened from the picker did.
+        self._sync_mpn_library_state()
         self._audit_view.load(summary.audit_id)
         self.stacked.setCurrentWidget(self._audit_view)
         self.toast.show_success(summary)

@@ -63,6 +63,7 @@ class SettingsDialog(QDialog):
         config,
         parent: QWidget | None = None,
         source_root_controller=None,
+        mpn_library_controller=None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
@@ -121,6 +122,11 @@ class SettingsDialog(QDialog):
         if source_root_controller is not None:
             source_root_group = self._build_source_root_settings(source_root_controller)
             layout.addWidget(source_root_group)
+            layout.addSpacing(12)
+            
+        if mpn_library_controller is not None:
+            mpn_library_group = self._build_mpn_library_settings(mpn_library_controller)
+            layout.addWidget(mpn_library_group)
             layout.addSpacing(12)
             
         reset_group = QGroupBox("Application Data")
@@ -306,6 +312,25 @@ class SettingsDialog(QDialog):
             self._probe_thread.start()
             
         validate_btn.clicked.connect(on_validate)
+        return group
+
+    def _build_mpn_library_settings(self, controller) -> QGroupBox:
+        from PyQt6.QtWidgets import QCheckBox, QSpinBox
+        group = QGroupBox("MPN Library")
+        form = QFormLayout(group)
+        
+        enable_cb = QCheckBox("Enable MPN Library")
+        enable_cb.setChecked(controller.is_enabled())
+        enable_cb.stateChanged.connect(lambda state: controller.set_enabled(bool(state)))
+        form.addRow(enable_cb)
+        
+        stale_spin = QSpinBox()
+        stale_spin.setRange(1, 3650)
+        stale_spin.setSuffix(" days")
+        stale_spin.setValue(controller.stale_after_days())
+        stale_spin.valueChanged.connect(controller.set_stale_after_days)
+        form.addRow("Stale after:", stale_spin)
+        
         return group
 
     def _update_edit(self) -> None:

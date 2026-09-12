@@ -72,10 +72,33 @@ class LocalFileCrashSink:
             pass
 
 
+def write_stderr(message: str) -> None:
+    """Best-effort stderr write that cannot raise.
+
+    In a PyInstaller windowed build (console=False) sys.stderr is None, so a bare
+    sys.stderr.write raises AttributeError. Every write in this module is a
+    last-resort diagnostic inside an exception handler, and one that raises takes
+    the crash reporter down with it — which is how an unhandled slot exception
+    became a silent hang instead of a reported error. Failures go to the log file,
+    which exists in a frozen build even when the console does not.
+    """
+    stream = sys.stderr
+    if stream is not None:
+        try:
+            stream.write(message)
+            return
+        except Exception:
+            pass
+    try:
+        logging.getLogger(__name__).error(message.rstrip("\n"))
+    except Exception:
+        pass
+
+
 class StderrCrashSink:
     def emit(self, report: CrashReport) -> None:
         msg = f"CRASH: {report.exception_class} ({report.reason_code or 'UNKNOWN'}) - {report.exception_message}\n"
-        sys.stderr.write(msg)
+        write_stderr(msg)
 
 
 class GuiDialogCrashSink:
@@ -115,7 +138,7 @@ class GuiDialogCrashSink:
             )
             ErrorDialog(payload, None).exec()
         except Exception:
-            sys.stderr.write("GuiDialogCrashSink failed to display dialog.\n")
+            write_stderr("GuiDialogCrashSink failed to display dialog.\n")
 
 
 _installed_chain = None
@@ -162,13 +185,19 @@ def install_crash_reporter(crash_dir: pathlib.Path, build_info: BuildInfo, sinks
                 try:
                     sink.emit(report)
                 except Exception:
-                    sys.stderr.write(f"CrashSink {sink} failed to emit.\n")
+                    write_stderr(f"CrashSink {sink} failed to emit.\n")
         except Exception:
-            sys.stderr.write("Crash reporter failed.\n")
+            write_stderr("Crash reporter failed.\n")
             
-        # Always chain to the original hook
+        # Always chain to the original hook. Guarded because the default hook
+        # writes to sys.stderr, which is None in a windowed frozen build; an
+        # exception escaping this handler is swallowed at the PyQt boundary and
+        # takes every sink's output with it.
         if _installed_chain is not None:
-            _installed_chain(exc_type, exc_value, exc_traceback)
+            try:
+                _installed_chain(exc_type, exc_value, exc_traceback)
+            except Exception:
+                write_stderr("Chained excepthook failed.\n")
             
     sys.excepthook = _handle_exception
     
@@ -196,9 +225,9 @@ def install_crash_reporter(crash_dir: pathlib.Path, build_info: BuildInfo, sinks
                         try:
                             sink.emit(report)
                         except Exception:
-                            sys.stderr.write(f"CrashSink {sink} failed to emit.\n")
+                            write_stderr(f"CrashSink {sink} failed to emit.\n")
                 except Exception:
-                    sys.stderr.write("Crash reporter failed in Qt handler.\n")
+                    write_stderr("Crash reporter failed in Qt handler.\n")
             elif msg_type == QtMsgType.QtCriticalMsg:
                 qt_logger.error("Qt critical at %s:%s in %s — %s", context.file, context.line, context.function, msg)
             elif msg_type == QtMsgType.QtWarningMsg:

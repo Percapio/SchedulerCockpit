@@ -116,6 +116,50 @@ class AuditBomComponentRepository:
         except sqlite3.Error as e:
             raise PersistenceUnavailable(self._conn, e) from e
 
+    def list_bom_lines_for_audit(self, audit_id: int) -> list[PersistedBomLine]:
+        """BOM lines for one audit, shaped like list_bom_lines_for_all_active_audits.
+
+        The ORDER BY is for determinism only and carries no semantics: find_number
+        has TEXT affinity since v18, so lexical order is not natural order. Callers
+        that need natural ordering sort in Python with natural_sort_key, per the
+        Phase 45 decision to keep ordering out of SQL.
+        """
+        try:
+            cur = self._conn.cursor()
+            cur.execute("""
+                SELECT DISTINCT
+                    a.id as audit_id,
+                    abc.source_file_id,
+                    a.part_number,
+                    a.split_suffix,
+                    a.work_order_ref,
+                    abc.find_number,
+                    abc.component_mpn,
+                    abc.description,
+                    abc.mount_type
+                FROM active_audits a
+                JOIN source_files sf ON a.id = sf.audit_id AND sf.file_category = 'BOM'
+                JOIN audit_bom_components abc ON sf.id = abc.source_file_id
+                WHERE a.id = ?
+                ORDER BY abc.find_number ASC, abc.component_mpn ASC
+            """, (audit_id,))
+            return [
+                PersistedBomLine(
+                    audit_id=row["audit_id"],
+                    source_file_id=row["source_file_id"],
+                    part_number=row["part_number"],
+                    split_suffix=row["split_suffix"],
+                    work_order_ref=row["work_order_ref"],
+                    find_number=row["find_number"],
+                    component_mpn=row["component_mpn"],
+                    description=row["description"],
+                    mount_type=row["mount_type"]
+                )
+                for row in cur.fetchall()
+            ]
+        except sqlite3.Error as e:
+            raise PersistenceUnavailable(self._conn, e) from e
+
     def list_bom_lines_for_all_active_audits(self) -> list[PersistedBomLine]:
         try:
             cur = self._conn.cursor()

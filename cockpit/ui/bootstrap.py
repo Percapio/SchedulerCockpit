@@ -59,6 +59,7 @@ class BootstrappedApp:
     source_file_repo: SourceFileRepository
     audit_bom_component_repo: AuditBomComponentRepository
     storage_reaper: StorageReaper
+    library_module: Any | None
 
 
 def remove_notes_media_tree(app_data_root: pathlib.Path) -> bool:
@@ -266,5 +267,6 @@ def bootstrap(
         runtime_calc_svc=runtime_calc_svc,
         source_file_repo=source_file_repo,
         audit_bom_component_repo=bom_component_repo,
-        storage_reaper=storage_reaper
+        storage_reaper=storage_reaper,
+        library_module=None
     )

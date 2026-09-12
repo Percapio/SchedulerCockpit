@@ -12,6 +12,7 @@ class CenterPage(Enum):
     PRIMARY_PDF = "primary"
     SECONDARY_PDF = "secondary"
     BUILD_NOTES = "notes"
+    LIBRARY = "library"
 
 class SourceSelector(QWidget):
     page_changed = pyqtSignal(object) # CenterPage
@@ -26,7 +27,7 @@ class SourceSelector(QWidget):
         self._buttons: dict[CenterPage, QPushButton] = {}
         self._current_page = CenterPage.PRIMARY_PDF
         
-    def set_segments(self, has_secondary: bool) -> None:
+    def set_segments(self, has_secondary: bool, has_library: bool) -> None:
         # Clear existing buttons
         from cockpit.ui.widgets.qt_lifecycle import purge_widget_subtree, _drain_layout_widgets
         for widget in _drain_layout_widgets(self.layout):
@@ -37,6 +38,8 @@ class SourceSelector(QWidget):
         if has_secondary:
             segments.append((CenterPage.SECONDARY_PDF, "Reference"))
         segments.append((CenterPage.BUILD_NOTES, "Build Notes"))
+        if has_library:
+            segments.append((CenterPage.LIBRARY, "Library"))
         
         for page, label in segments:
             btn = QPushButton(label)
@@ -104,18 +107,39 @@ class CenterPager(QWidget):
         self._canvas.secondary_availability_changed.connect(self._on_secondary_availability)
         
         self._session: AuditSession | None = None
+        self._library_module = None
+        self._library_segment = None
+        self._has_secondary = False
+
+    def bind_library(self, library_module) -> None:
+        if self._library_segment:
+            self._stacked.removeWidget(self._library_segment)
+            self._library_segment.deleteLater()
+            self._library_segment = None
+            
+        self._library_module = library_module
+        if self._library_module:
+            from cockpit.ui.widgets.library_segment import LibrarySegment
+            self._library_segment = LibrarySegment(self._library_module, self)
+            self._stacked.addWidget(self._library_segment)
+            
+        self._selector.set_segments(self._has_secondary, self._library_module is not None)
 
     def _on_secondary_availability(self, available: bool) -> None:
-        self._selector.set_segments(available)
+        self._has_secondary = available
+        self._selector.set_segments(self._has_secondary, self._library_module is not None)
         self._selector.show_page(CenterPage.PRIMARY_PDF)
         
     def _on_page_changed(self, page: CenterPage) -> None:
         if page == CenterPage.BUILD_NOTES:
             self._stacked.setCurrentWidget(self._notes_pane)
+        elif page == CenterPage.LIBRARY and self._library_segment:
+            self._stacked.setCurrentWidget(self._library_segment)
         else:
             self._stacked.setCurrentWidget(self._canvas)
             source = PdfSource.PRIMARY if page == CenterPage.PRIMARY_PDF else PdfSource.SECONDARY
             self._canvas.show_source(source)
+            
     def bind(self, session: AuditSession) -> None:
         self._session = session
         self._session.view_changed.connect(self._on_audit_loaded)
@@ -123,19 +147,33 @@ class CenterPager(QWidget):
     def _on_audit_loaded(self, view) -> None:
         if view:
             self._notes_pane.load(view)
+            if self._library_segment:
+                # We need the bom components for the current audit
+                # Actually, the view doesn't directly expose bom lines by default, let's see.
+                # If we need bom lines, we can get them in load()
+                pass
 
-
-    def load(self, audit_id: int) -> None:
-        self._selector.set_segments(has_secondary=False)
+    def load(self, audit_id: int, bom_lines: list = None) -> None:
+        self._selector.set_segments(has_secondary=False, has_library=self._library_module is not None)
         self._canvas.load(audit_id)
+        if self._library_segment:
+            self._library_segment.load(None, bom_lines or [])
         
     def unload(self) -> None:
-        self._selector.set_segments(has_secondary=False)
+        self._has_secondary = False
+        self._selector.set_segments(has_secondary=False, has_library=self._library_module is not None)
         self._selector.show_page(CenterPage.PRIMARY_PDF)
         self._stacked.setCurrentWidget(self._canvas)
         self._canvas.unload()
         self._notes_pane.unload()
+        if self._library_segment:
+            self._library_segment.unload()
 
     @property
     def notes_pane(self) -> BuildNotesPane:
         return self._notes_pane
+
+    def set_operation_in_flight(self, in_flight: bool) -> None:
+        if self._library_segment:
+            self._library_segment.set_operation_in_flight(in_flight)
+

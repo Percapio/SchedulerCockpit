@@ -5,6 +5,7 @@ from cockpit.ui.widgets.open_audit_picker import OpenAuditPicker
 from cockpit.services.views import OpenAuditDigest
 from cockpit.persistence.types import AuditStatus
 from datetime import datetime, timezone
+from cockpit.services.repeat import derive_repeat_marker
 
 
 def test_ops_per_board_dialog_init_and_save(qtbot):
@@ -50,7 +51,7 @@ def test_open_audit_picker_ops_action_signal(qtbot, monkeypatch):
         date_ingested=datetime.now(timezone.utc),
         ship_date=None,
         lead_time_days=None,
-        repeat=None,
+        repeat=derive_repeat_marker({"assembly_type": "NEW"}),
         classification="Class 2",
         assembly_class=2,
         process="Clean",

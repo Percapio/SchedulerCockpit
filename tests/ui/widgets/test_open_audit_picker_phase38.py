@@ -5,6 +5,7 @@ from cockpit.ui.widgets.open_audit_picker import OpenAuditPicker, Column, RowKin
 from cockpit.services.views import OpenAuditDigest
 from cockpit.persistence.types import AuditStatus
 from cockpit.ui import facelift
+from cockpit.services.repeat import derive_repeat_marker
 
 
 def create_digest(audit_id=1, status=AuditStatus.NOT_CLEAR, is_labeled=False, are_photos_uploaded=False):
@@ -19,7 +20,7 @@ def create_digest(audit_id=1, status=AuditStatus.NOT_CLEAR, is_labeled=False, ar
         date_ingested=datetime.now(timezone.utc),
         ship_date=None,
         lead_time_days=None,
-        repeat="NEW",
+        repeat=derive_repeat_marker({"assembly_type": "NEW"}),
         classification="Non-ITAR",
         assembly_class=2,
         process=None,
@@ -41,7 +42,7 @@ def test_picker_columns_and_checkbox_flags(qtbot):
     digest = create_digest(is_labeled=True, are_photos_uploaded=False)
     picker.populate([digest])
 
-    assert len(picker.model.COLUMNS) == 19
+    assert len(picker.model.COLUMNS) == 20
     assert picker.model.COLUMNS[Column.LABEL] == "Label"
     assert picker.model.COLUMNS[Column.PHOTOS] == "Photos"
 

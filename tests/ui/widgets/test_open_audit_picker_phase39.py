@@ -7,6 +7,7 @@ from cockpit.services.views import OpenAuditDigest
 from cockpit.persistence.types import AuditStatus
 from cockpit.services.date_urgency import DateUrgency
 from cockpit.ui import facelift
+from cockpit.services.repeat import derive_repeat_marker
 
 
 def create_digest(
@@ -30,7 +31,7 @@ def create_digest(
         date_ingested=datetime.now(timezone.utc),
         ship_date=ship_date,
         lead_time_days=None,
-        repeat="NEW",
+        repeat=derive_repeat_marker({"assembly_type": "NEW"}),
         classification="Non-ITAR",
         assembly_class=2,
         process=None,

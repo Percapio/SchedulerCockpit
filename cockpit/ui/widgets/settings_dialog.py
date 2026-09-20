@@ -122,6 +122,7 @@ class SettingsDialog(QDialog):
         self._test_connection_btn: QPushButton | None = None
         self._forget_credentials_btn: QPushButton | None = None
         self._plaintext_disclosure_lbl: QLabel | None = None
+        self._credential_block: QWidget | None = None
         self._probe_in_flight = False
         self._probe_worker = None
         self._probe_result_handler = None
@@ -376,7 +377,7 @@ class SettingsDialog(QDialog):
         )
 
         self._mpn_controller = controller
-        group = QGroupBox("MPN Library")
+        group = QGroupBox("MPN Library (Alpha)")
         form = QFormLayout(group)
 
         enable_cb = QCheckBox("Enable MPN Library")
@@ -391,9 +392,17 @@ class SettingsDialog(QDialog):
         stale_spin.valueChanged.connect(controller.set_stale_after_days)
         form.addRow("Stale after:", stale_spin)
 
+        # Everything below the divider lives in one container so the alpha gate
+        # can hide it as a unit. Hiding a parent does not destroy children, so
+        # the widget references below and the done() teardown are unaffected.
+        self._credential_block = QWidget()
+        block_form = QFormLayout(self._credential_block)
+        block_form.setContentsMargins(0, 0, 0, 0)
+        form.addRow(self._credential_block)
+
         divider = QFrame()
         divider.setFrameShape(QFrame.Shape.HLine)
-        form.addRow(divider)
+        block_form.addRow(divider)
 
         # Credentials commit on focus-out and on dialog accept, never per
         # keystroke: wiring textChanged straight through would flush every
@@ -402,7 +411,7 @@ class SettingsDialog(QDialog):
         self._client_id_edit = QLineEdit()
         self._client_id_edit.setText(self._stored_client_id_text())
         self._client_id_edit.editingFinished.connect(self._commit_digikey_credentials)
-        form.addRow("Client ID:", self._client_id_edit)
+        block_form.addRow("Client ID:", self._client_id_edit)
 
         # Password echo is a shoulder-surfing control. It is not storage
         # security, and the disclosure label below says so. The field is never
@@ -412,12 +421,12 @@ class SettingsDialog(QDialog):
         self._client_secret_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self._client_secret_edit.setPlaceholderText(self._secret_placeholder_text())
         self._client_secret_edit.editingFinished.connect(self._commit_digikey_credentials)
-        form.addRow("Client Secret:", self._client_secret_edit)
+        block_form.addRow("Client Secret:", self._client_secret_edit)
 
         self._api_base_edit = QLineEdit()
         self._api_base_edit.setText(controller.api_base_url_text())
         self._api_base_edit.editingFinished.connect(self._commit_api_base_url)
-        form.addRow("API host:", self._api_base_edit)
+        block_form.addRow("API host:", self._api_base_edit)
 
         ceiling_spin = QSpinBox()
         ceiling_spin.setRange(min_call_ceiling(), 100000)
@@ -428,11 +437,11 @@ class SettingsDialog(QDialog):
             f"included. Default {enrichment_call_ceiling_default()}."
         )
         ceiling_spin.valueChanged.connect(controller.set_call_ceiling)
-        form.addRow("Requests per run:", ceiling_spin)
+        block_form.addRow("Requests per run:", ceiling_spin)
 
         self._mpn_status_lbl = QLabel("")
         self._mpn_status_lbl.setWordWrap(True)
-        form.addRow(self._mpn_status_lbl)
+        block_form.addRow(self._mpn_status_lbl)
 
         btn_row = QHBoxLayout()
         self._test_connection_btn = QPushButton("Test Connection")
@@ -442,16 +451,37 @@ class SettingsDialog(QDialog):
         self._forget_credentials_btn = QPushButton("Forget Credentials")
         self._forget_credentials_btn.clicked.connect(self._on_forget_credentials)
         btn_row.addWidget(self._forget_credentials_btn)
-        form.addRow(btn_row)
+        block_form.addRow(btn_row)
 
         self._plaintext_disclosure_lbl = QLabel(
             "Credentials are stored unencrypted in settings.ini."
         )
         self._plaintext_disclosure_lbl.setWordWrap(True)
-        form.addRow(self._plaintext_disclosure_lbl)
+        block_form.addRow(self._plaintext_disclosure_lbl)
 
+        enable_cb.toggled.connect(self.set_credential_block_visible)
+        self.set_credential_block_visible(controller.is_enabled())
         self._refresh_mpn_credential_state()
         return group
+
+    def set_credential_block_visible(self, visible: bool) -> None:
+        """Shows or hides the credential controls behind the alpha gate.
+
+        post: the container is visible iff the library is enabled; a probe in
+              flight is torn down before the container is hidden, and the
+              buttons and status label are re-rendered from the resulting
+              state rather than left on their in-flight text
+        """
+        if self._credential_block is None:
+            return
+        if not visible and self._probe_in_flight:
+            # Teardown alone clears the flag without re-rendering, which would
+            # leave both buttons disabled and the label on "Checking..." with
+            # no worker behind it.
+            self._teardown_credential_probe()
+            self._refresh_mpn_credential_state()
+        self._credential_block.setVisible(bool(visible))
+
 
     # --- MPN library credentials -----------------------------------------
 

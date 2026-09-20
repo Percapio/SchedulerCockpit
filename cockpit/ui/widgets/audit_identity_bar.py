@@ -1,7 +1,29 @@
+import html
+
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QPushButton
 from PyQt6.QtCore import pyqtSignal
 from typing import Optional
 from cockpit.services.views import AuditIdentityBanner
+
+
+def _coloured(text: str, color: str) -> str:
+    """One escaped run wrapped in a colour span.
+
+    Every value reaching this function originates in a traveler workbook on a
+    share other people write to. Escaping is what keeps a value containing
+    markup from being parsed as markup once the label switches to rich text.
+    """
+    return f'<span style="color:{color};">{html.escape(text)}</span>'
+
+
+def _class_markup(assembly_class: str, color: str) -> str:
+    """Renders "Class 3" with only the digit coloured, any other class plain."""
+    escaped = html.escape(assembly_class)
+    if not assembly_class.endswith("3"):
+        return escaped
+    head = html.escape(assembly_class[:-1])
+    return f'{head}<span style="color:{color};">3</span>'
+
 
 class AuditIdentityBar(QWidget):
     back_requested = pyqtSignal()
@@ -76,8 +98,26 @@ class AuditIdentityBar(QWidget):
             
         self.qty_lbl.setText(f"\xb7 Qty: {data.quantity}" if data.quantity else "")
         self.lt_lbl.setText(f"\xb7 LT: {data.lead_time_days}" if data.lead_time_days else "")
-        self.class_lbl.setText(f"\xb7 {data.assembly_class}" if data.assembly_class else "")
+        from cockpit.ui import facelift
+
+        if data.assembly_class:
+            self.class_lbl.setText(
+                "\xb7 " + _class_markup(data.assembly_class, facelift.palette().overdue)
+            )
+        else:
+            self.class_lbl.setText("")
+
         self.process_lbl.setText(f"\xb7 {data.process}" if data.process else "")
         self.customer_lbl.setText(f"\xb7 {data.customer}" if data.customer else "")
-        self.rowc_lbl.setText(f"\xb7 {data.repeat_marker}" if data.repeat_marker else "")
+
+        marker = data.repeat_marker
+        if marker.label or marker.reference:
+            runs = []
+            if marker.label:
+                runs.append(html.escape(marker.label))
+            if marker.reference:
+                runs.append(_coloured(marker.reference, facelift.palette().attention))
+            self.rowc_lbl.setText("\xb7 " + " ".join(runs))
+        else:
+            self.rowc_lbl.setText("")
         self.status_lbl.setText(f"\xb7 Status: {data.status}" if data.status else "")

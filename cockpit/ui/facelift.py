@@ -89,13 +89,28 @@ def palette(preset: str | None = None) -> Palette:
 
 # List View column indexes with semantic color treatment (2.5).
 # 2 = B# (part number), 5 = QTY, 9 = Process.
+#
+# Retained for callers that still address columns positionally. The Audit List
+# itself no longer does: it owns the Column -> role mapping and calls
+# semantic_color, so inserting a column cannot silently re-point these.
 _SEMANTIC_LIST_COLUMNS = {2: "part_number", 5: "quantity", 9: "process"}
+
+# Semantic roles the List View may ask for by name.
+SEMANTIC_ROLES = frozenset({"part_number", "quantity", "process"})
 
 
 def list_column_color(column: int):
     """QColor for a semantically highlighted List View column, else None."""
-    role = _SEMANTIC_LIST_COLUMNS.get(column)
-    if role is None:
+    return semantic_color(_SEMANTIC_LIST_COLUMNS.get(column))
+
+
+def semantic_color(role: str | None):
+    """QColor for a named semantic field role, else None.
+
+    Takes the role rather than a column index so that a caller which knows its
+    own column layout is not forced to keep a second copy of it here.
+    """
+    if role is None or role not in SEMANTIC_ROLES:
         return None
     from PyQt6.QtGui import QColor
     return QColor(getattr(palette(), role))

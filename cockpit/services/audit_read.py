@@ -6,7 +6,7 @@ from cockpit.services.views import OpenAuditDigest
 
 from datetime import date, timedelta
 import math
-from cockpit.services.repeat import derive_repeat
+from cockpit.services.repeat import derive_repeat_marker
 from cockpit.services.itar import classification_display, is_itar
 from cockpit.services.date_urgency import classify_urgency
 
@@ -70,7 +70,7 @@ class AuditReadService:
             date_ingested=a.created_at,
             ship_date=ship_date_obj,
             lead_time_days=meta.get("lead_time_days"),
-            repeat=derive_repeat(meta),
+            repeat=derive_repeat_marker(meta),
             classification=classification,
             assembly_class=meta.get("assembly_class"),
             process=meta.get("process"),
@@ -83,6 +83,7 @@ class AuditReadService:
             start_by=start_by_val,
             ops_per_board_min=a.ops_per_board_min,
             is_itar=is_itar_flag,
+            process_clean=meta.get("process_clean"),
             is_labeled=a.is_labeled,
             are_photos_uploaded=a.are_photos_uploaded,
             start_by_urgency=start_by_urgency,

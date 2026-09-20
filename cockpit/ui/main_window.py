@@ -130,6 +130,7 @@ class MainWindow(QMainWindow):
         self.stacked.addWidget(self._audit_view)
         
         self.toast = Toast(self)
+        self._term_merge_announced = False
 
         self._style_controller = style_controller
         self._runtime_settings_controller = runtime_settings_controller
@@ -181,6 +182,23 @@ class MainWindow(QMainWindow):
         
     def _on_runtime_constants_changed(self) -> None:
         self._runtime_constants_dirty = True
+
+    def announce_term_merge(self, outcome) -> None:
+        """Surfaces the 2nd OPS migration notice exactly once.
+
+        pre:  called after the window is shown
+        post: a toast is raised iff outcome.added is non-empty; a second call
+              raises nothing
+        """
+        if self._term_merge_announced:
+            return
+        self._term_merge_announced = True
+        if outcome is None or not outcome.added:
+            return
+        self.toast.show_toast(
+            f"{len(outcome.added)} new 2nd OPS terms added",
+            "Settings › 2nd OPS"
+        )
 
     def _recompute_and_refresh(self) -> None:
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)

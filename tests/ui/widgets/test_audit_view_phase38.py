@@ -3,6 +3,7 @@ from unittest.mock import Mock
 from PyQt6.QtWidgets import QLabel
 from cockpit.ui.widgets.audit_identity_bar import AuditIdentityBar
 from cockpit.services.views import AuditIdentityBanner
+from cockpit.services.repeat import derive_repeat_marker
 
 def test_audit_identity_bar_updates(qtbot):
     bar = AuditIdentityBar()
@@ -16,7 +17,7 @@ def test_audit_identity_bar_updates(qtbot):
         assembly_class="Class 3",
         process="",
         customer="TestCorp",
-        repeat_marker="",
+        repeat_marker=derive_repeat_marker({}),
         status="NOT_CLEAR",
         is_itar=False
     )

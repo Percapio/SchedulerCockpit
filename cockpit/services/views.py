@@ -7,6 +7,7 @@ from typing import Any, Sequence
 import pathlib
 
 from cockpit.persistence.types import AuditStatus
+from cockpit.services.repeat import RepeatMarker, derive_repeat_marker
 from cockpit.services.date_urgency import DateUrgency
 
 
@@ -183,7 +184,7 @@ class AuditIdentityBanner:
     assembly_class: str       # "Class 3" | ""
     process: str              # process and process_clean, space-joined, stripped
     customer: str
-    repeat_marker: str        # rowc_label and rowc_ref, space-joined
+    repeat_marker: RepeatMarker   # label and reference, kept separable
     status: str
     is_itar: bool
 
@@ -206,12 +207,7 @@ def build_identity_banner(view: ActiveAuditView) -> AuditIdentityBanner:
         process_parts.append(str(p))
     process_str = " ".join(process_parts).strip()
     
-    repeat_parts = []
-    if r := meta.get("rowc_label"):
-        repeat_parts.append(str(r))
-    if r := meta.get("rowc_ref"):
-        repeat_parts.append(str(r))
-    repeat_marker = " ".join(repeat_parts).strip()
+    repeat_marker = derive_repeat_marker(meta)
     
     part_number = view.part_number
     if view.split_suffix:
@@ -250,7 +246,7 @@ class OpenAuditDigest:
     date_ingested: datetime
     ship_date: date | None
     lead_time_days: int | None
-    repeat: str | None
+    repeat: RepeatMarker
     classification: str
     assembly_class: int | None
     process: str | None
@@ -263,6 +259,10 @@ class OpenAuditDigest:
     start_by: date | None
     ops_per_board_min: float | None = None
     is_itar: bool = False
+    # The traveler's own wash wording, carried verbatim alongside `process`.
+    # Not the is_clean_process boolean: that asks only whether the cell is
+    # non-empty, so a traveler spelling out "NO CLEAN" reads as a wash process.
+    process_clean: str | None = None
     is_labeled: bool = False
     are_photos_uploaded: bool = False
     start_by_urgency: DateUrgency = DateUrgency.COMFORTABLE

@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
 )
 
 from cockpit.persistence.types import AuditStatus
+from cockpit.persistence.traveler_flags import WashState, is_class_3, wash_state
 from cockpit.services.views import OpenAuditDigest
 from cockpit.ui.widgets.toast import Toast  # Phase 3
 
@@ -43,15 +44,41 @@ class Column(IntEnum):
     CLASSIFICATION = 7
     ASSEMBLY_CLASS = 8
     PROCESS = 9
-    FSU = 10
-    SMT = 11
-    THT = 12
-    AOI = 13
-    OPS = 14
-    SHIP = 15
-    DATE_INGESTED = 16
-    LABEL = 17
-    PHOTOS = 18
+    WASH = 10
+    FSU = 11
+    SMT = 12
+    THT = 13
+    AOI = 14
+    OPS = 15
+    SHIP = 16
+    DATE_INGESTED = 17
+    LABEL = 18
+    PHOTOS = 19
+
+# Phase 49 (2.2): no Audit List code compares a column against an integer
+# literal. Column order is a property of the enum alone.
+_SEMANTIC_ROLE_BY_COLUMN = {
+    Column.PART_NUMBER: "part_number",
+    Column.QUANTITY: "quantity",
+    Column.PROCESS: "process",
+}
+
+# Blank is a real answer: a traveler ingested before process_clean was mapped
+# said nothing about washing, and "NC" would put words in its mouth.
+WASH_COLUMN_TEXT = {
+    WashState.CLEAN: "C",
+    WashState.NO_CLEAN: "NC",
+    WashState.UNKNOWN: "",
+}
+WASH_SEARCH_TOKEN = {
+    WashState.CLEAN: "wash",
+    WashState.NO_CLEAN: "noclean",
+    WashState.UNKNOWN: "",
+}
+
+
+def wash_state_of(digest) -> WashState:
+    return wash_state({"process_clean": digest.process_clean})
 
 _CHECKBOX_COLUMNS = frozenset({Column.LABEL, Column.PHOTOS})
 _STATUS_STAGE_COLUMN = {
@@ -65,7 +92,8 @@ _STATUS_STAGE_COLUMN = {
 _DEFAULT_COLUMN_WIDTHS: dict[Column, int] = {
     Column.START_BY: 90, Column.SHIP_DATE: 90, Column.PART_NUMBER: 120, Column.WORK_ORDER_REF: 80,
     Column.LEAD_TIME: 50, Column.QUANTITY: 55, Column.REPEAT: 70, Column.CLASSIFICATION: 110,
-    Column.ASSEMBLY_CLASS: 55, Column.PROCESS: 90, Column.FSU: 70, Column.SMT: 70, Column.THT: 70,
+    Column.ASSEMBLY_CLASS: 55, Column.PROCESS: 90, Column.WASH: 55,
+    Column.FSU: 70, Column.SMT: 70, Column.THT: 70,
     Column.AOI: 70, Column.OPS: 70, Column.SHIP: 70, Column.DATE_INGESTED: 100,
     Column.LABEL: 55, Column.PHOTOS: 60,
 }
@@ -81,8 +109,8 @@ class AuditListModel(QAbstractTableModel):
 
     COLUMNS = [
         "Start-By Date", "Ship Date", "B#", "S/O", "LT",
-        "QTY", "Type", "Classification", "Class", "Process",
-        "FSU (hrs)", "SMT (hrs)", "THT (hrs)", 
+        "QTY", "Type", "Classification", "Class", "Process", "Wash",
+        "FSU (hrs)", "SMT (hrs)", "THT (hrs)",
         "AOI (hrs)", "OPS (hrs)", "SHIP (hrs)", "Date Ingested",
         "Label", "Photos"
     ]
@@ -133,25 +161,26 @@ class AuditListModel(QAbstractTableModel):
 
     def _sort_key(self, d: OpenAuditDigest) -> Any:
         col = self._sort_col
-        if col == 0: return (d.start_by is not None, d.start_by)
-        if col == 1: return (d.ship_date is not None, d.ship_date)
-        if col == 2: return str(d.part_number)
-        if col == 3: return f"{d.work_order_ref}{d.split_suffix}"
-        if col == 4: return (d.lead_time_days is not None, d.lead_time_days)
-        if col == 5: return d.quantity
-        if col == 6: return str(d.repeat)
-        if col == 7: return str(d.classification)
-        if col == 8: return (d.assembly_class is not None, d.assembly_class)
-        if col == 9: return str(d.process)
-        if col == 10: return (d.feeder_setuptime is not None, d.feeder_setuptime)
-        if col == 11: return (d.smt_runtime is not None, d.smt_runtime)
-        if col == 12: return (d.tht_runtime is not None, d.tht_runtime)
-        if col == 13: return (d.aoi_runtime is not None, d.aoi_runtime)
-        if col == 14: return (d.ops_runtime is not None, d.ops_runtime)
-        if col == 15: return (d.shipping_runtime is not None, d.shipping_runtime)
-        if col == 16: return (d.date_ingested is not None, d.date_ingested)
-        if col == 17: return d.is_labeled
-        if col == 18: return d.are_photos_uploaded
+        if col == Column.START_BY: return (d.start_by is not None, d.start_by)
+        if col == Column.SHIP_DATE: return (d.ship_date is not None, d.ship_date)
+        if col == Column.PART_NUMBER: return str(d.part_number)
+        if col == Column.WORK_ORDER_REF: return f"{d.work_order_ref}{d.split_suffix}"
+        if col == Column.LEAD_TIME: return (d.lead_time_days is not None, d.lead_time_days)
+        if col == Column.QUANTITY: return d.quantity
+        if col == Column.REPEAT: return d.repeat.display
+        if col == Column.CLASSIFICATION: return str(d.classification)
+        if col == Column.ASSEMBLY_CLASS: return (d.assembly_class is not None, d.assembly_class)
+        if col == Column.PROCESS: return str(d.process)
+        if col == Column.WASH: return WASH_COLUMN_TEXT[wash_state_of(d)]
+        if col == Column.FSU: return (d.feeder_setuptime is not None, d.feeder_setuptime)
+        if col == Column.SMT: return (d.smt_runtime is not None, d.smt_runtime)
+        if col == Column.THT: return (d.tht_runtime is not None, d.tht_runtime)
+        if col == Column.AOI: return (d.aoi_runtime is not None, d.aoi_runtime)
+        if col == Column.OPS: return (d.ops_runtime is not None, d.ops_runtime)
+        if col == Column.SHIP: return (d.shipping_runtime is not None, d.shipping_runtime)
+        if col == Column.DATE_INGESTED: return (d.date_ingested is not None, d.date_ingested)
+        if col == Column.LABEL: return d.is_labeled
+        if col == Column.PHOTOS: return d.are_photos_uploaded
         return 0
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlag:
@@ -221,10 +250,16 @@ class AuditListModel(QAbstractTableModel):
 
             if index.column() == _STATUS_STAGE_COLUMN.get(d.status):
                 return facelift.attention_color()
-            if index.column() == 7 and d.is_itar:
+            if index.column() == Column.CLASSIFICATION and d.is_itar:
                 return facelift.attention_color()
+            # Phase 49 (4.5): the cell holds nothing but the digit, so colouring
+            # the whole cell colours exactly the intended glyph.
+            if index.column() == Column.ASSEMBLY_CLASS and is_class_3(
+                {"assembly_class": d.assembly_class}
+            ):
+                return facelift.overdue_color()
             
-            color = facelift.list_column_color(index.column())
+            color = facelift.semantic_color(_SEMANTIC_ROLE_BY_COLUMN.get(index.column()))
             if color is not None:
                 return color
 
@@ -234,23 +269,24 @@ class AuditListModel(QAbstractTableModel):
             d: OpenAuditDigest = row_data["digest"]
             col = index.column()
             
-            if col == 0: return _format_list_date(d.start_by)
-            if col == 1: return _format_list_date(d.ship_date)
-            if col == 2: return d.part_number
-            if col == 3: return f"{d.work_order_ref}{d.split_suffix}"
-            if col == 4: return str(d.lead_time_days) if d.lead_time_days is not None else ""
-            if col == 5: return str(d.quantity)
-            if col == 6: return d.repeat
-            if col == 7: return d.classification
-            if col == 8: return str(d.assembly_class) if d.assembly_class is not None else ""
-            if col == 9: return d.process or ""
-            if col == 10: return f"{d.feeder_setuptime:.1f}" if d.feeder_setuptime is not None else ""
-            if col == 11: return f"{d.smt_runtime:.1f}" if d.smt_runtime is not None else ""
-            if col == 12: return f"{d.tht_runtime:.1f}" if d.tht_runtime is not None else ""
-            if col == 13: return f"{d.aoi_runtime:.1f}" if d.aoi_runtime is not None else ""
-            if col == 14: return f"{d.ops_runtime:.1f}" if d.ops_runtime is not None else ""
-            if col == 15: return f"{d.shipping_runtime:.1f}" if d.shipping_runtime is not None else ""
-            if col == 16:
+            if col == Column.START_BY: return _format_list_date(d.start_by)
+            if col == Column.SHIP_DATE: return _format_list_date(d.ship_date)
+            if col == Column.PART_NUMBER: return d.part_number
+            if col == Column.WORK_ORDER_REF: return f"{d.work_order_ref}{d.split_suffix}"
+            if col == Column.LEAD_TIME: return str(d.lead_time_days) if d.lead_time_days is not None else ""
+            if col == Column.QUANTITY: return str(d.quantity)
+            if col == Column.REPEAT: return d.repeat.display
+            if col == Column.CLASSIFICATION: return d.classification
+            if col == Column.ASSEMBLY_CLASS: return str(d.assembly_class) if d.assembly_class is not None else ""
+            if col == Column.PROCESS: return d.process or ""
+            if col == Column.WASH: return WASH_COLUMN_TEXT[wash_state_of(d)]
+            if col == Column.FSU: return f"{d.feeder_setuptime:.1f}" if d.feeder_setuptime is not None else ""
+            if col == Column.SMT: return f"{d.smt_runtime:.1f}" if d.smt_runtime is not None else ""
+            if col == Column.THT: return f"{d.tht_runtime:.1f}" if d.tht_runtime is not None else ""
+            if col == Column.AOI: return f"{d.aoi_runtime:.1f}" if d.aoi_runtime is not None else ""
+            if col == Column.OPS: return f"{d.ops_runtime:.1f}" if d.ops_runtime is not None else ""
+            if col == Column.SHIP: return f"{d.shipping_runtime:.1f}" if d.shipping_runtime is not None else ""
+            if col == Column.DATE_INGESTED:
                 if not d.date_ingested: return ""
                 local = d.date_ingested.astimezone(PST)
                 return f"{local:%Y-%m-%d}"
@@ -322,6 +358,64 @@ class CenteredCheckDelegate(QStyledItemDelegate):
         is_checked = (current == Qt.CheckState.Checked or current == Qt.CheckState.Checked.value or current == 2 or current is True)
         next_state = Qt.CheckState.Unchecked if is_checked else Qt.CheckState.Checked
         return model.setData(index, next_state, Qt.ItemDataRole.CheckStateRole)
+
+
+class RepeatReferenceDelegate(QStyledItemDelegate):
+    """Paints the repeat cell as two runs so the reference alone carries the cue.
+
+    The split is taken from the RepeatMarker, never by searching the displayed
+    string for a separator: nothing constrains rowc_label to a single word.
+    A row whose display text does not end in its reference — a NEW assembly,
+    or a synthesised "REPEAT" — is drawn exactly as the default delegate would.
+    """
+
+    def paint(self, painter, option, index):
+        row_data = index.data(Qt.ItemDataRole.UserRole)
+        if not row_data or row_data.get("kind") != RowKind.DATA:
+            super().paint(painter, option, index)
+            return
+
+        digest: OpenAuditDigest = row_data["digest"]
+        marker = digest.repeat
+        reference = marker.reference
+        display = marker.display
+
+        if not reference or not display.endswith(reference):
+            super().paint(painter, option, index)
+            return
+
+        prefix = display[: len(display) - len(reference)]
+
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        opt.text = ""
+        style = option.widget.style() if option.widget else QApplication.style()
+        style.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, painter, option.widget)
+
+        from cockpit.ui import facelift
+
+        metrics = opt.fontMetrics
+        prefix_width = metrics.horizontalAdvance(prefix)
+        total_width = metrics.horizontalAdvance(display)
+        cell = option.rect
+        left = cell.x() + max(0, (cell.width() - total_width) // 2)
+
+        painter.save()
+        painter.setFont(opt.font)
+        if prefix:
+            painter.setPen(opt.palette.text().color())
+            painter.drawText(
+                QRect(left, cell.y(), prefix_width, cell.height()),
+                Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+                prefix,
+            )
+        painter.setPen(facelift.attention_color())
+        painter.drawText(
+            QRect(left + prefix_width, cell.y(), total_width - prefix_width, cell.height()),
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
+            reference,
+        )
+        painter.restore()
 
 
 class GroupHeaderDelegate(QStyledItemDelegate):
@@ -396,6 +490,9 @@ class OpenAuditPicker(QWidget):
         
         for col in (Column.LABEL, Column.PHOTOS):
             self.table_view.setItemDelegateForColumn(col, CenteredCheckDelegate(self.table_view))
+        self.table_view.setItemDelegateForColumn(
+            Column.REPEAT, RepeatReferenceDelegate(self.table_view)
+        )
         
         layout.addWidget(self.table_view)
         self._last_digests = []
@@ -491,6 +588,10 @@ class OpenAuditPicker(QWidget):
         if not header.restoreState(blob):
             logger.warning("Audit list: header state failed to restore; reverting to defaults")
             header.restoreState(self._default_header_state)
+            # Phase 49 (2.4): overwrite the stale blob now. It is only otherwise
+            # written on a section move or resize, so an operator who never
+            # drags a header would fail this restore on every launch forever.
+            self._persist_header_state()
         self._apply_group_header_spans()
 
     def _reset_columns(self) -> None:
@@ -517,10 +618,13 @@ class OpenAuditPicker(QWidget):
             f"{d.work_order_ref}{d.split_suffix}",
             str(d.lead_time_days) if d.lead_time_days is not None else "",
             str(d.quantity),
-            str(d.repeat),
+            d.repeat.display,
             str(d.classification),
             str(d.assembly_class) if d.assembly_class is not None else "",
             d.process or "",
+            # Not the displayed C / NC: "c" would match any cell containing a c,
+            # and "clean" is a substring of "noclean". These two share none.
+            WASH_SEARCH_TOKEN[wash_state_of(d)],
             f"{d.feeder_setuptime:.1f}" if d.feeder_setuptime is not None else "",
             f"{d.smt_runtime:.1f}" if d.smt_runtime is not None else "",
             f"{d.tht_runtime:.1f}" if d.tht_runtime is not None else "",

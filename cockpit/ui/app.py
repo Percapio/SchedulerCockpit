@@ -126,6 +126,9 @@ def main() -> None:
 
     from cockpit.services.second_ops import SecondOpsSettingsController
     second_ops_settings_controller = SecondOpsSettingsController(settings)
+    # Phase 49 (5.5): runs before any consumer reads terms(), and is an explicit
+    # call rather than a side effect of the getter.
+    term_merge_outcome = second_ops_settings_controller.migrate_shipped_terms()
 
     from cockpit.settings.source_root import SourceRootController
     source_root_controller = SourceRootController(settings)
@@ -152,7 +155,12 @@ def main() -> None:
         holiday_svc=bootstrapped.holiday_svc
     )
     window.show()
-    
+
+    # A one-shot, not a visibility listener: showEvent would re-fire on every
+    # minimise and restore and would need explicit disconnection.
+    from PyQt6.QtCore import QTimer
+    QTimer.singleShot(0, lambda: window.announce_term_merge(term_merge_outcome))
+
     report = bootstrapped.reconciliation_report
     if report.errors or report.orphan_delete_failed:
         from cockpit.ui.widgets import ErrorDialog

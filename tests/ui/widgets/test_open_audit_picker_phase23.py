@@ -8,6 +8,7 @@ from PyQt6.QtCore import Qt, QModelIndex
 from cockpit.services.views import OpenAuditDigest
 from cockpit.persistence.types import AuditStatus
 from cockpit.ui.widgets.open_audit_picker import OpenAuditPicker, RowKind
+from cockpit.services.repeat import derive_repeat_marker
 
 def test_OpenAuditPicker_font_scale_buttons(qtbot):
     picker = OpenAuditPicker()
@@ -48,7 +49,7 @@ def test_OpenAuditPicker_populate_and_click(qtbot):
         date_ingested=datetime(2026, 5, 31, 10, 0, 0, tzinfo=timezone.utc),
         ship_date=None,
         lead_time_days=None,
-        repeat="NEW",
+        repeat=derive_repeat_marker({"assembly_type": "NEW"}),
         classification="Non-ITAR",
         assembly_class=2,
         process=None,

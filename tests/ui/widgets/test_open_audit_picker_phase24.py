@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from cockpit.ui.widgets.open_audit_picker import OpenAuditPicker
 from cockpit.services.views import OpenAuditDigest
 from cockpit.persistence.types import AuditStatus
+from cockpit.services.repeat import derive_repeat_marker
 
 def test_picker_table_grouping(qtbot):
     digest = OpenAuditDigest(
@@ -16,7 +17,7 @@ def test_picker_table_grouping(qtbot):
         date_ingested=datetime.now(timezone.utc),
         ship_date=None,
         lead_time_days=None,
-        repeat="NEW",
+        repeat=derive_repeat_marker({"assembly_type": "NEW"}),
         classification="Non-ITAR",
         assembly_class=2,
         process=None,

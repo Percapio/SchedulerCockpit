@@ -4,7 +4,7 @@ import pathlib
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThread, QSettings, QTimer, QEvent
 from PyQt6.QtGui import QCloseEvent
-from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox, QApplication
+from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox, QApplication, QDialog
 
 from cockpit.ingestion.progress import ProgressStage
 from cockpit.ui.bootstrap import BootstrappedApp
@@ -121,16 +121,19 @@ class MainWindow(QMainWindow):
             setup_bom_service=self._bootstrapped.setup_bom_svc,
             pdf_renderer=pdf_renderer,
             theme=self._theme,
-            audit_bom_component_repo=self._bootstrapped.audit_bom_component_repo
+            audit_bom_component_repo=self._bootstrapped.audit_bom_component_repo,
+            source_root_controller=source_root_controller,
         )
         self._audit_view.exit_requested.connect(self._on_dashboard_exit)
         self._audit_view.error_occurred.connect(self._on_failed)
         self._audit_view.ops_per_board_change_requested.connect(self._on_ops_per_board_change_requested)
         self._audit_view.second_ops_requested.connect(self._on_audit_second_ops_requested)
+        self._audit_view.drawing_fetch_requested.connect(self._on_drawing_fetch_requested)
         self.stacked.addWidget(self._audit_view)
         
         self.toast = Toast(self)
         self._term_merge_announced = False
+        self._pending_drawing_target = None
 
         self._style_controller = style_controller
         self._runtime_settings_controller = runtime_settings_controller
@@ -540,6 +543,98 @@ class MainWindow(QMainWindow):
                 
             self._fetch_thread = None
             self._fetch_worker = None
+
+    # --- Phase 50 section 4.4: drawing fetch -----------------------------
+
+    def _on_drawing_fetch_requested(self, audit_id: int, secondary: bool) -> None:
+        """Locates a drawing on the share and attaches it to the audit.
+
+        Reuses the Phase 46 worker and watchdog rather than a second copy: the
+        blocking-stat hazard and its abandonment contract are identical.
+        """
+        if self._operation_in_flight:
+            return
+
+        from cockpit.settings.source_root import SourceRootState
+
+        if self._source_root_controller is None:
+            return
+        state, root_path = self._source_root_controller.source_root()
+        if state != SourceRootState.CONFIGURED:
+            QMessageBox.information(
+                self, "Setup Required",
+                "Please configure the source share root in Settings first."
+            )
+            return
+
+        audit = self._bootstrapped.audit_repo.find_by_id(audit_id)
+        if audit is None:
+            return
+
+        self._pending_drawing_target = (audit_id, secondary)
+        self._operation_in_flight = True
+
+        from cockpit.ui.job_fetch_worker import DrawingFetchWorker
+        self._fetch_thread = QThread()
+        self._fetch_worker = DrawingFetchWorker(audit.part_number, root_path)
+        self._fetch_worker.moveToThread(self._fetch_thread)
+
+        self._fetch_thread.started.connect(self._fetch_worker.run)
+        self._fetch_worker.succeeded_signal.connect(self._on_drawing_fetch_succeeded)
+        self._fetch_worker.failed_signal.connect(self._on_fetch_failed)
+
+        self._fetch_watchdog = QTimer(self)
+        self._fetch_watchdog.setSingleShot(True)
+        self._fetch_watchdog.timeout.connect(self._on_fetch_watchdog_timeout)
+        self._fetch_watchdog.start(FETCH_WATCHDOG_TIMEOUT_MS)
+
+        self._fetch_thread.start()
+
+    def _on_drawing_fetch_succeeded(self, outcome) -> None:
+        self._operation_in_flight = False
+        self._fetch_watchdog.stop()
+        self._fetch_thread.quit()
+        self._fetch_thread.wait()
+        self._fetch_worker.deleteLater()
+        self._fetch_thread.deleteLater()
+        self._fetch_thread = None
+        self._fetch_worker = None
+
+        audit_id, secondary = self._pending_drawing_target
+        self._pending_drawing_target = None
+
+        from cockpit.ingestion.locator import (
+            LocatedDrawing, PendingDrawingSelection, as_pending_selection,
+        )
+        from cockpit.ingestion.roles import SourceRole
+
+        pdf_path = None
+        if isinstance(outcome, LocatedDrawing):
+            pdf_path = outcome.pdf_path
+        elif isinstance(outcome, PendingDrawingSelection):
+            from cockpit.ui.widgets.fetch_dialog import SelectSourcesDialog
+            dialog = SelectSourcesDialog(as_pending_selection(outcome), self)
+            if dialog.exec() != QDialog.DialogCode.Accepted:
+                # A cancel is a decision, not a failure: nothing is copied,
+                # nothing is registered, and no error is raised.
+                return
+            pdf_path = dialog.choices.get(SourceRole.PDF)
+
+        if pdf_path is None:
+            return
+
+        try:
+            service = self._bootstrapped.ingestion_service
+            if secondary:
+                service.add_secondary_pdf_to_audit(audit_id, pdf_path)
+            else:
+                service.add_pdf_to_audit(audit_id, pdf_path)
+        except Exception as e:
+            logger.exception("Drawing fetch failed to attach")
+            self._on_failed(FailurePayload.from_exception(e, "Could not attach the drawing"))
+            return
+
+        self._audit_view.load(audit_id)
 
     def _on_fetch_watchdog_timeout(self) -> None:
         self._abandon_fetch_worker()

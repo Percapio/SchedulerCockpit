@@ -44,6 +44,22 @@ class FileStorageError(IngestionError):
         self.cause = cause
 
 
+class StoredFileVerificationError(IngestionError):
+    """The bytes at the storage destination do not hash to the expected value.
+
+    Raised before any database mutation. The registered file_hash is what the
+    startup orphan sweep matches on, so a row whose hash disagrees with its
+    bytes gets the file unlinked underneath it.
+    """
+    def __init__(self, path: pathlib.Path, destination: pathlib.Path):
+        super().__init__(
+            f"Stored copy of {path.name} at {destination} does not match its "
+            f"expected content; the file was not registered."
+        )
+        self.path = path
+        self.destination = destination
+
+
 # ---------- parsing ----------
 
 class ParseError(IngestionError):

@@ -1,3 +1,5 @@
+from enum import Enum
+
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, 
     QComboBox, QPushButton, QFormLayout, QDialogButtonBox, QCheckBox
@@ -5,16 +7,52 @@ from PyQt6.QtWidgets import (
 from cockpit.services.release import ReleaseFormData
 from cockpit.persistence.types import AuditStatus
 
-from PyQt6.QtCore import Qt, QDate
+
+class DetailsOutcome(Enum):
+    """Which button closed the modal.
+
+    Update no longer closes, so it is not an outcome: it commits in place and
+    the dialog stays open. What remains is whether the operator asked to print
+    on the way out.
+    """
+
+    RELEASE = "RELEASE"
+    CLOSED = "CLOSED"
+
+
+def resolve_ship_date(raw_ship_date: str, blank_requested: bool):
+    """Resolves the ship-date control into what should be persisted.
+
+    pre:  blank_requested reflects the Blank checkbox
+    post: None iff blank_requested; otherwise the parsed date
+    raises: ValueError when a non-blank control yields an unparseable value,
+            which is a programming error and must not silently reach the
+            database as a NULL that clears a date nobody asked to clear
+    """
+    from datetime import date
+
+    if blank_requested:
+        return None
+    text = (raw_ship_date or "").strip()
+    if not text:
+        return None
+    return date.fromisoformat(text)
+
+from PyQt6.QtCore import Qt, QDate, pyqtSignal
 from cockpit.layout.constants import PAGE_SIDE_LABELS
 
 class ReleaseDialog(QDialog):
+    # The dialog holds no service. It asks to be committed and is told what
+    # happened, which is what keeps it constructible with nothing injected.
+    update_requested = pyqtSignal()
+
     def __init__(self, initial_data: ReleaseFormData, initial_status: str, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Release Audit")
+        self.setWindowTitle("Details")
         self.setMinimumWidth(400)
         
         self.initial_data = initial_data
+        self._outcome = DetailsOutcome.CLOSED
         
         layout = QVBoxLayout(self)
         
@@ -100,11 +138,101 @@ class ReleaseDialog(QDialog):
         form.addRow("Floor Notes:", self.floor_notes_input)
 
         layout.addLayout(form)
-        
-        btns = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
-        btns.accepted.connect(self.accept)
-        btns.rejected.connect(self.reject)
+
+        notice = QLabel(
+            "Only Workflow Status and Ship Date are saved. "
+            "Other fields apply to the printed form only."
+        )
+        notice.setWordWrap(True)
+        notice.setProperty("class", "hint")
+        layout.addWidget(notice)
+
+        # Says what the last commit did, since Update no longer closes the
+        # modal and a vanishing button is a weak signal on its own.
+        self.status_lbl = QLabel("")
+        self.status_lbl.setWordWrap(True)
+        layout.addWidget(self.status_lbl)
+
+        btns = QDialogButtonBox()
+        self.update_btn = btns.addButton("Update", QDialogButtonBox.ButtonRole.ApplyRole)
+        self.release_btn = btns.addButton("Release", QDialogButtonBox.ButtonRole.AcceptRole)
+        # Never "Cancel": it has never undone anything, and now that Update can
+        # commit without closing, "Cancel" would actively mislead.
+        self.close_btn = btns.addButton("Close", QDialogButtonBox.ButtonRole.RejectRole)
+        self.update_btn.clicked.connect(self._on_update_clicked)
+        self.release_btn.clicked.connect(self._on_release_clicked)
+        self.close_btn.clicked.connect(self.reject)
         layout.addWidget(btns)
+
+        # Recomputed on every change to a persistable widget, not only here: a
+        # button that was correct when the dialog opened and wrong by the time
+        # the operator reaches for it is worse than no button.
+        # The baseline is what the form actually shows once populated, not what
+        # it was asked to show. A status the combo could not match, or a ship
+        # date that failed to parse, would otherwise register as an operator
+        # edit on open and offer to commit a change nobody made.
+        self._initial_status = self.status_combo.currentText()
+        self._initial_ship_date = self._current_ship_date_text()
+
+        self.status_combo.currentTextChanged.connect(self._refresh_update_visibility)
+        self.ship_date_input.dateChanged.connect(self._refresh_update_visibility)
+        self.ship_date_blank_check.toggled.connect(self._refresh_update_visibility)
+        self._refresh_update_visibility()
+
+    def has_persistable_change(self) -> bool:
+        """Whether the modal holds an edit that Update can actually commit.
+
+        post: true iff status or ship_date differ from what was loaded; an edit
+              to any of the fifteen print-payload fields never makes this true
+        """
+        if self.status_combo.currentText() != self._initial_status:
+            return True
+        return self._current_ship_date_text() != self._initial_ship_date
+
+    def _current_ship_date_text(self) -> str:
+        if self.ship_date_blank_check.isChecked():
+            return ""
+        return self.ship_date_input.date().toString(Qt.DateFormat.ISODate)
+
+    def _refresh_update_visibility(self) -> None:
+        changed = self.has_persistable_change()
+        self.update_btn.setVisible(changed)
+        # The line describes the current form, not a commit two edits ago.
+        if changed and self.status_lbl.text():
+            self.status_lbl.setText("")
+
+    def _on_update_clicked(self) -> None:
+        """Asks to be committed. Does not close: this is an apply, not an OK."""
+        self.update_requested.emit()
+
+    def mark_committed(self, committed_status: str, committed_ship_date: str) -> None:
+        """Rebases onto the values that were just persisted.
+
+        post: the baseline becomes the committed values, so the existing
+              visibility rule hides Update with no separate committed state
+        """
+        self._initial_status = committed_status
+        self._initial_ship_date = committed_ship_date
+        self.status_lbl.setText("Saved.")
+        self.update_btn.setVisible(self.has_persistable_change())
+
+    def mark_commit_failed(self, message: str) -> None:
+        """Reports inline rather than raising a second dialog over this one.
+
+        post: the baseline is unchanged, so Update stays visible to retry
+        """
+        self.status_lbl.setText(message)
+        self.update_btn.setVisible(self.has_persistable_change())
+
+    def _on_release_clicked(self) -> None:
+        self._outcome = DetailsOutcome.RELEASE
+        self.accept()
+
+    def outcome(self) -> DetailsOutcome:
+        return self._outcome
+
+    def ship_date_is_blank(self) -> bool:
+        return self.ship_date_blank_check.isChecked()
 
     def get_result(self) -> tuple[ReleaseFormData, str]:
         def parse_int(s):

@@ -198,3 +198,91 @@ def resolve_selection(pending: PendingSelection, chosen: dict[SourceRole, pathli
         ),
         ignored_count=pending.ignored_count
     )
+
+
+@dataclass
+class LocatedDrawing:
+    job_number: str
+    job_directory: pathlib.Path
+    pdf_path: pathlib.Path
+
+
+@dataclass
+class PendingDrawingSelection:
+    job_number: str
+    job_directory: pathlib.Path
+    candidates: list[pathlib.Path]
+
+
+DrawingFetchOutcome = Union[LocatedDrawing, PendingDrawingSelection]
+
+
+def locate_drawing(job_number: str, source_root: pathlib.Path) -> DrawingFetchOutcome:
+    """Locates the drawing for a job, ignoring every other role.
+
+    pre:  job_number matches JOB_NUMBER_GRAMMAR; source_root is reachable
+    post: on LocatedDrawing the path names an existing .pdf inside source_root;
+          on PendingDrawingSelection every candidate does likewise and the set
+          holds two or more, since one candidate resolves to LocatedDrawing
+    raises: JobNumberMalformed, SourceRootUnreachable, JobDirectoryNotFound,
+            JobDirectoryEscapesRoot, RequiredRoleMissing naming PDF alone
+
+    Deliberately not `locate` with a relaxed contract: `locate` guarantees a
+    complete quartet and `IngestionService.ingest` depends on that guarantee.
+    A job folder cleaned down to its drawing must serve this path and must
+    still fail that one.
+    """
+    job_number_clean = job_number.strip().upper()
+    if not JOB_NUMBER_GRAMMAR.match(job_number_clean):
+        raise JobNumberMalformed(job_number)
+
+    try:
+        if not source_root.exists() or not source_root.is_dir():
+            raise SourceRootUnreachable(source_root, FileNotFoundError("Root missing or not a directory"))
+        list(source_root.iterdir())
+    except Exception as e:
+        if isinstance(e, SourceRootUnreachable):
+            raise
+        raise SourceRootUnreachable(source_root, e)
+
+    job_dir = resolve_job_directory(job_number_clean, source_root)
+    if not job_dir.exists():
+        raise JobDirectoryNotFound(job_number_clean, job_dir)
+
+    # Containment is re-checked here rather than assumed from resolve_job_directory:
+    # the root is a share other people write to.
+    assert_within_root(job_dir, source_root)
+
+    entries = [e for e in job_dir.iterdir() if e.is_file()]
+    candidates = [e for e in entries if role_of(e.name) == SourceRole.PDF]
+
+    if not candidates:
+        raise RequiredRoleMissing(job_number_clean, ["PDF"], [p.name for p in entries])
+
+    if len(candidates) == 1:
+        return LocatedDrawing(
+            job_number=job_number_clean,
+            job_directory=job_dir,
+            pdf_path=candidates[0],
+        )
+
+    return PendingDrawingSelection(
+        job_number=job_number_clean,
+        job_directory=job_dir,
+        candidates=sorted(candidates, key=lambda p: p.name),
+    )
+
+
+def as_pending_selection(pending: PendingDrawingSelection) -> PendingSelection:
+    """Adapts a drawing ambiguity onto the shipped selection dialog's input.
+
+    post: one CandidateSet carrying the PDF role and no preselection; the
+          dialog is reused verbatim rather than a second picker being written
+    """
+    return PendingSelection(
+        job_number=pending.job_number,
+        job_directory=pending.job_directory,
+        sets=[CandidateSet(role=SourceRole.PDF, candidates=list(pending.candidates), preselected=None)],
+        resolved={},
+        ignored_count=0,
+    )

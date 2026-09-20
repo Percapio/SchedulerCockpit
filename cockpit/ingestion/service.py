@@ -21,7 +21,7 @@ from . import categorizer
 from . import cross_validation
 from . import gatekeeper
 from . import hashing
-from .errors import FileStorageError
+from .errors import FileStorageError, StoredFileVerificationError
 from .filename_rules import derive_part_number_from_filename
 from .parsers import audit_bom, coordinate_map, eco_build_notes, traveler
 from .progress import ProgressEvent, ProgressStage
@@ -279,14 +279,17 @@ class IngestionService:
             raise AuditNotFound(audit_id)
 
         pdf_hash = hashing.sha256_hex(pdf_path)
-        
+
         audit_dir = self.file_storage_root / audit.part_number / "unsplit"
         try:
             audit_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
             raise FileStorageError(audit_dir, audit_dir, e)
 
-        stored_pdf = audit_dir / pdf_path.name
+        # Phase 50 section 3.2: content-addressed, so a revision re-exported
+        # under the same filename gets a distinct destination instead of
+        # silently keeping the superseded bytes under the new hash.
+        stored_pdf = audit_dir / f"{pdf_path.stem}__{pdf_hash[:12]}{pdf_path.suffix}"
         copied = False
         try:
             if not stored_pdf.exists():
@@ -294,6 +297,18 @@ class IngestionService:
                 copied = True
         except Exception as e:
             raise FileStorageError(pdf_path, stored_pdf, e)
+
+        # Phase 50 section 3.3: both branches converge on one post-condition —
+        # the file at stored_pdf hashes to pdf_hash. Verifying only the skip
+        # branch would leave a truncated copy unchecked, and the registered hash
+        # is what the startup sweep matches on.
+        if hashing.sha256_hex(stored_pdf) != pdf_hash:
+            if copied and self.source_file_repo.reference_count(pdf_hash) == 0:
+                try:
+                    stored_pdf.unlink()
+                except Exception:
+                    pass
+            raise StoredFileVerificationError(pdf_path, stored_pdf)
 
         target_ref_des = set()
         bom_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.BOM)
@@ -312,6 +327,16 @@ class IngestionService:
                     pass
             raise
 
+        # Phase 50 section 3.4: captured before the savepoint so that a rollback
+        # cannot leave a reap referring to rows that still exist. The reap runs
+        # after RELEASE, following complete_and_cleanup's ordering.
+        superseded = []
+        prior_before_txn = self.source_file_repo.find_by_audit_and_category(
+            audit_id, SourceFileCategory.PDF
+        )
+        if prior_before_txn:
+            superseded.append(prior_before_txn)
+
         self.conn.execute("SAVEPOINT add_pdf")
         try:
             prior_pdf_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
@@ -320,7 +345,10 @@ class IngestionService:
                 
             pdf_file = self.source_file_repo.register(SourceFileDraft(
                 audit_id=audit.id, file_category=SourceFileCategory.PDF,
-                original_filename=stored_pdf.name, local_storage_path=stored_pdf, file_hash=pdf_hash
+                # The operator-facing name, not the content-addressed one on
+                # disk: nothing derives a path from this column and the UI
+                # displays it, so the hash suffix must not reach it.
+                original_filename=pdf_path.name, local_storage_path=stored_pdf, file_hash=pdf_hash
             ))
             
             if pdf_result and pdf_file:
@@ -347,6 +375,22 @@ class IngestionService:
                     except Exception:
                         pass
             raise
+
+        # reference_count is what keeps this safe for split siblings, which
+        # share local_storage_path and file_hash by reference: a file another
+        # row still points at is retained, not deleted. A reap failure leaves
+        # the rows correct and an unreferenced file for the startup sweep.
+        if superseded:
+            from cockpit.services.storage_reaper import StorageReaper
+            try:
+                report = StorageReaper(self.source_file_repo).reap(superseded)
+                if report.failed_paths:
+                    logger.warning(
+                        "Superseded drawing(s) could not be removed; the startup "
+                        "sweep will retry: %s", report.failed_paths
+                    )
+            except Exception:
+                logger.exception("Reaping the superseded drawing failed")
 
     def add_secondary_pdf_to_audit(
         self,

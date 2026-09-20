@@ -212,6 +212,7 @@ pytest tests/ui/test_theme.py
 pytest -v          # verbose — shows each test name as it runs
 pytest -x          # stop on the first failure
 pytest --tb=short  # shorter tracebacks
+pytest -o faulthandler_timeout=30   #Any test exceeding 30 s dumps the traceback of every thread, which names the blocking call outright.
 ```
 
 > **Note:** UI tests spin up a real (hidden) Qt application. If you see an error about a display, make sure you're running in a graphical session, not a headless SSH shell.

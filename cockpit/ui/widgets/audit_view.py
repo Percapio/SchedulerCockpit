@@ -40,6 +40,7 @@ class AuditView(QWidget):
     
     # Local
     settings_requested = pyqtSignal()
+    drawing_fetch_requested = pyqtSignal(int, bool)  # (audit_id, secondary)
 
     def __init__(
         self,
@@ -54,7 +55,8 @@ class AuditView(QWidget):
         parent: QWidget | None = None,
         *,
         theme: Theme,
-        audit_bom_component_repo = None
+        audit_bom_component_repo = None,
+        source_root_controller = None
         
     ) -> None:
         super().__init__(parent)
@@ -95,7 +97,8 @@ class AuditView(QWidget):
         
         self._actions_bar = AuditActionsBar(
             split_service, completion_service, ingestion_service,
-            release_service, setup_bom_service, self
+            release_service, setup_bom_service, self,
+            source_root_controller=source_root_controller,
         )
         self._actions_bar.bind(self._session)
         self._actions_bar.error_occurred.connect(self.error_occurred.emit)
@@ -103,6 +106,8 @@ class AuditView(QWidget):
         self._actions_bar.ops_per_board_change_requested.connect(self.ops_per_board_change_requested.emit)
         self._actions_bar.exit_requested.connect(self._on_exit_requested)
         self._actions_bar.second_ops_requested.connect(self.second_ops_requested.emit)
+        self._actions_bar.drawing_fetch_requested.connect(self.drawing_fetch_requested.emit)
+        self._actions_bar.audit_fields_changed.connect(self.refresh_audit_fields)
         header_layout.addWidget(self._actions_bar)
         
         layout.addLayout(header_layout)
@@ -281,6 +286,20 @@ class AuditView(QWidget):
         except Exception:
             logger.exception("Could not read BOM lines for the MPN library segment")
             return []
+
+    def refresh_audit_fields(self, audit_id: int | None = None) -> None:
+        """Re-reads the audit without rebuilding the BOM panel or the canvas.
+
+        pre:  only the audit's own scalar columns changed
+        post: the identity bar and checklist rows reflect the stored audit;
+              no BOM row is rebuilt and no canvas render is requested
+
+        AuditView.load costs ~126 ms on a 374-line BOM, essentially all of it
+        in _bom_panel.load, and requests a fresh raster on top. Neither the BOM
+        panel nor this widget renders status or ship date, so none of that work
+        can change a pixel here.
+        """
+        self._session.reload()
 
     def reload(self) -> None:
         self._session.reload()

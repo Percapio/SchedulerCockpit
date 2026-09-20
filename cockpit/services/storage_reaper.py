@@ -46,9 +46,11 @@ class StorageReaper:
                     d.rmdir()
                     pruned_directories.append(d)
                 except OSError:
-                    logger.exception('Exception caught in storage_reaper')
-                    # Fails if not empty, expected behavior
-                    pass
+                    # A non-empty directory is the ordinary outcome whenever the
+                    # reap is a replace rather than a completion, so this is not
+                    # logged as an exception: doing so buries real errors under
+                    # a traceback on every drawing replace.
+                    logger.debug("Not pruning %s; still in use", d)
 
         return ReapReport(
             deleted_paths=deleted_paths,

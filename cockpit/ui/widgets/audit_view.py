@@ -2,7 +2,7 @@
 
 import logging
 
-from PyQt6.QtCore import pyqtSignal, Qt, QSettings
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QSplitter, QLineEdit
 from PyQt6.QtGui import QKeySequence, QShortcut
 
@@ -253,8 +253,11 @@ class AuditView(QWidget):
     def set_render_worker_alive(self, alive: bool) -> None:
         self._layout_canvas.set_render_worker_alive(alive)
         
-    def bind_library(self, library_module) -> None:
-        self._center_pager.bind_library(library_module)
+    def bind_library(self, library_module, settings_controller) -> None:
+        self._center_pager.bind_library(library_module, settings_controller)
+
+    def is_enrichment_in_flight(self) -> bool:
+        return self._center_pager.is_enrichment_in_flight()
 
     def load(self, audit_id: int) -> None:
         self.unload()

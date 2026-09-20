@@ -1,4 +1,5 @@
 import sqlite3
+import threading
 from typing import Callable
 from datetime import datetime
 from pathlib import Path
@@ -20,7 +21,7 @@ from cockpit.services.library_errors import (
     DigiKeyUnreachable,
     MalformedCatalogueResponse
 )
-from .connection import LibraryConnection
+from .connection import LibraryConnection, open_library_connection
 
 class EnrichmentWorker(QThread):
     part_enriched = pyqtSignal(str, str) # MpnKey, ResolutionStatus
@@ -33,7 +34,8 @@ class EnrichmentWorker(QThread):
         credentials: DigiKeyCredentials,
         budget: RequestBudget,
         library_path: Path,
-        utcnow: Callable[[], datetime]
+        utcnow: Callable[[], datetime],
+        api_base: str
     ):
         super().__init__()
         self.plan = plan
@@ -41,6 +43,10 @@ class EnrichmentWorker(QThread):
         self.budget = budget
         self.library_path = library_path
         self.utcnow = utcnow
+        # Both settings this worker needs -- the credentials and the host --
+        # are read on the UI thread and handed over as frozen values before
+        # the thread starts. The worker holds no settings object.
+        self.api_base = api_base
         
         self.report = EnrichmentReport()
         self.report.unqueried = list(self.plan.to_query) # start with all unqueried
@@ -51,12 +57,15 @@ class EnrichmentWorker(QThread):
         
     def run(self):
         try:
-            worker_conn = LibraryConnection(self.library_path)
+            # Bound to this thread, not the UI thread's connection: the wrapper
+            # refuses cross-thread use, and the module's ui_conn belongs to the
+            # thread that built it.
+            worker_conn = open_library_connection(self.library_path, threading.get_ident())
         except Exception as e:
             self.failed.emit(e)
             return
             
-        gateway = DigiKeyGateway()
+        gateway = DigiKeyGateway(api_base=self.api_base)
         gateway.initialize(self.credentials)
         
         try:

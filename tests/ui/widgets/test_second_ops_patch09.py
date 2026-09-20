@@ -159,26 +159,58 @@ def test_multi_row_copy():
     assert len(lines) == 2
     assert not lines[1].endswith("\t")
 
-def test_hidden_columns_still_copied(qtbot, terms_controller):
+class _RecordingClipboard:
+    """Stands in for the system clipboard.
+
+    Qt cannot take the Windows clipboard while another process holds it, and on
+    a headless runner there is none at all: a bare setText/text round trip
+    outside Cockpit comes back empty. Reading the payload back through the OS
+    therefore tests the environment rather than the dialog, so these two assert
+    on what the dialog hands over. Every other test in this file already builds
+    its payload with render_tsv for the same reason.
+    """
+
+    def __init__(self):
+        self.text_payload = None
+        self.mime_payloads = []
+
+    def clear(self):
+        self.text_payload = None
+        self.mime_payloads.clear()
+
+    def setText(self, text):
+        self.text_payload = text
+
+    def setMimeData(self, mime):
+        self.mime_payloads.append(mime)
+
+
+@pytest.fixture
+def recording_clipboard(monkeypatch):
+    clipboard = _RecordingClipboard()
+    monkeypatch.setattr(QApplication, "clipboard", staticmethod(lambda: clipboard))
+    return clipboard
+
+
+def test_hidden_columns_still_copied(qtbot, terms_controller, recording_clipboard):
+    """Hiding a column in the view must not drop it from the payload: the copy
+    is built from the row, not from whatever happens to be on screen."""
     repo = MagicMock()
     repo.list_for_audit.return_value = []
     dialog = SecondOpsAuditDialog(1, repo, terms_controller)
     cells = tuple(["Val" for c in CANONICAL_COLUMNS])
     row = RawBomRow(1, cells, "", "")
     dialog._on_rows_ready([SecondOpsRow(row, True)])
-    
+
     dialog.table.setColumnHidden(2, True)
-    
-    clipboard = QApplication.clipboard()
-    clipboard.clear()
     dialog._copy_to_clipboard([row])
-    
-    tsv = clipboard.text()
-    fields = tsv.split("\t")
+
+    fields = recording_clipboard.text_payload.split("\t")
     assert len(fields) == 14
     assert fields[2] == "Val"
 
-def test_clipboard_payload_mime_types(qtbot, terms_controller):
+def test_clipboard_payload_mime_types(qtbot, terms_controller, recording_clipboard):
+    """Plain text only. An HTML flavour would paste markup into Excel."""
     from cockpit.ui.widgets.second_ops_dialog import SecondOpsAuditDialog
     repo = MagicMock()
     repo.list_for_audit.return_value = []
@@ -186,14 +218,11 @@ def test_clipboard_payload_mime_types(qtbot, terms_controller):
     cells = tuple(["Val" for c in CANONICAL_COLUMNS])
     row = RawBomRow(1, cells, "", "")
     dialog._on_rows_ready([SecondOpsRow(row, True)])
-    
-    clipboard = QApplication.clipboard()
-    clipboard.clear()
+
     dialog._copy_to_clipboard([row])
-    
-    mime = clipboard.mimeData()
-    assert mime.hasText()
-    assert not mime.hasHtml()
+
+    assert recording_clipboard.text_payload is not None
+    assert recording_clipboard.mime_payloads == []
 
 # §7.4 Feature 01 Tests
 def test_second_ops_audit_dialog_is_modeless(qtbot, terms_controller):

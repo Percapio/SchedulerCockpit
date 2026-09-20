@@ -40,6 +40,11 @@ TOKEN_REFRESH_SKEW_S = 60
 # Configurable endpoints
 PRODUCTION_API_BASE = "https://api.digikey.com"
 
+# Upper bound on API calls in one enrichment run, token acquisition included.
+# A run that would exceed it stops at the ceiling and reports how many parts
+# remain unqueried. Configurable because a paid tier has a different budget.
+ENRICHMENT_CALL_CEILING_DEFAULT = 150
+
 class DigiKeyGateway:
     def __init__(self, api_base: str = PRODUCTION_API_BASE):
         self.api_base = api_base
@@ -95,9 +100,14 @@ class DigiKeyGateway:
                 # "429: Honour Retry-After... at most MAX_RETRIES then QuotaExhausted"
                 raise QuotaExhausted(budget.spent)
             else:
-                raise DigiKeyUnreachable(req.host, 1)
+                raise DigiKeyUnreachable(req.host, 1, http_status=e.code)
         except Exception as e:
-            raise DigiKeyUnreachable(req.host, 1)
+            # The credential probe distinguishes a host that refused the read
+            # from one that never answered, so the timeout is carried on the
+            # exception rather than collapsed into a flat transport failure.
+            reason = getattr(e, "reason", None)
+            timed_out = isinstance(e, TimeoutError) or isinstance(reason, TimeoutError)
+            raise DigiKeyUnreachable(req.host, 1, timed_out=timed_out)
 
 
     def resolve_mpn(self, mpn_key: MpnKey, budget: RequestBudget, clock) -> Resolved | Ambiguous | NotFound:

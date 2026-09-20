@@ -36,11 +36,25 @@ class QuotaExhausted(Exception):
         self.retry_after_seconds = retry_after_seconds
 
 class DigiKeyUnreachable(Exception):
-    """Raised when transport failure or 5xx survives MAX_RETRIES."""
-    def __init__(self, endpoint_host: str, attempt_count: int):
+    """Raised when transport failure or 5xx survives MAX_RETRIES.
+
+    http_status carries the refusing status when the host answered, and
+    timed_out records that the read never completed. Both are None/False for
+    a plain transport or TLS failure. The credential probe reads them to tell
+    a server error from an unreachable host from a timeout; nothing else does.
+    """
+    def __init__(
+        self,
+        endpoint_host: str,
+        attempt_count: int,
+        http_status: Optional[int] = None,
+        timed_out: bool = False,
+    ):
         super().__init__(f"DigiKey unreachable at {endpoint_host} after {attempt_count} attempts")
         self.endpoint_host = endpoint_host
         self.attempt_count = attempt_count
+        self.http_status = http_status
+        self.timed_out = timed_out
 
 class EnrichmentTimedOut(Exception):
     """Raised when ENRICHMENT_WATCHDOG_TIMEOUT_MS elapses."""

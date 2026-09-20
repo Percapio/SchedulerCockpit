@@ -209,7 +209,8 @@ class MainWindow(QMainWindow):
                 self._bootstrapped.config,
                 self,
                 source_root_controller=self._source_root_controller,
-                mpn_library_controller=self._mpn_library_controller
+                mpn_library_controller=self._mpn_library_controller,
+                enrichment_in_flight=self._audit_view.is_enrichment_in_flight
             )
             dialog.reset_requested.connect(self._on_reset_requested)
             dialog.exec()
@@ -367,7 +368,7 @@ class MainWindow(QMainWindow):
                 # application untouched. It must never fail an audit load.
                 logger.exception("MPN library unavailable at %s; feature disabled", db_path)
                 self._library_module = None
-            self._audit_view.bind_library(self._library_module)
+            self._audit_view.bind_library(self._library_module, self._mpn_library_controller)
 
         elif not enabled and self._library_module is not None:
             try:
@@ -375,7 +376,7 @@ class MainWindow(QMainWindow):
             except Exception:
                 logger.exception("MPN library teardown failed")
             self._library_module = None
-            self._audit_view.bind_library(None)
+            self._audit_view.bind_library(None, None)
 
     def _on_complete_requested(self, audit_id: int) -> None:
         entry = self._second_ops_review_dialogs.get(audit_id)

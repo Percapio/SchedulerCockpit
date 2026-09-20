@@ -1,6 +1,6 @@
 # Cockpit — Manufacturing Audit Tool
 
-Cockpit is a local desktop app for electronics manufacturing. You drop three files onto it — an **Audit BOM** (what parts go on the board), a **Shop Traveler** (job routing info), and **Build Notes** (a Word doc with extra steps) — and it builds an interactive checklist that ties everything together. No server, no internet, just a window on your machine.  Optional: Drag-and-drop a **Drawing** (PDF drawing) have the BOM match with the reference designators on the PDF for quick-view.
+Cockpit is a local desktop app for electronics manufacturing. You drop three files onto it — an **Audit BOM** (what parts go on the board), a **Shop Traveler** (job routing info), and **Build Notes** (a Word doc with extra steps) — and it builds an interactive checklist that ties everything together. No server, and no internet unless you turn on the optional [MPN Library](#mpn-library-optional), which is off by default.  Optional: Drag-and-drop a **Drawing** (PDF drawing) have the BOM match with the reference designators on the PDF for quick-view.
 
 ---
 
@@ -22,10 +22,11 @@ Cockpit.exe
 ## Table of Contents
 
 1. [What it does](#what-it-does)
-2. [Setting up a dev environment](#setting-up-a-dev-environment)
-3. [Running the app from source](#running-the-app-from-source)
-4. [Running tests](#running-tests)
-5. [Building the executable](#building-the-executable)
+2. [MPN Library (optional)](#mpn-library-optional)
+3. [Setting up a dev environment](#setting-up-a-dev-environment)
+4. [Running the app from source](#running-the-app-from-source)
+5. [Running tests](#running-tests)
+6. [Building the executable](#building-the-executable)
 
 ---
 
@@ -38,7 +39,68 @@ Cockpit.exe
 - **Quick actions from the job list** — right-click any job in the open-audit list to **Complete** it, change its **Status** (Shipping, OPS, THT, AOI, SMT, FSU, ON HOLD, Not Clear), or toggle **Label** and **Photos** verification checkboxes directly without opening the job. Completing is destructive and asks for confirmation first.
 - **Secondary drawing support** — attach a secondary assembly drawing PDF to any audit and toggle between Primary and Reference mode directly on the canvas.
 - **Cascade deletion** — when a job completes, all uploaded files and database records are permanently deleted. Files shared between split jobs are only deleted when every sibling is done.
-- **Local SQLite database** — all state lives in `local_audit.db` on disk. Nothing leaves the machine.
+- **Local SQLite database** — audit state lives in `local_audit.db` on disk, and the optional [MPN Library](#mpn-library-optional) keeps its own `parts_library.db` beside it. Nothing leaves the machine unless you enable that feature and press Enrich.
+
+---
+
+## MPN Library (optional)
+
+**Off by default.** Everything below applies only once you turn it on in
+Settings. With the toggle off, Cockpit makes no network requests at all.
+
+### What it is
+
+A persistent parts library keyed on manufacturer part number. It holds the tape
+and feeder geometry an SMT programmer needs — carrier width and pitch, reel
+diameter, quantity per reel, package and mounting type — half of it curated by
+you and half of it supplied by DigiKey.
+
+It lives in its own file, `parts_library.db`, next to `local_audit.db`. That
+separation is deliberate: the library survives job completion, application
+reset, and the delete-the-database remedy below, so curated attributes are not
+collateral damage when an audit is thrown away.
+
+### What leaves the machine
+
+The normalised manufacturer part number, and nothing else.
+
+Not the description, reference designators, quantity, find number, job number,
+assembly part number, work order, customer, or filename. The confirmation
+dialog you get before any enrichment recites the same list and gives you the
+exact count of part numbers about to be sent. You can cancel there.
+
+### How rate limits are respected
+
+- **On demand only.** Never on ingest, never on a timer, never in the
+  background. A lookup happens because you pressed Enrich.
+- **A pre-flight count** before anything leaves, showing how many parts will be
+  looked up, how many are already known, and how many are skipped.
+- **A per-run request ceiling**, configurable in Settings and defaulting to 150
+  requests. A run that would exceed it stops at the ceiling and tells you how
+  many parts went unqueried.
+- **Negative results are cached**, so a house part number DigiKey has never
+  heard of is not re-queried on every job.
+
+### Configuring credentials
+
+The fields are in **Settings → MPN Library**. You need a client ID and client
+secret from DigiKey's developer portal — they are issued by DigiKey, not by us,
+and Cockpit ships with none.
+
+- **Test Connection** checks the pair against the configured host by requesting
+  a token and nothing else, so it never spends product quota.
+- **API host** lets you point at DigiKey's sandbox instead of production. The
+  status line names the host that will receive your secret, so read it before
+  you click. Only `https` is accepted.
+- **Forget Credentials** removes both values. It leaves the feature enabled and
+  your curated library untouched.
+
+**The client secret is stored unencrypted in `settings.ini`.** Anything running
+under your Windows account can read it, and in portable-drive mode it travels
+on the drive with everything else. There is no installer, no keyring and no
+server to hold it instead, and a key file on the same disk would be theatre
+rather than protection. If that trade is wrong for your site, do not store
+credentials.
 
 ---
 

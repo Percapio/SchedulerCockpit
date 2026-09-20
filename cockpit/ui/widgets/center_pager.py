@@ -1,5 +1,5 @@
 from enum import Enum
-from PyQt6.QtCore import pyqtSignal, QSettings, Qt
+from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QStackedWidget
 
 from cockpit.ui.canvas.layout_canvas import LayoutCanvas, PdfSource
@@ -109,18 +109,29 @@ class CenterPager(QWidget):
         self._session: AuditSession | None = None
         self._library_module = None
         self._library_segment = None
+        self._library_settings_controller = None
         self._has_secondary = False
 
-    def bind_library(self, library_module) -> None:
+    def bind_library(self, library_module, settings_controller) -> None:
+        """Binds or releases the optional library module and the settings it reads.
+
+        settings_controller is the instance injected at cockpit/ui/app.py, and
+        is None exactly when library_module is None. The segment holds it as
+        its only route to any library/* key.
+        """
         if self._library_segment:
             self._stacked.removeWidget(self._library_segment)
             self._library_segment.deleteLater()
             self._library_segment = None
             
+        if library_module is not None and settings_controller is None:
+            raise ValueError("bind_library needs the settings controller alongside the module")
+
         self._library_module = library_module
+        self._library_settings_controller = settings_controller
         if self._library_module:
             from cockpit.ui.widgets.library_segment import LibrarySegment
-            self._library_segment = LibrarySegment(self._library_module, self)
+            self._library_segment = LibrarySegment(self._library_module, settings_controller, self)
             self._stacked.addWidget(self._library_segment)
             
         self._selector.set_segments(self._has_secondary, self._library_module is not None)
@@ -176,4 +187,7 @@ class CenterPager(QWidget):
     def set_operation_in_flight(self, in_flight: bool) -> None:
         if self._library_segment:
             self._library_segment.set_operation_in_flight(in_flight)
+
+    def is_enrichment_in_flight(self) -> bool:
+        return bool(self._library_segment) and self._library_segment.is_enrichment_in_flight()
 

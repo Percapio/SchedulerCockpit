@@ -12,7 +12,20 @@ from .registry import ATTRIBUTE_REGISTRY
 
 logger = logging.getLogger(__name__)
 
-# Map DigiKey parameter names to our registry names
+# Map DigiKey parameter names to our registry names.
+#
+# One registry name is supplied by at most one label per product record. A
+# record carrying two labels for one name is a defect in this table, not a
+# runtime condition, and fails the projection test rather than resolving by
+# iteration order.
+#
+# "Standard Package" is deliberately absent: it is DigiKey's order multiple,
+# not the quantity on a reel, and for a cut-tape variant the two differ by
+# orders of magnitude. No registry name holds an order multiple.
+#
+# pin_count, body_length_mm and body_width_mm are deliberately absent: the
+# Phase 48 snapshot survey found no retained response to confirm a label
+# against. See scripts/survey_parameter_labels.py.
 PARAM_MAPPING = {
     "Tape Width": "carrier_width_mm",
     "Carrier Width": "carrier_width_mm",
@@ -20,7 +33,6 @@ PARAM_MAPPING = {
     "Carrier Pitch": "carrier_pitch_mm",
     "Reel Diameter": "reel_diameter_mm",
     "Quantity per Reel": "quantity_per_reel",
-    "Standard Package": "quantity_per_reel",
     "Package / Case": "package_case",
     "Supplier Device Package": "supplier_device_package",
     "Mounting Type": "mounting_type",

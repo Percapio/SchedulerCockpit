@@ -10,13 +10,30 @@ from cockpit.services.mpn_library.enrichment_plan import plan_enrichment
 from cockpit.services.mpn_library.enrichment_worker import EnrichmentWorker
 from cockpit.services.mpn_library.digikey_types import RequestBudget
 from cockpit.services.library_errors import CredentialsNotConfigured
+from cockpit.settings.mpn_library import (
+    BASE_URL_FAULT_TEXT,
+    Accepted,
+    Configured,
+    MissingCredentialField,
+    Partial,
+)
 
 logger = logging.getLogger(__name__)
 
 class LibrarySegment(QWidget):
-    def __init__(self, library_module: MpnLibraryModule, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        library_module: MpnLibraryModule,
+        settings_controller,
+        parent: Optional[QWidget] = None
+    ) -> None:
         super().__init__(parent)
         self.library_module = library_module
+        # The injected controller is this widget's only route to any library/*
+        # key. Constructing a settings object here is what made enrichment
+        # unreachable: a bare QSettings has no backing store, so every read
+        # returned empty regardless of what the dialog had written.
+        self._settings_controller = settings_controller
         self._current_bom = None
         self._has_observed = False
         self._worker = None
@@ -100,6 +117,9 @@ class LibrarySegment(QWidget):
             logger.exception("Failed to observe BOM")
             self.summary_label.setText(f"Error observing BOM: {e}")
 
+    def is_enrichment_in_flight(self) -> bool:
+        return self._worker is not None
+
     def set_operation_in_flight(self, in_flight: bool) -> None:
         self.grid.set_operation_in_flight(in_flight)
         self.enrich_btn.setEnabled(not in_flight)
@@ -108,19 +128,31 @@ class LibrarySegment(QWidget):
         if not self._current_bom:
             return
             
-        from PyQt6.QtCore import QSettings
-        settings = QSettings()
-        client_id = settings.value("library/digikey_client_id", "", type=str)
-        client_secret = settings.value("library/digikey_client_secret", "", type=str)
-        
-        if not client_id or not client_secret:
+        stored = self._settings_controller.digikey_credentials()
+        if isinstance(stored, Partial):
+            missing = (
+                "client ID" if stored.missing == MissingCredentialField.CLIENT_ID
+                else "client secret"
+            )
+            QMessageBox.warning(
+                self, "Credentials Required",
+                f"The DigiKey {missing} is missing. Complete it in Settings."
+            )
+            return
+        if not isinstance(stored, Configured):
             QMessageBox.warning(self, "Credentials Required", "DigiKey credentials not configured. Please add them in Settings.")
             return
-            
-        from cockpit.services.mpn_library.digikey_types import DigiKeyCredentials
-        creds = DigiKeyCredentials(client_id=client_id, client_secret=client_secret)
-            
-        budget = 150 # default budget
+        creds = stored.credentials
+
+        api_base = self._settings_controller.api_base_url()
+        if not isinstance(api_base, Accepted):
+            QMessageBox.warning(
+                self, "API Host Invalid",
+                BASE_URL_FAULT_TEXT[api_base.fault] + " Correct it in Settings."
+            )
+            return
+
+        budget = self._settings_controller.call_ceiling()
         
         cur = self.library_module.ui_conn.cursor()
         seen_raw = set(line.component_mpn for line in self._current_bom)
@@ -147,7 +179,7 @@ class LibrarySegment(QWidget):
             f"  {len(plan.suppressed)} previously not found (not re-queried)\n"
             f"  {len(plan.unkeyable)} cannot be keyed\n\n"
             f"Budget: {budget} requests.\n"
-            f"Cockpit will send {len(plan.to_query)} manufacturer part numbers to api.digikey.com. "
+            f"Cockpit will send {len(plan.to_query)} manufacturer part numbers to {api_base.url}. "
             f"Nothing else is transmitted: no description, designators, quantity, job number, assembly number, or customer."
         )
         
@@ -162,8 +194,9 @@ class LibrarySegment(QWidget):
             plan=plan,
             credentials=creds,
             budget=RequestBudget(remaining=budget),
-            library_path=self.library_module.repository._conn._path, # using path to open new conn
-            utcnow=utcnow
+            library_path=self.library_module.db_path,
+            utcnow=utcnow,
+            api_base=api_base.url
         )
         self._worker.part_enriched.connect(self.grid.update_part)
         self._worker.finished_report.connect(self._on_enrich_finished)

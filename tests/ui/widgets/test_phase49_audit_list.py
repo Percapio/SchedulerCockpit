@@ -79,7 +79,7 @@ def test_wash_sits_right_of_process_and_photos_moved_to_the_end():
 def test_column_count_and_header_label(qtbot):
     picker = OpenAuditPicker()
     qtbot.addWidget(picker)
-    assert len(picker.model.COLUMNS) == 20
+    assert len(picker.model.COLUMNS) == 21
     assert picker.model.COLUMNS[Column.WASH] == "Wash"
 
 

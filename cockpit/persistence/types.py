@@ -64,6 +64,9 @@ class ActiveAudit:
     is_class_3: bool
     is_clean_process: bool
     ops_per_board_min: float | None = None
+    # NULL and "FA" both mean first article. Not part of the identity key:
+    # one family per part number and S/O is what makes replacement correct.
+    article_revision: str | None = None
     is_labeled: bool = False
     are_photos_uploaded: bool = False
 
@@ -100,6 +103,7 @@ class ActiveAuditDraft:
     split_suffix: str = ""                              # '' for un-split
     schedule_job_id: int | None = None
     traveler_metadata: dict[str, Any] | None = None
+    article_revision: str = "FA"
 
 
 @dataclass(frozen=True)

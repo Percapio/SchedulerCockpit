@@ -10,14 +10,24 @@ class JobFetchWorker(QObject):
     succeeded_signal = pyqtSignal(object)  # FetchOutcome
     failed_signal = pyqtSignal(object)     # FailurePayload
     
-    def __init__(self, job_number: str, source_root: pathlib.Path):
+    def __init__(self, job_number: str, source_root: pathlib.Path,
+                 scope=None, article_folder: pathlib.Path | None = None):
         super().__init__()
         self.job_number = job_number
         self.source_root = source_root
-        
+        self.scope = scope
+        # Set on the second pass, once the operator has chosen among several
+        # matching article folders.
+        self.article_folder = article_folder
+
     def run(self) -> None:
+        from cockpit.ingestion.locator import IngestionScope
         try:
-            outcome = locate(self.job_number, self.source_root)
+            outcome = locate(
+                self.job_number, self.source_root,
+                self.scope or IngestionScope.ROOT,
+                self.article_folder,
+            )
             self.succeeded_signal.emit(outcome)
         except Exception as e:
             self.failed_signal.emit(render(e))

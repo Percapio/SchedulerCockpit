@@ -605,8 +605,10 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     v16_migrated = migrate_to_v16(conn)
     v17_migrated = migrate_to_v17(conn, parser_registry)
     v18_migrated = migrate_to_v18(conn)
+    v19_migrated = migrate_to_v19(conn)
     return (v7_migrated or v8_migrated or v9_migrated or v11_migrated or v13_migrated
-            or v14_migrated or v15_migrated or v16_migrated or v17_migrated or v18_migrated)
+            or v14_migrated or v15_migrated or v16_migrated or v17_migrated or v18_migrated
+            or v19_migrated)
 
 SCHEMA_V5_DDL_DROP_SHIP_DATE: str = """
 ALTER TABLE active_audits DROP COLUMN ship_date
@@ -1313,3 +1315,45 @@ def migrate_to_v18(conn: sqlite3.Connection) -> bool:
         except Exception as e:
             logger.error("Failed to restore foreign_keys in v18 migration finally block.")
             raise PersistenceError("Database state corrupted: failed to re-enable foreign keys") from e
+
+
+SCHEMA_V19_DDL_ARTICLE_REVISION: str = (
+    "ALTER TABLE active_audits ADD COLUMN article_revision TEXT NULL"
+)
+
+
+def migrate_to_v19(conn: sqlite3.Connection) -> bool:
+    """Records which article a stored audit came from.
+
+    pre:  schema_version >= 18
+    post: active_audits.article_revision exists, NULL on every existing row,
+          which reads as the first article; schema_version == 19. Returns False
+          without touching the database when already >= 19.
+    raises: SchemaMismatch when version < 18;
+            SchemaInitializationError on DDL failure
+
+    Deliberately not part of UNIQUE(part_number, work_order_ref, split_suffix):
+    one family per part number and S/O is the invariant that makes replacement
+    rather than coexistence the correct answer for an article revision.
+    """
+    cur = conn.cursor()
+    cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    version = cur.fetchone()["version"]
+    if version < 18:
+        raise SchemaMismatch(f"Cannot run v19 migration from version {version}")
+    if version >= 19:
+        return False
+
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        cur.execute(SCHEMA_V19_DDL_ARTICLE_REVISION)
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 19, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,)
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception as e:
+        conn.rollback()
+        raise SchemaInitializationError(statement="v19 migration failed", cause=e)

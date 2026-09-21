@@ -10,6 +10,10 @@ class SourceRole(Enum):
     NOTES = "NOTES"
     PDF = "PDF"
     UNKNOWN = "UNKNOWN"
+    # A selection axis, not a file classification: role_of never returns it.
+    # It exists so folder ambiguity can reuse PendingSelection and the shipped
+    # selection dialog rather than growing a second picker.
+    ARTICLE_FOLDER = "Article folder"
 
 
 def role_of(file_name: str) -> SourceRole:

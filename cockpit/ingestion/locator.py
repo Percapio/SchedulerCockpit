@@ -5,7 +5,10 @@ import re
 from dataclasses import dataclass
 from typing import Union
 
+from enum import Enum
+
 from .roles import role_of, SourceRole
+from .filename_rules import article_designation
 from .errors import (
     JobNumberMalformed,
     SourceRootUnreachable,
@@ -18,6 +21,19 @@ from .categorizer import CategorizedQuartet
 from .filename_rules import derive_part_number_from_filename
 
 JOB_NUMBER_GRAMMAR = re.compile(r"^[A-Z][0-9]{6}$")
+
+
+class IngestionScope(Enum):
+    """Where a mode looks for its required roles.
+
+    The drawing stays at the job root in both scopes and is shared between
+    articles. That asymmetry is why the mode is chosen from the menu rather than
+    inferred: a job holding an FA set at the root and a 2nd article below would
+    otherwise force a disambiguation prompt on every ordinary ingest.
+    """
+
+    ROOT = "ROOT"
+    ARTICLE_SUBFOLDER = "ARTICLE_SUBFOLDER"
 
 @dataclass
 class CandidateSet:
@@ -80,7 +96,27 @@ def revision_rank(file_name: str) -> tuple[int, int, str]:
         return (0, 0, "")
     return (1, len(rev), rev)
 
-def locate(job_number: str, source_root: pathlib.Path) -> FetchOutcome:
+def locate(
+    job_number: str,
+    source_root: pathlib.Path,
+    scope: IngestionScope = IngestionScope.ROOT,
+    article_folder: pathlib.Path | None = None,
+) -> FetchOutcome:
+    """Locates the source files for a job under an explicit search scope.
+
+    pre:  job_number matches JOB_NUMBER_GRAMMAR; source_root is reachable
+    post: on LocatedFiles every required role resolves to a file inside
+          source_root; on PendingSelection every ambiguous axis -- folder as
+          well as role -- is a CandidateSet
+    raises: SourceRootUnreachable, JobDirectoryNotFound,
+            JobDirectoryEscapesRoot, RequiredRoleMissing, JobNumberMismatch
+
+    `article_folder` resolves a folder ambiguity. resolve_selection answers role
+    ambiguity by merging chosen files into an existing PendingSelection, but a
+    folder choice is upstream of that: which folder is chosen determines which
+    files are even candidates. So the folder comes back through here, and the
+    second pass skips folder matching entirely.
+    """
     # Grammar check before touching share
     job_number_clean = job_number.strip().upper()
     if not JOB_NUMBER_GRAMMAR.match(job_number_clean):
@@ -101,9 +137,47 @@ def locate(job_number: str, source_root: pathlib.Path) -> FetchOutcome:
         raise JobDirectoryNotFound(job_number_clean, job_dir)
         
     assert_within_root(job_dir, source_root)
-    
-    entries = list(job_dir.iterdir())
-    
+
+    role_dir = job_dir
+    if scope == IngestionScope.ARTICLE_SUBFOLDER:
+        if article_folder is None:
+            matches = sorted(
+                (child for child in job_dir.iterdir()
+                 if child.is_dir() and article_designation(child.name) is not None),
+                key=lambda p: p.name,
+            )
+            if not matches:
+                present = [c.name for c in job_dir.iterdir() if c.is_dir()]
+                raise RequiredRoleMissing(
+                    job_number_clean, ["BOM", "TRAVELER", "NOTES"], present
+                )
+            if len(matches) > 1:
+                # Returned alone: the roles are not yet knowable, because the
+                # folder that would supply them has not been chosen.
+                return PendingSelection(
+                    job_number=job_number_clean,
+                    job_directory=job_dir,
+                    sets=[CandidateSet(
+                        role=SourceRole.ARTICLE_FOLDER,
+                        candidates=matches,
+                        preselected=None,
+                    )],
+                    resolved={},
+                    ignored_count=0,
+                )
+            role_dir = matches[0]
+        else:
+            role_dir = article_folder
+        # It arrived from a dialog, and a value that came from a dialog is not
+        # a value that may skip a containment check.
+        assert_within_root(role_dir, source_root)
+        if not role_dir.is_dir():
+            raise JobDirectoryNotFound(job_number_clean, role_dir)
+
+    entries = list(role_dir.iterdir())
+    # The drawing stays at the root and is shared between articles.
+    pdf_entries = list(job_dir.iterdir()) if role_dir != job_dir else entries
+
     candidates_by_role = {
         SourceRole.BOM: [],
         SourceRole.TRAVELER: [],
@@ -113,8 +187,12 @@ def locate(job_number: str, source_root: pathlib.Path) -> FetchOutcome:
     }
     
     for entry in entries:
-        if entry.is_file():
+        if entry.is_file() and role_of(entry.name) != SourceRole.PDF:
             candidates_by_role[role_of(entry.name)].append(entry)
+
+    for entry in pdf_entries:
+        if entry.is_file() and role_of(entry.name) == SourceRole.PDF:
+            candidates_by_role[SourceRole.PDF].append(entry)
             
     ignored_count = len(candidates_by_role[SourceRole.UNKNOWN])
     
@@ -156,7 +234,7 @@ def locate(job_number: str, source_root: pathlib.Path) -> FetchOutcome:
     if has_ambiguity:
         return PendingSelection(
             job_number=job_number_clean,
-            job_directory=job_dir,
+            job_directory=role_dir,
             sets=pending_sets,
             resolved=resolved,
             ignored_count=ignored_count
@@ -169,7 +247,7 @@ def locate(job_number: str, source_root: pathlib.Path) -> FetchOutcome:
         
     return LocatedFiles(
         job_number=job_number_clean,
-        job_directory=job_dir,
+        job_directory=role_dir,
         quartet=CategorizedQuartet(
             bom_path=resolved[SourceRole.BOM],
             traveler_path=resolved[SourceRole.TRAVELER],

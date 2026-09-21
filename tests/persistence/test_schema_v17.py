@@ -41,7 +41,7 @@ def test_fresh_database_reaches_v17(tmp_path, null_registry):
 
     assert conn.execute(
         "SELECT version FROM schema_version WHERE singleton_guard = 1"
-    ).fetchone()["version"] == 18
+    ).fetchone()["version"] == 19
     assert "find_number" in _columns(conn, "audit_bom_components")
 
 
@@ -94,7 +94,7 @@ def test_v17_is_idempotent(tmp_path, null_registry):
     assert migrate_to_v17(conn, null_registry) is False
     assert conn.execute(
         "SELECT version FROM schema_version WHERE singleton_guard = 1"
-    ).fetchone()["version"] == 18
+    ).fetchone()["version"] == 19
 
 
 def test_bom_reads_work_after_the_repair(tmp_path, null_registry):

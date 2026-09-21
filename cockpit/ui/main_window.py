@@ -33,6 +33,10 @@ logger = logging.getLogger(__name__)
 # Patch01 section 8.2). Beyond this the worker is wrong, not slow, and the exit
 # path stops waiting on it.
 FETCH_WATCHDOG_TIMEOUT_MS = 20_000
+
+# Distinguishes "the operator declined" from "there is no plan", which is a
+# legitimate value meaning today's unchanged ingest behaviour.
+_PREFLIGHT_ABORTED = object()
 RENDER_SHUTDOWN_TIMEOUT_MS = 10_000
 
 
@@ -134,6 +138,10 @@ class MainWindow(QMainWindow):
         self.toast = Toast(self)
         self._term_merge_announced = False
         self._pending_drawing_target = None
+        self._pending_plan = None
+        self._pending_article_folder = None
+        from cockpit.services.ingestion_mode import IngestionMode
+        self._pending_mode = IngestionMode.STANDARD
 
         self._style_controller = style_controller
         self._runtime_settings_controller = runtime_settings_controller
@@ -469,10 +477,17 @@ class MainWindow(QMainWindow):
     def _invalidate_audit_view_if_loaded(self, audit_id: int) -> None:
         self._audit_view.discard_if_showing(audit_id)
         
-    def _on_picker_new_audit_requested(self) -> None:
+    def _on_picker_new_audit_requested(self, mode=None) -> None:
+        from cockpit.services.ingestion_mode import IngestionMode
+
+        self._pending_mode = mode or IngestionMode.STANDARD
         self._show_drop_area()
 
-    def _on_picker_fetch_job_requested(self) -> None:
+    def _on_picker_fetch_job_requested(self, mode=None) -> None:
+        from cockpit.services.ingestion_mode import IngestionMode
+
+        self._pending_mode = mode or IngestionMode.STANDARD
+        self._pending_article_folder = None
         if self._source_root_controller is None:
             return
             
@@ -502,7 +517,11 @@ class MainWindow(QMainWindow):
         
         from cockpit.ui.job_fetch_worker import JobFetchWorker
         self._fetch_thread = QThread()
-        self._fetch_worker = JobFetchWorker(job_number, root_path)
+        self._fetch_worker = JobFetchWorker(
+            job_number, root_path,
+            scope=self._pending_mode.scope,
+            article_folder=self._pending_article_folder,
+        )
         self._fetch_worker.moveToThread(self._fetch_thread)
         
         self._fetch_thread.started.connect(self._fetch_worker.run)
@@ -687,6 +706,21 @@ class MainWindow(QMainWindow):
             if not dialog.exec():
                 return
             
+            from cockpit.ingestion.roles import SourceRole
+            folder_set = next(
+                (c for c in outcome.sets if c.role == SourceRole.ARTICLE_FOLDER), None
+            )
+            if folder_set is not None:
+                # Section 4.1: a folder choice is upstream of role resolution --
+                # which folder is chosen decides which files are candidates --
+                # so it re-enters locate rather than resolve_selection.
+                self._pending_article_folder = dialog.choices.get(SourceRole.ARTICLE_FOLDER)
+                if self._pending_article_folder is None:
+                    return
+                _state, root_path = self._source_root_controller.source_root()
+                self._start_job_fetch(outcome.job_number, root_path)
+                return
+
             from cockpit.ingestion.locator import resolve_selection
             try:
                 outcome = resolve_selection(outcome, dialog.choices)
@@ -721,7 +755,75 @@ class MainWindow(QMainWindow):
         if outcome.quartet.notes_path: paths.append(outcome.quartet.notes_path)
         if outcome.quartet.pdf_path: paths.append(outcome.quartet.pdf_path)
         
-        self._on_drop_received(paths)
+        plan = self._run_ingest_preflight(outcome.quartet.traveler_path, outcome)
+        if plan is _PREFLIGHT_ABORTED:
+            return
+        self._on_drop_received(paths, plan=plan)
+
+    def _run_ingest_preflight(self, traveler_path, outcome=None):
+        """Settles every question that needs a human before the worker starts.
+
+        pre:  nothing has been copied and nothing written
+        post: returns an IngestionPlan, or _PREFLIGHT_ABORTED when the operator
+              declined; by the time ingest() runs there is no further input to
+              wait for, which is what keeps a dialog out of the savepoint
+
+        Order matters: the article designation is known from the mode, the
+        quantity prompt is prefilled from the probe, and the replacement
+        confirmation comes last because it is the only irreversible one.
+        """
+        from cockpit.ingestion.service import IngestionPlan, probe_identity
+        from cockpit.services.ingestion_mode import IngestionMode
+
+        mode = getattr(self, "_pending_mode", None) or IngestionMode.STANDARD
+        article = "FA"
+        if mode is IngestionMode.ARTICLE_REVISION and outcome is not None:
+            from cockpit.ingestion.filename_rules import article_designation
+            article = article_designation(outcome.job_directory.name) or "FA"
+
+        service = self._bootstrapped.ingestion_service
+        try:
+            probed = probe_identity(traveler_path, service.coord_map)
+        except Exception as e:
+            logger.exception("Identity pre-flight failed")
+            self._on_failed(FailurePayload.from_exception(e, "Could not read the traveler"))
+            return _PREFLIGHT_ABORTED
+
+        quantity_override = None
+        if mode.prompts_for_quantity:
+            from PyQt6.QtWidgets import QInputDialog
+            value, accepted = QInputDialog.getInt(
+                self, "Job quantity",
+                "Documents for an article revision are often out of date.\n"
+                "Confirm or correct the job quantity:",
+                probed.quantity, 1, 1_000_000,
+            )
+            if not accepted:
+                return _PREFLIGHT_ABORTED
+            if value != probed.quantity:
+                quantity_override = value
+
+        family = service.audit_repo.list_family(probed.part_number, probed.work_order_ref)
+        replace_ids = ()
+        if family:
+            from cockpit.services.replacement import summarise_family
+            from cockpit.ui.widgets.replace_confirm_dialog import ReplaceConfirmDialog
+
+            casualties = summarise_family(family, service.tht_repo)
+            dialog = ReplaceConfirmDialog(
+                probed.part_number, probed.work_order_ref, article, casualties, self
+            )
+            if not dialog.exec():
+                # A decision, not a failure: nothing copied, nothing written.
+                return _PREFLIGHT_ABORTED
+            replace_ids = tuple(a.id for a in family)
+
+        return IngestionPlan(
+            expected_identity=probed,
+            replace_family=replace_ids,
+            article_revision=article,
+            quantity_override=quantity_override,
+        )
 
     def _on_holidays_requested(self) -> None:
         from cockpit.ui.widgets.holiday_dialog import HolidayDialog
@@ -788,17 +890,21 @@ class MainWindow(QMainWindow):
         dialog.destroyed.connect(lambda obj=None, a=audit_id, s=serial: self._unregister_review_dialog(a, s))
         dialog.show()
 
-    def _on_drop_received(self, paths: list[pathlib.Path]) -> None:
+    def _on_drop_received(self, paths: list[pathlib.Path], plan=None) -> None:
         if self._operation_in_flight:
             return
-            
+
+        self._pending_plan = plan
+        
         self._operation_in_flight = True
         self.drop_area.setEnabled(False)
         self.progress_view.reset()
         self.stacked.setCurrentWidget(self.progress_view)
         
         self._thread = QThread()
-        self._worker = IngestionWorker(self._bootstrapped.ingestion_service, paths)
+        self._worker = IngestionWorker(
+            self._bootstrapped.ingestion_service, paths, plan=self._pending_plan
+        )
         self._worker.moveToThread(self._thread)
         
         self._thread.started.connect(self._worker.run)
@@ -847,6 +953,46 @@ class MainWindow(QMainWindow):
         self._audit_view.load(summary.audit_id)
         self.stacked.setCurrentWidget(self._audit_view)
         self.toast.show_success(summary)
+        self._offer_split_after_ingest(summary.audit_id)
+
+    def _offer_split_after_ingest(self, audit_id: int) -> None:
+        """Phase 51 section 5: Split mode runs the shipped SplitDialog.
+
+        post: on success the view reloads split; on failure or cancellation the
+              audit is kept and the outcome is surfaced as "ingested, not split"
+
+        The dialog opens against the persisted audit with its authoritative
+        quantity, so no parameters-only variant and no duplicated validation is
+        needed. The ingest and the split are two transactions: rolling the
+        ingest back would discard a correct result to undo an unrelated
+        decision.
+        """
+        from cockpit.services.ingestion_mode import IngestionMode
+
+        mode = getattr(self, "_pending_mode", None)
+        self._pending_mode = IngestionMode.STANDARD
+        self._pending_plan = None
+        if mode is None or not mode.splits_after_ingest:
+            return
+
+        view = self._audit_view._session.current_view()
+        if view is None:
+            self.toast.show_toast("Ingested, not split", "Could not open the new audit")
+            return
+
+        from cockpit.ui.widgets.split_dialog import SplitDialog
+        try:
+            dialog = SplitDialog(view, self._bootstrapped.split_svc, self)
+            if dialog.exec() and dialog.outcome:
+                self._audit_view.load(audit_id)
+                return
+        except Exception:
+            logger.exception("Split after ingest failed")
+
+        self.toast.show_toast(
+            "Ingested, not split",
+            "Use Split from the audit's ⋯ menu to divide it",
+        )
 
     def _on_dashboard_exit(self) -> None:
         self._reload_list()

@@ -23,6 +23,10 @@ _HEADER_STATE_KEY = "audit_list/header_state"
 def _format_list_date(value: date | None) -> str:
     return "" if value is None else f"{value:%b} {value.day}"
 
+def _article_text(digest) -> str:
+    """NULL and "FA" both mean first article; only NULL reaches an old row."""
+    return digest.article_revision or FIRST_ARTICLE_TEXT
+
 def _centered_square(cell: QRect, extent: int) -> QRect:
     return QRect(
         cell.x() + (cell.width() - extent) // 2,
@@ -54,6 +58,7 @@ class Column(IntEnum):
     DATE_INGESTED = 17
     LABEL = 18
     PHOTOS = 19
+    ARTICLE_REVISION = 20
 
 # Phase 49 (2.2): no Audit List code compares a column against an integer
 # literal. Column order is a property of the enum alone.
@@ -65,6 +70,8 @@ _SEMANTIC_ROLE_BY_COLUMN = {
 
 # Blank is a real answer: a traveler ingested before process_clean was mapped
 # said nothing about washing, and "NC" would put words in its mouth.
+FIRST_ARTICLE_TEXT = "FA"
+
 WASH_COLUMN_TEXT = {
     WashState.CLEAN: "C",
     WashState.NO_CLEAN: "NC",
@@ -95,7 +102,7 @@ _DEFAULT_COLUMN_WIDTHS: dict[Column, int] = {
     Column.ASSEMBLY_CLASS: 55, Column.PROCESS: 90, Column.WASH: 55,
     Column.FSU: 70, Column.SMT: 70, Column.THT: 70,
     Column.AOI: 70, Column.OPS: 70, Column.SHIP: 70, Column.DATE_INGESTED: 100,
-    Column.LABEL: 55, Column.PHOTOS: 60,
+    Column.LABEL: 55, Column.PHOTOS: 60, Column.ARTICLE_REVISION: 70,
 }
 _DATE_COLUMNS = frozenset({Column.START_BY, Column.SHIP_DATE})
 
@@ -112,7 +119,7 @@ class AuditListModel(QAbstractTableModel):
         "QTY", "Type", "Classification", "Class", "Process", "Wash",
         "FSU (hrs)", "SMT (hrs)", "THT (hrs)",
         "AOI (hrs)", "OPS (hrs)", "SHIP (hrs)", "Date Ingested",
-        "Label", "Photos"
+        "Label", "Photos", "Article"
     ]
     
     GROUP_ORDER = AuditStatus.ordered()
@@ -181,6 +188,7 @@ class AuditListModel(QAbstractTableModel):
         if col == Column.DATE_INGESTED: return (d.date_ingested is not None, d.date_ingested)
         if col == Column.LABEL: return d.is_labeled
         if col == Column.PHOTOS: return d.are_photos_uploaded
+        if col == Column.ARTICLE_REVISION: return _article_text(d)
         return 0
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlag:
@@ -290,6 +298,7 @@ class AuditListModel(QAbstractTableModel):
                 if not d.date_ingested: return ""
                 local = d.date_ingested.astimezone(PST)
                 return f"{local:%Y-%m-%d}"
+            if col == Column.ARTICLE_REVISION: return _article_text(d)
 
         return None
 
@@ -443,8 +452,9 @@ class OpenAuditPicker(QWidget):
     status_change_requested = pyqtSignal(int, AuditStatus)
     ship_date_change_requested = pyqtSignal(int, object)  # (audit_id, date | None)
     ops_per_board_change_requested = pyqtSignal(int, object)  # (audit_id, float | None)
-    new_audit_requested = pyqtSignal()
-    fetch_job_requested = pyqtSignal()
+    # Both carry the chosen IngestionMode, which fixes the search scope.
+    new_audit_requested = pyqtSignal(object)
+    fetch_job_requested = pyqtSignal(object)
     holidays_requested = pyqtSignal()
     font_scale_change_requested = pyqtSignal(int)
     settings_requested = pyqtSignal()
@@ -505,9 +515,29 @@ class OpenAuditPicker(QWidget):
         
         self.new_btn = QPushButton("New audit...")
         from PyQt6.QtWidgets import QMenu
+        from cockpit.services.ingestion_mode import IngestionMode
+
         menu = QMenu(self.new_btn)
-        menu.addAction("Fetch by job number...").triggered.connect(self.fetch_job_requested.emit)
-        menu.addAction("Manual upload...").triggered.connect(self.new_audit_requested.emit)
+        # Mode first, then entry point. Article Revision is Fetch-only: its
+        # ordinal comes from a folder name on the share, and a manual drop of
+        # loose files carries nothing to read it from.
+        self._mode_menus = {}
+        for mode in (IngestionMode.STANDARD, IngestionMode.SPLIT):
+            submenu = QMenu(mode.label, menu)
+            submenu.addAction("Fetch by job number...").triggered.connect(
+                lambda _c=False, m=mode: self.fetch_job_requested.emit(m)
+            )
+            submenu.addAction("Manual upload...").triggered.connect(
+                lambda _c=False, m=mode: self.new_audit_requested.emit(m)
+            )
+            menu.addMenu(submenu)
+            self._mode_menus[mode] = submenu
+
+        article = IngestionMode.ARTICLE_REVISION
+        menu.addAction(f"{article.label}...").triggered.connect(
+            lambda _c=False, m=article: self.fetch_job_requested.emit(m)
+        )
+        self._new_menu = menu
         self.new_btn.setMenu(menu)
         
         self.holidays_btn = QPushButton("Holidays...")
@@ -634,6 +664,7 @@ class OpenAuditPicker(QWidget):
             f"{d.date_ingested.astimezone(PST):%Y-%m-%d}" if d.date_ingested else "",
             "labeled" if d.is_labeled else "",
             "photos" if d.are_photos_uploaded else "",
+            _article_text(d),
         ]
         return " ".join(parts).casefold()
 

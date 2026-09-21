@@ -263,6 +263,8 @@ class OpenAuditDigest:
     # Not the is_clean_process boolean: that asks only whether the cell is
     # non-empty, so a traveler spelling out "NO CLEAN" reads as a wash process.
     process_clean: str | None = None
+    # NULL reads as the first article; see Phase 51 section 4.3.
+    article_revision: str | None = None
     is_labeled: bool = False
     are_photos_uploaded: bool = False
     start_by_urgency: DateUrgency = DateUrgency.COMFORTABLE

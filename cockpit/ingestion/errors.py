@@ -203,3 +203,20 @@ class FetchTimedOut(IngestionError):
         self.root = root
         self.elapsed_ms = elapsed_ms
 
+
+
+class ProbedIdentityMismatch(IngestionError):
+    """The authoritative parse disagrees with the identity the operator saw.
+
+    The replacement confirmation names a specific family to destroy. If the
+    share changed between the probe and the copy, that consent no longer covers
+    what is about to happen, so the ingest aborts before the savepoint and the
+    family is left intact.
+    """
+    def __init__(self, expected: tuple[str, str], found: tuple[str, str]):
+        super().__init__(
+            f"Source files changed since they were checked: expected {expected[0]} "
+            f"/ {expected[1]}, found {found[0]} / {found[1]}. Nothing was changed."
+        )
+        self.expected = expected
+        self.found = found

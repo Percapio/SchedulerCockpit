@@ -31,8 +31,10 @@ class StorageReaper:
                     path.unlink()
                     deleted_paths.append(path)
                 except FileNotFoundError:
-                    logger.exception('Exception caught in storage_reaper')
-                    # Already gone, treat as success
+                    # Already gone, treat as success. Not logged as an
+                    # exception: an expected outcome that prints a traceback
+                    # buries the failures that are not expected.
+                    logger.debug("Already removed: %s", path)
                     deleted_paths.append(path)
                 except OSError as e:
                     logger.exception('Exception caught in storage_reaper')

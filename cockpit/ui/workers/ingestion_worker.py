@@ -29,17 +29,19 @@ class IngestionWorker(QObject):
     failed_signal = pyqtSignal(object)
     cancelled_signal = pyqtSignal()
 
-    def __init__(self, service: IngestionService, paths: list[pathlib.Path]) -> None:
+    def __init__(self, service: IngestionService, paths: list[pathlib.Path], plan=None) -> None:
         super().__init__()
         self._service = service
         self._paths = paths
+        # Settled by the pre-flight. None means today's unchanged behaviour.
+        self._plan = plan
         self._cancel_requested = False
         self._last_detail = {}
 
     def run(self) -> None:
         """Run IngestionService.ingest on the calling thread."""
         try:
-            audit = self._service.ingest(self._paths, progress=self._on_progress)
+            audit = self._service.ingest(self._paths, progress=self._on_progress, plan=self._plan)
             
             assert "tht_item_count" in self._last_detail, "tht_item_count missing from progress stream"
             assert "eco_item_count" in self._last_detail, "eco_item_count missing from progress stream"

@@ -55,8 +55,8 @@ class AuditRepository:
                 INSERT INTO active_audits (
                     part_number, schedule_job_id, work_order_ref, split_suffix,
                     quantity, status, traveler_metadata, created_at, updated_at,
-                    is_class_3, is_clean_process
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    is_class_3, is_clean_process, article_revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft.part_number,
@@ -69,7 +69,8 @@ class AuditRepository:
                     now_iso,
                     now_iso,
                     1 if is_class_3(draft.traveler_metadata) else 0,
-                    1 if is_clean_process(draft.traveler_metadata) else 0
+                    1 if is_clean_process(draft.traveler_metadata) else 0,
+                    draft.article_revision,
                 )
             )
         except sqlite3.IntegrityError as e:
@@ -105,6 +106,31 @@ class AuditRepository:
         
         filtered_row = {k: v for k, v in row.items() if k in _ACTIVE_AUDIT_FIELDS}
         return ActiveAudit(**filtered_row)
+
+    def list_family(self, part_number: str, work_order_ref: str) -> list[ActiveAudit]:
+        """Every active audit sharing an identity, across all split suffixes.
+
+        post: ordered by split_suffix, '' first; empty when the family is absent
+
+        find_by_identity takes an exact split_suffix and cannot express this.
+        The distinction is load-bearing: UNIQUE(part_number, work_order_ref,
+        split_suffix) lets a new '' row insert while -1 and -2 siblings remain,
+        so a replacement matching only the exact suffix would leave a mixed
+        family behind and raise nothing.
+        """
+        cur = self.conn.cursor()
+        cur.execute(
+            """
+            SELECT * FROM active_audits
+            WHERE part_number = ? AND work_order_ref = ?
+            ORDER BY split_suffix
+            """,
+            (part_number, work_order_ref),
+        )
+        return [
+            ActiveAudit(**{k: v for k, v in row.items() if k in _ACTIVE_AUDIT_FIELDS})
+            for row in cur.fetchall()
+        ]
 
     def find_by_id(self, audit_id: int) -> ActiveAudit | None:
         cur = self.conn.cursor()
@@ -321,8 +347,8 @@ class AuditRepository:
                 INSERT INTO active_audits (
                     part_number, schedule_job_id, work_order_ref, split_suffix,
                     quantity, status, traveler_metadata, created_at, updated_at,
-                    is_class_3, is_clean_process
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    is_class_3, is_clean_process, article_revision
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     source["part_number"],
@@ -335,7 +361,9 @@ class AuditRepository:
                     now_iso,
                     now_iso,
                     1 if is_class_3(source["traveler_metadata"]) else 0,
-                    1 if is_clean_process(source["traveler_metadata"]) else 0
+                    1 if is_clean_process(source["traveler_metadata"]) else 0,
+                    # A split inherits its parent's article.
+                    source["article_revision"],
                 )
             )
         except sqlite3.IntegrityError as e:

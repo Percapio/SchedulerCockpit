@@ -84,6 +84,7 @@ class AuditReadService:
             ops_per_board_min=a.ops_per_board_min,
             is_itar=is_itar_flag,
             process_clean=meta.get("process_clean"),
+            article_revision=a.article_revision,
             is_labeled=a.is_labeled,
             are_photos_uploaded=a.are_photos_uploaded,
             start_by_urgency=start_by_urgency,

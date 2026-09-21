@@ -42,7 +42,7 @@ def test_picker_columns_and_checkbox_flags(qtbot):
     digest = create_digest(is_labeled=True, are_photos_uploaded=False)
     picker.populate([digest])
 
-    assert len(picker.model.COLUMNS) == 20
+    assert len(picker.model.COLUMNS) == 21
     assert picker.model.COLUMNS[Column.LABEL] == "Label"
     assert picker.model.COLUMNS[Column.PHOTOS] == "Photos"
 

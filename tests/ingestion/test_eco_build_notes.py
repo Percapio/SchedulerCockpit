@@ -107,15 +107,14 @@ def test_three_tables_are_accepted(tmp_path):
     assert eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx")).raw_table_count == 3
 
 
-def test_xray_header_drift_is_rejected_exact_arity_not_prefix(tmp_path):
+def test_a_renamed_count_column_is_ignored_not_rejected(tmp_path):
+    """Patch 12 §1.2 reverses Phase 43's exact-arity rule: an unknown column,
+    including a renamed Count, is ignored once the required four are present."""
     document = docx.Document()
     table = document.add_table(2, 5)
-    # 4-col prefix + Qty
     fill_row(table, 0, ["Find#", "PartNum", "Ref_Des", "Description", "Qty"])
 
-    with pytest.raises(MalformedEcoError) as excinfo:
-        eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
-    assert "XRAY_HEADER_DRIFT" in str(excinfo.value)
+    assert eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx")).row_count == 1
 
 def test_xray_header_drift_is_rejected_existing_case(tmp_path):
     document = docx.Document()
@@ -125,6 +124,7 @@ def test_xray_header_drift_is_rejected_existing_case(tmp_path):
     with pytest.raises(MalformedEcoError) as excinfo:
         eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
     assert "XRAY_HEADER_DRIFT" in str(excinfo.value)
+    assert excinfo.value.detail["missing"] == ["PartNum"]
 
 def test_xray_header_drift_short_header(tmp_path):
     document = docx.Document()
@@ -135,16 +135,19 @@ def test_xray_header_drift_short_header(tmp_path):
         eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
     assert "XRAY_HEADER_DRIFT" in str(excinfo.value)
 
-def test_drift_detail_names_every_accepted_variant(tmp_path):
+def test_drift_detail_names_what_is_missing(tmp_path):
     document = docx.Document()
     table = document.add_table(2, 1)
     fill_row(table, 0, ["Find#"])
 
     with pytest.raises(MalformedEcoError) as excinfo:
         eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
-    
+
     payload = excinfo.value.detail
-    assert payload["accepted"] == eco_build_notes.ACCEPTED_XRAY_HEADERS
+    assert "accepted" not in payload
+    assert payload["required"] == eco_build_notes.REQUIRED_XRAY_COLUMNS
+    assert payload["missing"] == ["PartNum", "Ref_Des", "Description"]
+    assert payload["duplicated"] == []
     assert payload["observed"] == ["Find#"]
     assert payload["observed_column_count"] == 1
 
@@ -171,6 +174,98 @@ def test_a_build_table_is_not_held_to_the_xray_header(tmp_path):
     fill_row(table, 0, ["#", "Instruction"])
 
     assert eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx")).row_count == 1
+
+
+# ------------------------------------------------ Patch 12: presence, not shape
+
+
+def test_an_extra_column_between_required_ones_is_ignored(tmp_path):
+    document = docx.Document()
+    table = document.add_table(3, 6)
+    fill_row(table, 0, ["Find#", "PartNum", "Count", "Ref_Des", "Package", "Description"])
+
+    assert eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx")).row_count == 2
+
+
+def test_required_columns_may_appear_in_any_order(tmp_path):
+    document = docx.Document()
+    table = document.add_table(2, 4)
+    fill_row(table, 0, ["Find#", "Description", "Ref_Des", "PartNum"])
+
+    assert eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx")).row_count == 1
+
+
+def test_case_whitespace_and_underscore_variants_are_accepted(tmp_path):
+    document = docx.Document()
+    table = document.add_table(2, 4)
+    fill_row(table, 0, ["FIND #", "Part Num", "Ref Des", "description"])
+
+    assert eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx")).row_count == 1
+
+
+def test_identification_is_normalised_so_the_gate_still_runs(tmp_path):
+    document = docx.Document()
+    table = document.add_table(2, 3)
+    fill_row(table, 0, ["FIND #", "PartNum", "Description"])
+
+    with pytest.raises(MalformedEcoError) as excinfo:
+        eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
+    assert excinfo.value.detail["missing"] == ["Ref_Des"]
+
+
+def test_a_required_column_duplicated_under_normalisation_is_rejected(tmp_path):
+    document = docx.Document()
+    table = document.add_table(2, 5)
+    fill_row(table, 0, ["Find#", "PartNum", "Part Num", "Ref_Des", "Description"])
+
+    with pytest.raises(MalformedEcoError) as excinfo:
+        eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
+    assert excinfo.value.detail["duplicated"] == ["PartNum"]
+    assert excinfo.value.detail["missing"] == []
+
+
+def test_punctuation_is_significant(tmp_path):
+    document = docx.Document()
+    table = document.add_table(2, 4)
+    fill_row(table, 0, ["Find#", "PartNum", "Ref-Des", "Description"])
+
+    with pytest.raises(MalformedEcoError) as excinfo:
+        eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
+    assert excinfo.value.detail["missing"] == ["Ref_Des"]
+
+
+def test_ignored_columns_are_logged_once_per_table(tmp_path, caplog):
+    document = docx.Document()
+    table = document.add_table(2, 7)
+    fill_row(table, 0, ["Find#", "PartNum", "Count", "Ref_Des", "Package", "Description", ""])
+
+    with caplog.at_level("INFO", logger=eco_build_notes.__name__):
+        eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
+
+    records = [r for r in caplog.records if r.name == eco_build_notes.__name__]
+    assert len(records) == 1
+    assert "['Count', 'Package']" in records[0].getMessage()
+
+
+def test_nothing_is_logged_when_no_column_is_ignored(tmp_path, caplog):
+    document = docx.Document()
+    table = document.add_table(2, 4)
+    fill_row(table, 0, ["Find#", "PartNum", "Ref_Des", "Description"])
+
+    with caplog.at_level("INFO", logger=eco_build_notes.__name__):
+        eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx"))
+
+    assert not [r for r in caplog.records if r.name == eco_build_notes.__name__]
+
+
+def test_a_column_before_find_number_bypasses_the_gate(tmp_path):
+    """Pins Patch 12 §3: identification is by first cell, so this table is not
+    held to the X-ray rule and its header row is counted as data."""
+    document = docx.Document()
+    table = document.add_table(2, 2)
+    fill_row(table, 0, ["Package", "Find#"])
+
+    assert eco_build_notes.parse(save(document, tmp_path, "B1 ECO.docx")).row_count == 2
 
 
 @pytest.mark.parametrize("name", [

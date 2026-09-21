@@ -103,13 +103,20 @@ def test_status_stage_highlight_follows_the_enum(qtbot):
 @pytest.mark.parametrize(
     "process_clean,expected",
     [
+        # The two values the Document Control dropdown offers.
+        ("Clean", "C"),
+        ("No Clean", "NC"),
         ("CLEAN", "C"),
-        ("WASH", "C"),
         ("NO CLEAN", "NC"),
         ("NO-CLEAN", "NC"),
         # A traveler ingested before process_clean was mapped said nothing.
         (None, ""),
         ("   ", ""),
+        # Off-template wording reads blank, not C. Patch 10 section 3.1: the
+        # fall-through used to resolve to CLEAN, which is how an unreadable
+        # cell could claim a wash process. It is logged at ingest instead.
+        ("WASH", ""),
+        ("NC", ""),
     ],
 )
 def test_wash_renders_the_travelers_own_wording(qtbot, process_clean, expected):

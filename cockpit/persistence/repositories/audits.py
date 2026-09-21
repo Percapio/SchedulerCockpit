@@ -17,7 +17,11 @@ from ..types import ActiveAudit, ActiveAuditDraft, AuditStatus, SourceFileCatego
 
 from .bom_components import AuditBomComponentRepository
 from .pdf_coords import PdfComponentCoordRepository
-from ..traveler_flags import is_class_3, is_clean_process
+from ..traveler_flags import (
+    is_class_3,
+    is_clean_process,
+    log_unrecognised_wash_designation,
+)
 import dataclasses
 
 _ACTIVE_AUDIT_FIELDS = frozenset(f.name for f in dataclasses.fields(ActiveAudit))
@@ -45,6 +49,10 @@ class AuditRepository:
             traveler_json = json.dumps(draft.traveler_metadata) if draft.traveler_metadata is not None else None
         except TypeError:
             raise InvalidArgumentError("traveler_metadata", draft.traveler_metadata, "Must be JSON serializable")
+
+        log_unrecognised_wash_designation(
+            f"{draft.part_number}{draft.split_suffix}", draft.traveler_metadata
+        )
 
         now_iso = utcnow().isoformat()
         cur = self.conn.cursor()
@@ -220,10 +228,26 @@ class AuditRepository:
             raise AuditNotFound(audit_id)
 
     def set_traveler_metadata(self, audit_id: int, payload: dict[str, Any] | None) -> None:
+        """Replaces an audit's traveler metadata and the flags derived from it.
+
+        post: traveler_metadata, is_class_3 and is_clean_process are rewritten
+              together. Stage runtimes are NOT recomputed, so a caller that
+              changes a value runtime_calc consumes -- process_clean and
+              assembly_class both qualify -- must follow this with
+              runtime_calc.persist(audit_id) inside the same transaction, or
+              the audit's stored runtimes contradict its own flags.
+        raises: AuditNotFound, InvalidArgumentError
+
+        No caller today. This is the seam Update > Traveler would use; that
+        feature was struck, so the torn state above is unreachable rather than
+        closed. Patch 10 section 4.4.
+        """
         try:
             traveler_json = json.dumps(payload) if payload is not None else None
         except TypeError:
             raise InvalidArgumentError("payload", payload, "Must be JSON serializable")
+
+        log_unrecognised_wash_designation(f"audit {audit_id}", payload)
 
         cur = self.conn.cursor()
         cur.execute(
@@ -338,9 +362,14 @@ class AuditRepository:
         source = cur.fetchone()
         if not source:
             raise AuditNotFound(source_audit_id)
-            
+
+        # A split logs alongside its parent: two real rows, two lines.
+        log_unrecognised_wash_designation(
+            f"{source['part_number']}{new_suffix}", source["traveler_metadata"]
+        )
+
         now_iso = utcnow().isoformat()
-        
+
         try:
             cur.execute(
                 """

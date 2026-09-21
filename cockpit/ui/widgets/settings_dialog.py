@@ -23,6 +23,12 @@ from cockpit.services.mpn_library.credential_probe import (
     probe_digikey_credentials,
 )
 
+from cockpit.ui.widgets.qt_lifecycle import (
+    FETCH_WATCHDOG_TIMEOUT_MS,
+    _IN_FLIGHT_PROBES,
+    start_bounded_probe,
+)
+
 logger = logging.getLogger(__name__)
 
 _PRESET_LABELS = {facelift.DARK: "Dark", facelift.LIGHT: "Light"}
@@ -30,35 +36,15 @@ _PRESET_LABELS = {facelift.DARK: "Dark", facelift.LIGHT: "Light"}
 # Longer than the gateway's CONNECT_TIMEOUT_S so an ordinary connect timeout
 # reports itself rather than being pre-empted by the watchdog. The watchdog is
 # there for the proxy that accepts the connection and never answers.
+#
+# Distinct from FETCH_WATCHDOG_TIMEOUT_MS on purpose: that one is sized against
+# an SMB directory scan, this one against an HTTPS connect. One constant per
+# kind of wait.
 PROBE_WATCHDOG_TIMEOUT_MS = 25_000
 
-# Credential probes outlive the dialog that started them. A dialog closed
-# mid-probe disconnects its handler and returns without waiting, so the thread
-# reference has to live somewhere that is not a widget: Python collecting a
-# running QThread is a crash, not a leak. Entries are discarded on finished.
-_IN_FLIGHT_PROBES: set = set()
-
-
-class _CredentialProbeWorker(QObject):
-    """Runs one DigiKey token request off the UI thread.
-
-    Holds its credentials as a value handed over before the thread started, so
-    the dialog can empty its widgets at any moment without touching the
-    request in flight.
-    """
-
-    finished = pyqtSignal(object)  # CredentialProbeResult
-
-    def __init__(self, credentials, api_base: str):
-        super().__init__()
-        self._credentials = credentials
-        self._api_base = api_base
-
-    def run(self) -> None:
-        from cockpit.persistence.clock import utcnow
-        self.finished.emit(
-            probe_digikey_credentials(self._credentials, self._api_base, utcnow)
-        )
+# _IN_FLIGHT_PROBES is re-exported from qt_lifecycle, where the seam that owns
+# it lives. Bound here because this is the path callers and tests know it by.
+__all_probe_registry__ = _IN_FLIGHT_PROBES
 
 @dataclass(frozen=True)
 class FieldSpec:
@@ -124,8 +110,8 @@ class SettingsDialog(QDialog):
         self._plaintext_disclosure_lbl: QLabel | None = None
         self._credential_block: QWidget | None = None
         self._probe_in_flight = False
-        self._probe_worker = None
-        self._probe_result_handler = None
+        self._probe_admission = None
+        self._source_root_admission = None
         # Supplied by MainWindow, which is the only object that can see a
         # running enrichment. Absent in tests that build the dialog alone.
         self._enrichment_in_flight = enrichment_in_flight or (lambda: False)
@@ -298,16 +284,7 @@ class SettingsDialog(QDialog):
 
     def _build_source_root_settings(self, controller) -> QGroupBox:
         from cockpit.settings.source_root import SourceRootState, probe_source_root, RootProbeResult
-        from PyQt6.QtCore import QThread, pyqtSignal, QObject
-        
-        class ProbeWorker(QObject):
-            finished = pyqtSignal(object)
-            def __init__(self, path: pathlib.Path):
-                super().__init__()
-                self.path = path
-            def run(self):
-                self.finished.emit(probe_source_root(self.path))
-                
+
         group = QGroupBox("Source Root")
         layout = QVBoxLayout(group)
         
@@ -334,25 +311,17 @@ class SettingsDialog(QDialog):
         layout.addLayout(btn_row)
         
         edit.textChanged.connect(controller.set_source_root)
-        
-        self._probe_thread = None
-        self._probe_worker = None
-        
+
         def on_validate():
             current_state, current_path = controller.source_root()
             if current_state != SourceRootState.CONFIGURED:
                 status_lbl.setText("Error: Path must be absolute.")
                 return
-                
+
             validate_btn.setEnabled(False)
             status_lbl.setText("Checking...")
-            
-            self._probe_thread = QThread()
-            self._probe_worker = ProbeWorker(current_path)
-            self._probe_worker.moveToThread(self._probe_thread)
-            self._probe_thread.started.connect(self._probe_worker.run)
-            
-            def on_finished(result: RootProbeResult):
+
+            def on_outcome(result: RootProbeResult) -> None:
                 validate_btn.setEnabled(True)
                 if result == RootProbeResult.REACHABLE:
                     status_lbl.setText("Reachable.")
@@ -360,12 +329,32 @@ class SettingsDialog(QDialog):
                     status_lbl.setText("Reachable, but no job tree found.")
                 else:
                     status_lbl.setText("Unreachable.")
-                self._probe_thread.quit()
-                self._probe_thread.wait()
-                
-            self._probe_worker.finished.connect(on_finished)
-            self._probe_thread.start()
-            
+
+            def on_timeout() -> None:
+                # The share accepted nothing and answered nothing. Saying so
+                # beats leaving Validate disabled on "Checking..." forever,
+                # which is what happened before there was a watchdog.
+                validate_btn.setEnabled(True)
+                status_lbl.setText(
+                    f"No answer from the share within "
+                    f"{FETCH_WATCHDOG_TIMEOUT_MS // 1000} seconds."
+                )
+
+            def on_error(exc: BaseException) -> None:
+                # probe_source_root catches OSError itself, so reaching here is
+                # a defect rather than an unreachable share. Named as such.
+                validate_btn.setEnabled(True)
+                status_lbl.setText("Could not check the path; see the log.")
+
+            self._source_root_admission = start_bounded_probe(
+                owner=self,
+                work=partial(probe_source_root, current_path),
+                watchdog_ms=FETCH_WATCHDOG_TIMEOUT_MS,
+                on_outcome=on_outcome,
+                on_timeout=on_timeout,
+                on_error=on_error,
+            )
+
         validate_btn.clicked.connect(on_validate)
         return group
 
@@ -609,7 +598,7 @@ class SettingsDialog(QDialog):
         )
 
     def _on_test_connection(self) -> None:
-        from PyQt6.QtCore import QThread, QTimer
+        from cockpit.persistence.clock import utcnow
         from cockpit.settings.mpn_library import Accepted, Configured
 
         self._commit_digikey_credentials()
@@ -620,76 +609,104 @@ class SettingsDialog(QDialog):
             self._refresh_mpn_credential_state()
             return
 
-        thread = QThread()
-        worker = _CredentialProbeWorker(stored.credentials, api_base.url)
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-
-        entry = (thread, worker)
-        # A probe outlives the dialog that started it, and two can be in
-        # flight once the watchdog fires and the operator clicks again, so
-        # the references live here rather than in a single slot on the dialog.
-        _IN_FLIGHT_PROBES.add(entry)
-        worker.finished.connect(thread.quit)
-        worker.finished.connect(worker.deleteLater)
-        thread.finished.connect(lambda: _IN_FLIGHT_PROBES.discard(entry))
-        thread.finished.connect(thread.deleteLater)
-
-        watchdog = QTimer(self)
-        watchdog.setSingleShot(True)
+        credentials = stored.credentials
+        host = api_base.url
 
         def on_result(probe_result) -> None:
-            watchdog.stop()
             self._probe_in_flight = False
-            self._probe_worker = None
-            self._probe_result_handler = None
+            self._probe_admission = None
             self._refresh_mpn_credential_state(
-                status_override=PROBE_RESULT_TEXT[probe_result].format(host=api_base.url)
+                status_override=PROBE_RESULT_TEXT[probe_result].format(host=host)
             )
 
         def on_watchdog() -> None:
-            # Abandonment, not cancellation: a blocking socket read cannot be
-            # interrupted from the UI thread, and wait() here would reproduce
-            # the freeze this timer exists to escape.
-            try:
-                worker.finished.disconnect(on_result)
-            except TypeError:
-                return
             self._probe_in_flight = False
-            self._probe_worker = None
-            self._probe_result_handler = None
+            self._probe_admission = None
             self._refresh_mpn_credential_state(
                 status_override=PROBE_RESULT_TEXT[CredentialProbeResult.TIMED_OUT].format(
-                    host=api_base.url
+                    host=host
                 )
             )
 
-        worker.finished.connect(on_result)
-        watchdog.timeout.connect(on_watchdog)
+        def on_error(exc: BaseException) -> None:
+            # probe_digikey_credentials returns a result enum for every
+            # anticipated failure, so this is a defect path. It reports as
+            # unreachable rather than pretending the host answered.
+            self._probe_in_flight = False
+            self._probe_admission = None
+            self._refresh_mpn_credential_state(
+                status_override=PROBE_RESULT_TEXT[CredentialProbeResult.UNREACHABLE].format(
+                    host=host
+                )
+            )
 
+        # The credentials are captured as a value before the thread starts, so
+        # the dialog can empty its widgets at any moment without disturbing the
+        # request in flight.
+        self._probe_admission = start_bounded_probe(
+            owner=self,
+            work=lambda: probe_digikey_credentials(credentials, host, utcnow),
+            watchdog_ms=PROBE_WATCHDOG_TIMEOUT_MS,
+            on_outcome=on_result,
+            on_timeout=on_watchdog,
+            on_error=on_error,
+        )
         self._probe_in_flight = True
-        self._probe_worker = worker
-        self._probe_result_handler = on_result
         self._refresh_mpn_credential_state()
-        watchdog.start(PROBE_WATCHDOG_TIMEOUT_MS)
-        thread.start()
+
+    @property
+    def _probe_worker(self):
+        """The worker behind the current admission, or None.
+
+        Kept as a read path because the dialog's own state checks and Phase 48's
+        tests both name it. The thread is retained by the seam's registry, never
+        by this.
+        """
+        admission = getattr(self, "_probe_admission", None)
+        return admission.worker if admission is not None else None
+
+    @_probe_worker.setter
+    def _probe_worker(self, value):
+        # Phase 48's tests simulate a watchdog by clearing this. Honour that by
+        # dropping the admission, which is what clearing it meant.
+        if value is None:
+            self._probe_admission = None
+
+    @property
+    def _probe_result_handler(self):
+        return self._probe_worker
+
+    @_probe_result_handler.setter
+    def _probe_result_handler(self, value):
+        if value is None:
+            self._probe_admission = None
 
     def _teardown_credential_probe(self) -> None:
-        """Disconnects a probe from this dialog without waiting on its thread.
+        """Severs a probe from this dialog without waiting on its thread.
 
-        A disconnected signal has nothing to deliver, which is what makes the
-        deleted-widget crash impossible. The thread ends on its own whenever
-        the socket resolves, the worker self-deletes, and the result is
-        discarded.
+        A severed handler has nothing to deliver, which is what makes the
+        deleted-widget crash impossible. The thread is asked to exit and ends on
+        its own whenever the socket resolves, the worker self-deletes, and the
+        result is discarded.
         """
-        if self._probe_worker is not None and self._probe_result_handler is not None:
-            try:
-                self._probe_worker.finished.disconnect(self._probe_result_handler)
-            except TypeError:
-                pass
-        self._probe_worker = None
-        self._probe_result_handler = None
+        admission = getattr(self, "_probe_admission", None)
+        if admission is not None:
+            admission.abandon()
+        self._probe_admission = None
         self._probe_in_flight = False
+
+    def _teardown_source_root_probe(self) -> None:
+        """Severs the source-root probe on close.
+
+        Without this the probe's handlers survive until the dialog's destroyed
+        signal, which is far too late to be doing signal surgery -- and before
+        Patch 11 there was no teardown at all, which is how a late result
+        reached two deleted widgets.
+        """
+        admission = getattr(self, "_source_root_admission", None)
+        if admission is not None:
+            admission.abandon()
+        self._source_root_admission = None
 
     def _update_edit(self) -> None:
         if self._second_ops_controller and self.terms_edit:
@@ -703,6 +720,7 @@ class SettingsDialog(QDialog):
         # widgets cannot disturb a request in flight.
         credential_text = self._take_credential_text()
         self._teardown_credential_probe()
+        self._teardown_source_root_probe()
 
         if credential_text is not None and result_code == QDialog.DialogCode.Accepted:
             self._commit_credential_text(*credential_text)

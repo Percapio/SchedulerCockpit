@@ -76,11 +76,16 @@ WASH_COLUMN_TEXT = {
     WashState.CLEAN: "C",
     WashState.NO_CLEAN: "NC",
     WashState.UNKNOWN: "",
+    # An off-template traveler reads as blank, same as one that said nothing.
+    # The distinction lives in the log written at ingest, not in the column:
+    # surfacing it here adds UI for a case the dropdown should make impossible.
+    WashState.UNRECOGNISED: "",
 }
 WASH_SEARCH_TOKEN = {
     WashState.CLEAN: "wash",
     WashState.NO_CLEAN: "noclean",
     WashState.UNKNOWN: "",
+    WashState.UNRECOGNISED: "",
 }
 
 

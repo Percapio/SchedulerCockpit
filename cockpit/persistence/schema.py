@@ -8,7 +8,7 @@ from .clock import utcnow
 from .errors import SchemaInitializationError, SchemaMismatch, BackfillSourceMissing, PersistenceError
 from ..protocols import ParserRegistry
 from ..ingestion.errors import MalformedBomError
-from .traveler_flags import is_class_3, is_clean_process
+from .traveler_flags import is_class_3, is_clean_process, unrecognised_wash_text
 
 logger = logging.getLogger(__name__)
 
@@ -512,6 +512,11 @@ def migrate_to_v10(conn: sqlite3.Connection) -> bool:
                 if "duplicate column name" not in str(add_column_error):
                     raise SchemaInitializationError(statement="v10 DDL", cause=add_column_error)
                     
+        # One aggregate line for the whole migration, not one per row: this is a
+        # bulk path, and a count tells the reader more than a wall of identical
+        # warnings would. Patch 10 section 6.3.
+        unrecognised_wash_texts: list[str] = []
+
         cur.execute("SELECT id, traveler_metadata FROM active_audits")
         for audit_row in cur.fetchall():
             raw_metadata = audit_row["traveler_metadata"]
@@ -522,7 +527,11 @@ def migrate_to_v10(conn: sqlite3.Connection) -> bool:
                     raise SchemaInitializationError(statement="v10 traveler_metadata parse", cause=parse_error)
             else:
                 traveler_metadata = raw_metadata
-                
+
+            off_template = unrecognised_wash_text(traveler_metadata)
+            if off_template is not None:
+                unrecognised_wash_texts.append(off_template)
+
             cur.execute(
                 "UPDATE active_audits SET is_class_3 = ?, is_clean_process = ? WHERE id = ?",
                 (
@@ -531,7 +540,15 @@ def migrate_to_v10(conn: sqlite3.Connection) -> bool:
                     audit_row["id"],
                 ),
             )
-            
+
+        if unrecognised_wash_texts:
+            logger.warning(
+                "v10 backfill: %d audit(s) carry an unreadable wash designation; "
+                "distinct values %s. All treated as no wash process.",
+                len(unrecognised_wash_texts),
+                sorted(set(unrecognised_wash_texts)),
+            )
+
         now_iso = utcnow().isoformat()
         cur.execute(
             "UPDATE schema_version SET version = 10, applied_at = ? WHERE singleton_guard = 1",

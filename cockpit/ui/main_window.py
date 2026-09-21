@@ -26,13 +26,13 @@ from cockpit.services.layout_query import LayoutQueryService
 from cockpit.layout.renderer import PdfRenderer
 from cockpit.ui.theme import Theme
 from cockpit.ui.font_scale_controller import FontScaleController
+from cockpit.ui.widgets.qt_lifecycle import FETCH_WATCHDOG_TIMEOUT_MS
 import logging
 logger = logging.getLogger(__name__)
 
-# Sized against one worst-case single-page rasterize at unscaled 4K (~3.6 s per
-# Patch01 section 8.2). Beyond this the worker is wrong, not slow, and the exit
-# path stops waiting on it.
-FETCH_WATCHDOG_TIMEOUT_MS = 20_000
+# FETCH_WATCHDOG_TIMEOUT_MS is imported above from qt_lifecycle: the source-root
+# probe in settings_dialog scans the same shares on the same clock, and a widget
+# cannot import the window that owns it. Same name, same value.
 
 # Distinguishes "the operator declined" from "there is no plan", which is a
 # legitimate value meaning today's unchanged ingest behaviour.
@@ -541,27 +541,51 @@ class MainWindow(QMainWindow):
             self._abandon_fetch_worker()
 
     def _abandon_fetch_worker(self) -> None:
-        # Phase 46 abandonment
+        # Phase 46 abandonment, corrected by Patch 11 section 6.
         self._operation_in_flight = False
         if hasattr(self, "_fetch_watchdog"):
             self._fetch_watchdog.stop()
             
         if hasattr(self, "_fetch_thread") and self._fetch_thread is not None:
-            # We don't quit() or wait() because network shares hang indefinitely
-            self._fetch_thread.finished.connect(self._fetch_worker.deleteLater)
-            self._fetch_thread.finished.connect(self._fetch_thread.deleteLater)
-            
-            self._orphaned_workers.append((self._fetch_thread, self._fetch_worker))
-            
+            thread, worker = self._fetch_thread, self._fetch_worker
+            entry = (thread, worker)
+
+            thread.finished.connect(worker.deleteLater)
+            thread.finished.connect(thread.deleteLater)
+            # Retention without a discard is a leak. _IN_FLIGHT_PROBES gets this
+            # right and this list did not: entries were appended and never
+            # removed.
+            thread.finished.connect(lambda e=entry: self._discard_orphan(e))
+            self._orphaned_workers.append(entry)
+
             # Disconnect signals so they don't do anything if they ever wake up
             try:
-                self._fetch_worker.succeeded_signal.disconnect(self._on_fetch_succeeded)
-                self._fetch_worker.failed_signal.disconnect(self._on_fetch_failed)
+                worker.succeeded_signal.disconnect(self._on_fetch_succeeded)
+                worker.failed_signal.disconnect(self._on_fetch_failed)
             except Exception:
                 pass
-                
+
+            # quit() is not wait(). wait() blocks the UI thread for exactly as
+            # long as the share does, which is the freeze abandonment exists to
+            # avoid; quit() posts a request and returns. Without it nothing ends
+            # this thread at all: the handlers disconnected above were the only
+            # callers of quit(), and QThread.run() is an event loop that runs
+            # until asked to stop. A worker still inside its blocking call has
+            # not entered exec() yet, so this latches and takes effect the
+            # moment it is reached.
+            try:
+                thread.quit()
+            except RuntimeError:
+                pass
+
             self._fetch_thread = None
             self._fetch_worker = None
+
+    def _discard_orphan(self, entry) -> None:
+        try:
+            self._orphaned_workers.remove(entry)
+        except ValueError:
+            pass
 
     # --- Phase 50 section 4.4: drawing fetch -----------------------------
 

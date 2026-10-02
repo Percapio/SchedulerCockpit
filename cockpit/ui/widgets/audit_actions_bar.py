@@ -24,6 +24,9 @@ class AuditActionsBar(QWidget):
     ops_per_board_change_requested = pyqtSignal(int, object)
     exit_requested = pyqtSignal()
     second_ops_requested = pyqtSignal(int)
+    # Phase 52: MainWindow owns the dialog because it holds the roots and the
+    # stored BOM lookup; this widget only asks.
+    aoi_xy_requested = pyqtSignal(int)
     # Enumeration blocks on a network share, so it runs on MainWindow's
     # existing fetch worker and watchdog. This widget holds no threading code.
     drawing_fetch_requested = pyqtSignal(int, bool)  # (audit_id, secondary)
@@ -179,7 +182,18 @@ class AuditActionsBar(QWidget):
 
         second_ops_action = self.actions_menu.addAction("2nd OPS…")
         second_ops_action.triggered.connect(self._on_second_ops_clicked)
-        
+
+        # The XY export lives in the job folder, so AOI XY needs what Fetch
+        # needs. The program folder is optional: without it the dialog says so.
+        self.actions_menu.setToolTipsVisible(True)
+        aoi_action = self.actions_menu.addAction("AOI XY…")
+        aoi_reason = self._fetch_unavailable_reason(view)
+        if aoi_reason is None:
+            aoi_action.triggered.connect(self._on_aoi_xy_clicked)
+        else:
+            aoi_action.setEnabled(False)
+            aoi_action.setToolTip(aoi_reason)
+
         ops_action = self.actions_menu.addAction("OPS per board…")
         ops_action.triggered.connect(self._on_ops_per_board_clicked)
 
@@ -339,6 +353,14 @@ class AuditActionsBar(QWidget):
         if not view:
             return
         self.second_ops_requested.emit(view.audit_id)
+
+    def _on_aoi_xy_clicked(self) -> None:
+        if not self._session:
+            return
+        view = self._session.current_view()
+        if not view:
+            return
+        self.aoi_xy_requested.emit(view.audit_id)
 
     def _on_complete_clicked(self) -> None:
         if not self._session:

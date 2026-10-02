@@ -19,6 +19,12 @@ a = Analysis(
         # named here rather than relying on bytecode analysis of that call site.
         'cockpit.services.mpn_library.module',
         'cockpit.ui.widgets.library_segment',
+        # Phase 52: reached only through function-level imports in main_window,
+        # settings_dialog, error_messages and app; named for the same reason.
+        'cockpit.ui.widgets.aoi_xy_dialog',
+        'cockpit.services.aoi.export',
+        'cockpit.services.aoi.errors',
+        'cockpit.settings.program_root',
         'sqlite3',
     ],
     hookspath=['build/hooks'],

@@ -60,6 +60,7 @@ class MainWindow(QMainWindow):
         second_ops_settings_controller=None,
         source_root_controller=None,
         mpn_library_controller=None,
+        program_root_controller=None,
     ) -> None:
         super().__init__()
         self._theme = theme
@@ -70,6 +71,7 @@ class MainWindow(QMainWindow):
         self._runtime_settings_controller = runtime_settings_controller
         self._second_ops_settings_controller = second_ops_settings_controller
         self._source_root_controller = source_root_controller
+        self._program_root_controller = program_root_controller
         self._mpn_library_controller = mpn_library_controller
         self._library_module = bootstrapped_app.library_module
         self._audit_read_svc = audit_read_svc
@@ -132,6 +134,7 @@ class MainWindow(QMainWindow):
         self._audit_view.error_occurred.connect(self._on_failed)
         self._audit_view.ops_per_board_change_requested.connect(self._on_ops_per_board_change_requested)
         self._audit_view.second_ops_requested.connect(self._on_audit_second_ops_requested)
+        self._audit_view.aoi_xy_requested.connect(self._on_aoi_xy_requested)
         self._audit_view.drawing_fetch_requested.connect(self._on_drawing_fetch_requested)
         self.stacked.addWidget(self._audit_view)
         
@@ -239,7 +242,8 @@ class MainWindow(QMainWindow):
                 self,
                 source_root_controller=self._source_root_controller,
                 mpn_library_controller=self._mpn_library_controller,
-                enrichment_in_flight=self._audit_view.is_enrichment_in_flight
+                enrichment_in_flight=self._audit_view.is_enrichment_in_flight,
+                program_root_controller=self._program_root_controller,
             )
             dialog.reset_requested.connect(self._on_reset_requested)
             dialog.exec()
@@ -586,6 +590,52 @@ class MainWindow(QMainWindow):
             self._orphaned_workers.remove(entry)
         except ValueError:
             pass
+
+    # --- Phase 52: AOI XY export -------------------------------------------
+
+    def _on_aoi_xy_requested(self, audit_id: int) -> None:
+        """Opens the AOI XY dialog for one audit.
+
+        The dialog does its own share access through the bounded probe, so
+        nothing here touches the network; the stored BOM is on local disk.
+        """
+        from cockpit.settings.source_root import SourceRootState
+        from cockpit.services.aoi.errors import BomUnavailable
+        from cockpit.services.aoi.export import resolve_stored_bom
+        from cockpit.ui.error_messages import render
+        from cockpit.ui.widgets.aoi_xy_dialog import AoiXyDialog
+
+        if self._source_root_controller is None:
+            return
+        state, root_path = self._source_root_controller.source_root()
+        if state != SourceRootState.CONFIGURED:
+            QMessageBox.information(
+                self, "Setup Required",
+                "Please configure the source share root in Settings first."
+            )
+            return
+        audit = self._bootstrapped.audit_repo.find_by_id(audit_id)
+        if audit is None:
+            return
+        try:
+            stored_bom = resolve_stored_bom(audit_id, self._bootstrapped.source_file_repo)
+        except BomUnavailable as exc:
+            self._on_failed(render(exc))
+            return
+
+        program_root = None
+        if self._program_root_controller is not None:
+            program_root = self._program_root_controller.configured_root()
+        dialog = AoiXyDialog(
+            job_number=audit.part_number,
+            stored_bom=stored_bom,
+            source_root=root_path,
+            program_root=program_root,
+            forbidden_roots=(self._bootstrapped.config.file_storage_root,),
+            settings=self._settings,
+            parent=self,
+        )
+        dialog.exec()
 
     # --- Phase 50 section 4.4: drawing fetch -----------------------------
 

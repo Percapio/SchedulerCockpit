@@ -24,6 +24,7 @@ class AuditActionsBar(QWidget):
     ops_per_board_change_requested = pyqtSignal(int, object)
     exit_requested = pyqtSignal()
     second_ops_requested = pyqtSignal(int)
+    cleaning_report_requested = pyqtSignal(int)
     # Enumeration blocks on a network share, so it runs on MainWindow's
     # existing fetch worker and watchdog. This widget holds no threading code.
     drawing_fetch_requested = pyqtSignal(int, bool)  # (audit_id, secondary)
@@ -179,6 +180,12 @@ class AuditActionsBar(QWidget):
 
         second_ops_action = self.actions_menu.addAction("2nd OPS…")
         second_ops_action.triggered.connect(self._on_second_ops_clicked)
+
+        cleaning_report_action = self.actions_menu.addAction("BOM cleaning report\u2026")
+        if getattr(view, "has_bom", True):
+            cleaning_report_action.triggered.connect(self._on_cleaning_report_clicked)
+        else:
+            cleaning_report_action.setEnabled(False)
         
         ops_action = self.actions_menu.addAction("OPS per board…")
         ops_action.triggered.connect(self._on_ops_per_board_clicked)
@@ -339,6 +346,14 @@ class AuditActionsBar(QWidget):
         if not view:
             return
         self.second_ops_requested.emit(view.audit_id)
+
+    def _on_cleaning_report_clicked(self) -> None:
+        if not self._session:
+            return
+        view = self._session.current_view()
+        if not view:
+            return
+        self.cleaning_report_requested.emit(view.audit_id)
 
     def _on_complete_clicked(self) -> None:
         if not self._session:

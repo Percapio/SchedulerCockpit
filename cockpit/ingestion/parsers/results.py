@@ -1,6 +1,6 @@
 """Parser result dataclasses."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from cockpit.persistence.types import ActiveAuditDraft
@@ -26,6 +26,10 @@ class BomResult:
     excluded_dni_count: int             # rows that were filtered as DNI
     excluded_pcb_count: int             # rows that were excluded as PCBs
     header_layout: HeaderLayout         # "canonical" (all optionals present) or "legacy"
+    notes: list[Any] = field(default_factory=list)
+    cleaning: Any = None
+    sheet_name_used: str = ""
+    header_row: int = 1
 
 
 @dataclass(frozen=True)

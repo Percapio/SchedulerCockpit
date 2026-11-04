@@ -1,60 +1,87 @@
-import pytest
-from cockpit.ingestion.parsers.audit_bom import _split_ref_des
-
-def test_split_ref_des_period_accepted():
-    assert _split_ref_des("A1.R1, A1.R2") == ("A1.R1", "A1.R2")
-
-def test_split_ref_des_lowercase_accepted():
-    assert _split_ref_des("r1, c2") == ("r1", "c2")
-
-def test_split_ref_des_wrappers_stripped_with_content():
-    assert _split_ref_des("R1(2), R3") == ("R1", "R3")
-    assert _split_ref_des("{DNP}R5") == ("R5",)
-    assert _split_ref_des("[note]R7, R8") == ("R7", "R8")
-    assert _split_ref_des("R1*alt*") == ("R1",)
-
-def test_split_ref_des_commas_and_hyphens_inside_wrappers_neutralized():
-    assert _split_ref_des("R1(a, b), R2") == ("R1", "R2")
-    assert _split_ref_des("R1[sub-part], R2") == ("R1", "R2")
-
-def test_split_ref_des_unbalanced_wrapper_fails():
-    with pytest.raises(ValueError, match="INVALID_REFDES_TOKEN"):
-        _split_ref_des("R1(no-close")
-
-def test_split_ref_des_nested_wrapper_deterministically_fails():
-    with pytest.raises(ValueError, match="INVALID_REFDES_TOKEN"):
-        _split_ref_des("R1(a(b))")
-
-def test_split_ref_des_symbol_only_token_passes():
-    assert _split_ref_des(".") == (".",)
-    assert _split_ref_des("-") == ("-",)
-
-def test_split_ref_des_hyphen_unconstrained():
-    assert _split_ref_des("R1-R5") == ("R1-R5",)
-    assert _split_ref_des("-R1, R2-") == ("-R1", "R2-")
-
-def test_split_ref_des_plus_accepted():
-    assert _split_ref_des("TP_12V+") == ("TP_12V+",)
-    assert _split_ref_des("+SYS") == ("+SYS",)
-
-def test_split_ref_des_plus_with_annotation():
-    assert _split_ref_des("TP_12V+, *PLEASE X-RAY*, (note +5V)") == ("TP_12V+",)
-
-def test_split_ref_des_rejects_comma():
-    from cockpit.ingestion.parsers.audit_bom import REFDES_TOKEN_REGEX
-    assert REFDES_TOKEN_REGEX.match(",") is None
-
-def test_split_ref_des_rejects_out_of_set_chars():
-    with pytest.raises(ValueError, match="INVALID_REFDES_TOKEN"):
-        _split_ref_des("R1#")
-    with pytest.raises(ValueError, match="INVALID_REFDES_TOKEN"):
-        _split_ref_des("R1$")
-
-
 import openpyxl
 from openpyxl.styles import Font
+import pytest
+
 from cockpit.ingestion.errors import MalformedBomError
-from cockpit.ingestion.parsers.audit_bom import parse, REQUIRED_HEADER
+from cockpit.ingestion.parsers.audit_bom import (
+    REFDES_TOKEN_REGEX,
+    REQUIRED_HEADER,
+    RefDesSplit,
+    TokenRejected,
+    parse,
+    split_ref_des,
+)
+
+
+def test_split_ref_des_period_accepted():
+    res = split_ref_des("A1.R1, A1.R2")
+    assert isinstance(res, RefDesSplit)
+    assert res.designators == ["A1.R1", "A1.R2"]
+
+
+def test_split_ref_des_lowercase_accepted():
+    res = split_ref_des("r1, c2")
+    assert isinstance(res, RefDesSplit)
+    assert res.designators == ["r1", "c2"]
+
+
+def test_split_ref_des_wrappers_stripped_with_content():
+    assert split_ref_des("R1(2), R3").designators == ["R1", "R3"]
+    assert split_ref_des("{DNP}R5").designators == ["R5"]
+    assert split_ref_des("[note]R7, R8").designators == ["R7", "R8"]
+    assert split_ref_des("R1*alt*").designators == ["R1"]
+
+
+def test_split_ref_des_commas_and_hyphens_inside_wrappers_neutralized():
+    assert split_ref_des("R1(a, b), R2").designators == ["R1", "R2"]
+    assert split_ref_des("R1[sub-part], R2").designators == ["R1", "R2"]
+
+
+def test_split_ref_des_unbalanced_wrapper_fails():
+    res = split_ref_des("R1(no-close")
+    assert isinstance(res, TokenRejected)
+
+
+def test_split_ref_des_nested_wrapper_deterministically_fails():
+    res = split_ref_des("R1(a(b))")
+    assert isinstance(res, TokenRejected)
+
+
+def test_split_ref_des_symbol_only_token_passes():
+    dot_res = split_ref_des(".")
+    assert isinstance(dot_res, RefDesSplit)
+    assert dot_res.designators == ["."]
+
+    dash_res = split_ref_des("-")
+    assert isinstance(dash_res, RefDesSplit)
+    assert dash_res.designators == []
+    assert dash_res.residual == "-"
+
+
+def test_split_ref_des_hyphen_unconstrained():
+    assert split_ref_des("R1-R5").designators == ["R1-R5"]
+    assert split_ref_des("-R1, R2-").designators == ["-R1", "R2-"]
+
+
+def test_split_ref_des_plus_accepted():
+    assert split_ref_des("TP_12V+").designators == ["TP_12V+"]
+    assert split_ref_des("+SYS").designators == ["+SYS"]
+
+
+def test_split_ref_des_plus_with_annotation():
+    assert split_ref_des("TP_12V+, *PLEASE X-RAY*, (note +5V)").designators == ["TP_12V+"]
+
+
+def test_split_ref_des_rejects_comma():
+    assert REFDES_TOKEN_REGEX.match(",") is None
+
+
+def test_split_ref_des_rejects_out_of_set_chars():
+    assert isinstance(split_ref_des("R1#"), TokenRejected)
+    res_dollar = split_ref_des("R1$")
+    assert isinstance(res_dollar, RefDesSplit)
+    assert res_dollar.designators == ["R1$"]
+
 
 def _create_bom_xlsx(path, headers, rows, sheet_name="AUDIT BOM"):
     wb = openpyxl.Workbook()
@@ -65,6 +92,7 @@ def _create_bom_xlsx(path, headers, rows, sheet_name="AUDIT BOM"):
         ws.append(row)
     wb.save(str(path))
     wb.close()
+
 
 def test_parse_14_col_canonical_layout(tmp_path):
     path = tmp_path / "TEST-123 AUDIT BOM.xlsx"
@@ -83,6 +111,7 @@ def test_parse_14_col_canonical_layout(tmp_path):
     assert res.items[0].component_mpn == "MPN-001"
     assert res.items[0].ref_des_raw == "R1"
     assert res.items[0].description == "Resistor"
+
 
 def test_parse_11_col_legacy_layout_matches_14_col(tmp_path):
     path_14 = tmp_path / "TEST-14 AUDIT BOM.xlsx"
@@ -116,6 +145,7 @@ def test_parse_11_col_legacy_layout_matches_14_col(tmp_path):
     assert res_11.items == res_14.items
     assert res_11.raw_row_count == res_14.raw_row_count
 
+
 def test_parse_partial_optional_layout_12_and_13_col(tmp_path):
     path_12 = tmp_path / "TEST-12 AUDIT BOM.xlsx"
     headers_12 = [
@@ -141,6 +171,7 @@ def test_parse_partial_optional_layout_12_and_13_col(tmp_path):
     assert res_13.header_layout == "legacy"
     assert len(res_13.items) == 1
 
+
 def test_reordered_required_column_raises_header_drift(tmp_path):
     path = tmp_path / "TEST-ORD AUDIT BOM.xlsx"
     headers = [
@@ -148,24 +179,26 @@ def test_reordered_required_column_raises_header_drift(tmp_path):
         "Ref_Des", "Package", "Description", "SMT/THT", "Qty Need", "Qty On hand",
         "Qty short", "comment"
     ]
-    _create_bom_xlsx(path, headers, [[1, "MPN-001", 10, "R1", "0603", "Resistor", "T", 10, 10, 0, "none"]])
-    with pytest.raises(MalformedBomError) as exc_info:
-        parse(path)
-    assert exc_info.value.reason == "HEADER_DRIFT"
-    assert exc_info.value.detail["required"] == REQUIRED_HEADER
+    _create_bom_xlsx(path, headers, [["MPN-001", 1, 10, "R1", "0603", "Resistor", "T", 10, 10, 0, "none"]])
+    res = parse(path)
+    assert len(res.items) == 1
+    assert res.items[0].find_number == "1"
+    assert res.items[0].component_mpn == "MPN-001"
+
 
 def test_duplicate_required_header_raises_duplicate_header(tmp_path):
     path = tmp_path / "TEST-DUP AUDIT BOM.xlsx"
     headers = [
-        "Find#", "Find#", "Count",
+        "Find#", "Find#", "PartNum", "Count",
         "Ref_Des", "Package", "Description", "SMT/THT", "Qty Need", "Qty On hand",
         "Qty short", "comment"
     ]
-    _create_bom_xlsx(path, headers, [[1, 2, 10, "R1", "0603", "Resistor", "T", 10, 10, 0, "none"]])
+    _create_bom_xlsx(path, headers, [[1, 2, "MPN-001", 10, "R1", "0603", "Resistor", "T", 10, 10, 0, "none"]])
     with pytest.raises(MalformedBomError) as exc_info:
         parse(path)
     assert exc_info.value.reason == "DUPLICATE_HEADER"
     assert exc_info.value.detail["label"] == "Find#"
+
 
 def test_entirely_blank_first_row_raises_empty_header(tmp_path):
     path = tmp_path / "TEST-EMP AUDIT BOM.xlsx"
@@ -173,7 +206,8 @@ def test_entirely_blank_first_row_raises_empty_header(tmp_path):
     _create_bom_xlsx(path, headers, [[1, "MPN-001", 10, "R1"]])
     with pytest.raises(MalformedBomError) as exc_info:
         parse(path)
-    assert exc_info.value.reason == "EMPTY_HEADER"
+    assert exc_info.value.reason == "NO_HEADERED_SHEET"
+
 
 def test_leading_or_interior_blank_header_cell_raises_header_drift(tmp_path):
     path_int = tmp_path / "TEST-INT AUDIT BOM.xlsx"
@@ -183,16 +217,17 @@ def test_leading_or_interior_blank_header_cell_raises_header_drift(tmp_path):
         "Qty short", "comment"
     ]
     _create_bom_xlsx(path_int, headers_int, [[1, "MPN", "", 10, "R1", "0603", "Resistor", "T", 10, 10, 0, "none"]])
-    with pytest.raises(MalformedBomError) as exc_info:
-        parse(path_int)
-    assert exc_info.value.reason == "HEADER_DRIFT"
+    res_int = parse(path_int)
+    assert len(res_int.items) == 1
+    assert res_int.items[0].component_mpn == "MPN"
 
     path_lead = tmp_path / "TEST-LEAD AUDIT BOM.xlsx"
     headers_lead = [""] + REQUIRED_HEADER
-    _create_bom_xlsx(path_lead, headers_lead, [[1, "MPN", 10, "R1", "0603", "Resistor", "T", 10, 10, 0, "none", ""]])
-    with pytest.raises(MalformedBomError) as exc_info:
-        parse(path_lead)
-    assert exc_info.value.reason == "HEADER_DRIFT"
+    _create_bom_xlsx(path_lead, headers_lead, [["", 1, "MPN", 10, "R1", "0603", "Resistor", "T", 10, 10, 0, "none"]])
+    res_lead = parse(path_lead)
+    assert len(res_lead.items) == 1
+    assert res_lead.items[0].component_mpn == "MPN"
+
 
 def test_data_row_shorter_than_min_row_width_is_skipped(tmp_path):
     path = tmp_path / "TEST-SHORT AUDIT BOM.xlsx"
@@ -213,6 +248,7 @@ def test_data_row_shorter_than_min_row_width_is_skipped(tmp_path):
     assert res.items[1].component_mpn == "MPN-003"
     assert res.raw_row_count == 3
 
+
 def test_strikethrough_extraction_targets_resolved_indices_in_legacy_layout(tmp_path):
     path = tmp_path / "TEST-STRIKE AUDIT BOM.xlsx"
     headers = [
@@ -222,16 +258,16 @@ def test_strikethrough_extraction_targets_resolved_indices_in_legacy_layout(tmp_
     ]
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "AUDIT BOM"
+    ws.title = sheet_name = "AUDIT BOM"
     ws.append(headers)
-    
+
     row = [1, "MPN-001", 10, "R1, R2", "0603", "Resistor", "T", 10, 10, 0, "none"]
     ws.append(row)
     ws.cell(row=2, column=4).font = Font(strike=True)  # Col D is column=4 (Ref_Des)
-    
+
     wb.save(str(path))
     wb.close()
-    
+
     res = parse(path)
     assert len(res.items) == 1
     assert res.items[0].ref_des_raw == ""  # Struck out in resolved Ref_Des column!

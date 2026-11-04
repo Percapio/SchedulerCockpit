@@ -318,7 +318,19 @@ class IngestionService:
         pdf_result = None
         try:
             bom_result = audit_bom.parse(stored_bom)
-            _emit(ProgressStage.BOM_PARSED, {"header_layout": getattr(bom_result, "header_layout", "canonical")})
+            cleaning_report = getattr(bom_result, "cleaning", None)
+            cleaning_summary = (
+                audit_bom.summarise_cleaning(cleaning_report)
+                if cleaning_report is not None
+                else audit_bom.EMPTY_CLEANING_SUMMARY
+            )
+            _emit(
+                ProgressStage.BOM_PARSED,
+                {
+                    "header_layout": getattr(bom_result, "header_layout", "canonical"),
+                    "cleaning": cleaning_summary,
+                },
+            )
 
             eco_result = eco_build_notes.parse(stored_notes)
             _emit(ProgressStage.ECO_PARSED, {"eco_item_count": eco_result.row_count})

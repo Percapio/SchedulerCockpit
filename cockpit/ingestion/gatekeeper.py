@@ -12,6 +12,9 @@ def validate(paths: Sequence[pathlib.Path]) -> None:
         raise GatekeeperViolation("WRONG_COUNT", {"actual": len(paths)})
         
     for p in paths:
+        if p.name.startswith("~$"):
+            raise GatekeeperViolation("LOCK_FILE", {"path": str(p)})
+
         if not p.exists() or not p.is_file():
             if not p.exists():
                 raise GatekeeperViolation("MISSING_FILE", {"path": str(p)})

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import docx
 
 from ..errors import MalformedEcoError
+from ..labels import header_key
 from .results import EcoResult
 
 logger = logging.getLogger(__name__)
@@ -34,16 +35,6 @@ class XrayHeaderAccepted:
 class XrayHeaderRejected:
     missing: list[str]
     duplicated: list[str]
-
-
-def header_key(raw_label: str) -> str:
-    """Comparison key for a header label.
-
-    post: casefolded, with every Unicode whitespace code point (including the
-          non-breaking space Word inserts) and every "_" removed; "Ref Des",
-          "REF_DES", " ref_des " and "Ref_Des" all map to "refdes"
-    """
-    return "".join(ch for ch in raw_label if not ch.isspace() and ch != "_").casefold()
 
 
 _REQUIRED_KEYS = {header_key(label): label for label in REQUIRED_XRAY_COLUMNS}

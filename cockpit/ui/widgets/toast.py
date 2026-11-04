@@ -3,6 +3,7 @@
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel
 
+from cockpit.ingestion.parsers.audit_bom import CleaningSummary, describe_routine_cleaning
 from cockpit.ui.workers.ingestion_worker import AuditSummary
 
 
@@ -50,7 +51,17 @@ class Toast(QWidget):
     def show_success(self, summary: AuditSummary) -> None:
         """Show success toast."""
         self.title_label.setText(f"Ingested {summary.part_number} / {summary.work_order_ref}")
-        self.subtitle_label.setText(f"{summary.tht_item_count} THT items, {summary.eco_item_count} ECO items")
+        subtitle = f"{summary.tht_item_count} THT items, {summary.eco_item_count} ECO items"
+        if isinstance(summary.cleaning, CleaningSummary):
+            routine_text = describe_routine_cleaning(summary.cleaning)
+            if routine_text:
+                subtitle += f" \u00b7 {routine_text}"
+            conseq_count = len(summary.cleaning.consequential)
+            if conseq_count == 1:
+                subtitle += " \u00b7 1 change to review"
+            elif conseq_count > 1:
+                subtitle += f" \u00b7 {conseq_count} changes to review"
+        self.subtitle_label.setText(subtitle)
         self.subtitle_label.show()
         
         self.setProperty("severity", "error")

@@ -6,6 +6,11 @@ from dataclasses import dataclass
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
+from cockpit.ingestion.parsers.audit_bom import (
+    CleaningSummary,
+    EMPTY_CLEANING_SUMMARY,
+    describe_routine_cleaning,
+)
 from cockpit.ingestion.service import IngestionService
 from cockpit.ingestion.progress import ProgressEvent, ProgressStage, IngestionCancelled
 from cockpit.ui.error_messages import render, FailurePayload
@@ -21,6 +26,7 @@ class AuditSummary:
     work_order_ref: str
     tht_item_count: int
     eco_item_count: int
+    cleaning: CleaningSummary = EMPTY_CLEANING_SUMMARY
 
 
 class IngestionWorker(QObject):
@@ -45,13 +51,15 @@ class IngestionWorker(QObject):
             
             assert "tht_item_count" in self._last_detail, "tht_item_count missing from progress stream"
             assert "eco_item_count" in self._last_detail, "eco_item_count missing from progress stream"
+            assert "cleaning" in self._last_detail, "cleaning missing from progress stream"
             
             summary = AuditSummary(
                 audit_id=audit.id,
                 part_number=audit.part_number,
                 work_order_ref=audit.work_order_ref,
                 tht_item_count=self._last_detail["tht_item_count"],
-                eco_item_count=self._last_detail["eco_item_count"]
+                eco_item_count=self._last_detail["eco_item_count"],
+                cleaning=self._last_detail["cleaning"],
             )
             self.succeeded_signal.emit(summary)
             
@@ -85,5 +93,11 @@ class IngestionWorker(QObject):
                 annotation = "canonical layout"
             elif layout_val == "legacy":
                 annotation = "legacy layout"
+
+            cleaning_val = event.detail.get("cleaning")
+            if isinstance(cleaning_val, CleaningSummary):
+                routine_text = describe_routine_cleaning(cleaning_val)
+                if routine_text and annotation is not None:
+                    annotation = f"{annotation} \u00b7 {routine_text}"
 
         self.progress_signal.emit(event.stage.value, annotation)

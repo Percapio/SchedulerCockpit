@@ -171,6 +171,7 @@ class ActiveAuditView:
     is_labeled: bool = False
     are_photos_uploaded: bool = False
     notes_docx_path: pathlib.Path | None = None
+    has_bom: bool = True
 
 
 

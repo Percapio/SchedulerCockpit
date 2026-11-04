@@ -349,6 +349,8 @@ class _CellPainter:
             char_format.setFontItalic(True)
         if run.underline:
             char_format.setFontUnderline(True)
+        if getattr(run.font, "strike", False) or getattr(run.font, "double_strike", False):
+            char_format.setFontStrikeOut(True)
         colour = run.font.color
         if colour is not None and colour.rgb is not None:
             char_format.setForeground(QColor(f"#{colour.rgb}"))

@@ -41,12 +41,163 @@ class FailurePayload:
         )
 
 
+def _render_bom_error(exc: MalformedBomError) -> FailurePayload:
+    exc_class = exc.__class__.__name__
+    reason = exc.reason
+
+    if reason == "NO_HEADERED_SHEET":
+        detail: list[tuple[str, str]] = []
+        for s in exc.detail.get("sheets", []):
+            name_label = (
+                f"{s['sheet_name']} (hidden)"
+                if not s.get("is_visible", True)
+                else str(s["sheet_name"])
+            )
+            labels_str = ", ".join(str(lbl) for lbl in s.get("observed_labels", []) if lbl)
+            detail.append((name_label, labels_str))
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Audit BOM is malformed",
+            summary="No sheet in this workbook has an Audit BOM header (Find# and PartNum within the first 5 rows).",
+            detail=detail,
+            reason_code=reason,
+        )
+
+    if reason == "AMBIGUOUS_SHEET":
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Audit BOM is malformed",
+            summary="More than one sheet looks like the Audit BOM, and their names don't say which.",
+            detail=[("sheet", str(name)) for name in exc.detail.get("candidates", [])],
+            reason_code=reason,
+        )
+
+    if reason == "MISSING_COLUMN":
+        missing = exc.detail.get("missing") or (
+            [exc.detail["column"]] if "column" in exc.detail else []
+        )
+        if len(missing) == 1:
+            summary = f"The Audit BOM header has no {missing[0]} column."
+        else:
+            summary = f"The Audit BOM header has no {', '.join(str(c) for c in missing)} columns."
+        observed = exc.detail.get("observed", [])
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Audit BOM is malformed",
+            summary=summary,
+            detail=[("observed", ", ".join(str(lbl) for lbl in observed if lbl))],
+            reason_code=reason,
+        )
+
+    if reason == "DUPLICATE_HEADER":
+        duplicated = exc.detail.get("duplicated") or (
+            [exc.detail["column"]]
+            if "column" in exc.detail
+            else [exc.detail.get("label", "")]
+        )
+        if len(duplicated) == 1:
+            summary = f"{duplicated[0]} appears more than once in the Audit BOM header."
+        else:
+            summary = f"{', '.join(str(c) for c in duplicated)} appear more than once in the Audit BOM header."
+        observed = exc.detail.get("observed", [])
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Audit BOM is malformed",
+            summary=summary,
+            detail=[("observed", ", ".join(str(lbl) for lbl in observed if lbl))],
+            reason_code=reason,
+        )
+
+    if reason == "INVALID_REFDES_TOKEN":
+        row_num = exc.detail.get("row", "?")
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Audit BOM is malformed",
+            summary=f"Row {row_num}: a Ref_Des entry isn't a reference designator.",
+            detail=[
+                ("row", str(row_num)),
+                ("Find#", str(exc.detail.get("find_number", ""))),
+                ("Ref_Des", str(exc.detail.get("raw", ""))),
+                ("token", str(exc.detail.get("token", ""))),
+            ],
+            reason_code=reason,
+        )
+
+    if reason == "MISSING_FIND_NUMBER":
+        row_num = exc.detail.get("row", "?")
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Missing Find#",
+            summary=f"Row {row_num} has a part number but no Find#.",
+            detail=[
+                ("row", str(row_num)),
+                ("PartNum", str(exc.detail.get("mpn", ""))),
+            ],
+            reason_code=reason,
+        )
+
+    if reason == "INVALID_FIND_NUMBER":
+        row_num = exc.detail.get("row", "?")
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Invalid Find#",
+            summary=f"Row {row_num}: Find# must be a number, optionally followed by one letter (12, 12A).",
+            detail=[
+                ("row", str(row_num)),
+                ("value", str(exc.detail.get("raw", ""))),
+            ],
+            reason_code=reason,
+        )
+
+    if reason == "DUPLICATE_MPN":
+        duplicates = exc.detail.get("duplicates", [])
+        k = len(duplicates)
+        if k == 1:
+            summary = "1 part number appears on more than one line. Merge its lines into one."
+        else:
+            summary = f"{k} part numbers appear on more than one line. Merge each part's lines into one."
+        lines_map = exc.detail.get("lines", {})
+        if lines_map:
+            dup_detail = [
+                (
+                    str(mpn),
+                    ", ".join(f"Find# {entry['find_number']} (row {entry['row']})" for entry in entries),
+                )
+                for mpn, entries in lines_map.items()
+            ]
+        else:
+            dup_detail = [("PartNum", str(mpn)) for mpn in duplicates]
+        return FailurePayload(
+            exception_class=exc_class,
+            title="Audit BOM is malformed",
+            summary=summary,
+            detail=dup_detail,
+            reason_code=reason,
+        )
+
+    return FailurePayload(
+        exception_class=exc_class,
+        title="Audit BOM is malformed",
+        summary="The Audit BOM file structure does not match expectations.",
+        detail=[(k, str(v)) for k, v in exc.detail.items()],
+        reason_code=reason,
+    )
+
+
 def render(exc: Exception) -> FailurePayload:
     """Turn a Phase 1 / Phase 2 exception into a FailurePayload."""
     
     exc_class = exc.__class__.__name__
 
     if isinstance(exc, GatekeeperViolation):
+        if exc.reason == "LOCK_FILE":
+            return FailurePayload(
+                exception_class=exc_class,
+                title="Files don't match",
+                summary="One of the dropped files is a lock file Excel or Word keeps while a document is open. Drop the document itself.",
+                detail=[("path", str(exc.detail.get("path", "")))],
+                reason_code=exc.reason,
+            )
         return FailurePayload(
             exception_class=exc_class,
             title="Files don't match",
@@ -87,23 +238,7 @@ def render(exc: Exception) -> FailurePayload:
         )
 
     if isinstance(exc, MalformedBomError):
-        if exc.reason == "MISSING_FIND_NUMBER":
-            title = "Missing Find#"
-            summary = "Audit BOM row is missing a Find# value. Every BOM line must have a Find# number."
-        elif exc.reason == "INVALID_FIND_NUMBER":
-            title = "Invalid Find#"
-            summary = "Audit BOM Find# value is not a whole number. Find# must be an integer line number."
-        else:
-            title = "Audit BOM is malformed"
-            summary = "The Audit BOM file structure does not match expectations."
-            
-        return FailurePayload(
-            exception_class=exc_class,
-            title=title,
-            summary=summary,
-            detail=[(k, str(v)) for k, v in exc.detail.items()],
-            reason_code=exc.reason
-        )
+        return _render_bom_error(exc)
 
     if isinstance(exc, MalformedEcoError):
         return FailurePayload(

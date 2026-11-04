@@ -84,6 +84,7 @@ class MainWindow(QMainWindow):
         self._thread = None
         self._orphaned_workers = []
         self._second_ops_review_dialogs = {}
+        self._cleaning_report_dialogs = {}
         self._next_registration_serial = 0
         
         self.stacked = QStackedWidget()
@@ -132,6 +133,7 @@ class MainWindow(QMainWindow):
         self._audit_view.error_occurred.connect(self._on_failed)
         self._audit_view.ops_per_board_change_requested.connect(self._on_ops_per_board_change_requested)
         self._audit_view.second_ops_requested.connect(self._on_audit_second_ops_requested)
+        self._audit_view.cleaning_report_requested.connect(self._on_audit_cleaning_report_requested)
         self._audit_view.drawing_fetch_requested.connect(self._on_drawing_fetch_requested)
         self.stacked.addWidget(self._audit_view)
         
@@ -914,6 +916,33 @@ class MainWindow(QMainWindow):
         dialog.destroyed.connect(lambda obj=None, a=audit_id, s=serial: self._unregister_review_dialog(a, s))
         dialog.show()
 
+    def _unregister_cleaning_report_dialog(self, audit_id: int, serial: int) -> None:
+        entry = self._cleaning_report_dialogs.get(audit_id)
+        if entry is not None and entry[0] == serial:
+            self._cleaning_report_dialogs.pop(audit_id)
+
+    def _on_audit_cleaning_report_requested(self, audit_id: int) -> None:
+        entry = self._cleaning_report_dialogs.get(audit_id)
+        if entry is not None:
+            dialog = entry[1]
+            dialog.raise_()
+            dialog.activateWindow()
+            return
+
+        from cockpit.ui.widgets.cleaning_dialogs import CleaningReportDialog
+        dialog = CleaningReportDialog(
+            audit_id,
+            self._bootstrapped.source_file_repo,
+            self,
+        )
+        serial = self._next_registration_serial
+        self._next_registration_serial += 1
+        self._cleaning_report_dialogs[audit_id] = (serial, dialog)
+
+        dialog.finished.connect(lambda result_code, a=audit_id, s=serial: self._unregister_cleaning_report_dialog(a, s))
+        dialog.destroyed.connect(lambda obj=None, a=audit_id, s=serial: self._unregister_cleaning_report_dialog(a, s))
+        dialog.show()
+
     def _on_drop_received(self, paths: list[pathlib.Path], plan=None) -> None:
         if self._operation_in_flight:
             return
@@ -977,7 +1006,15 @@ class MainWindow(QMainWindow):
         self._audit_view.load(summary.audit_id)
         self.stacked.setCurrentWidget(self._audit_view)
         self.toast.show_success(summary)
+        open_full_report = False
+        if summary.cleaning and summary.cleaning.consequential:
+            from cockpit.ui.widgets.cleaning_dialogs import CleaningChangesDialog
+            changes_dialog = CleaningChangesDialog(summary.cleaning, self)
+            changes_dialog.exec()
+            open_full_report = changes_dialog.full_report_requested()
         self._offer_split_after_ingest(summary.audit_id)
+        if open_full_report:
+            self._on_audit_cleaning_report_requested(summary.audit_id)
 
     def _offer_split_after_ingest(self, audit_id: int) -> None:
         """Phase 51 section 5: Split mode runs the shipped SplitDialog.
@@ -1070,6 +1107,8 @@ class MainWindow(QMainWindow):
                 if self._worker:
                     self._worker.request_cancel()
         else:
+            for serial, dialog in list(self._cleaning_report_dialogs.values()):
+                dialog.close()
             for serial, dialog in list(self._second_ops_review_dialogs.values()):
                 dialog.close()
 

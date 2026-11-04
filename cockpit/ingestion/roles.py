@@ -16,14 +16,18 @@ class SourceRole(Enum):
     ARTICLE_FOLDER = "Article folder"
 
 
-def role_of(file_name: str) -> SourceRole:
+def role_of(file_name: str | pathlib.Path) -> SourceRole:
     """The role a filename declares.
     
     Exactly one role, by the ordered chain in the table below. Matching is
     case-insensitive and runs against the file's name with its extension
     included. The first matching rule wins; a name matching none is UNKNOWN.
     """
-    name_lower = file_name.lower()
+    base_name = pathlib.Path(file_name).name
+    if base_name.startswith("~$"):
+        return SourceRole.UNKNOWN
+
+    name_lower = base_name.lower()
     
     if "audit bom" in name_lower:
         return SourceRole.BOM

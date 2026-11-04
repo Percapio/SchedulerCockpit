@@ -162,6 +162,7 @@ class ChecklistService:
             has_secondary_pdf=has_secondary_pdf,
             is_labeled=audit.is_labeled,
             are_photos_uploaded=audit.are_photos_uploaded,
+            has_bom=bom_sf is not None,
         )
     def complete(self, audit_id: int) -> ActiveAuditView:
         self._audit_repo.transition_status(audit_id, AuditStatus.COMPLETED)

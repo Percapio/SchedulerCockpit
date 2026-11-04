@@ -37,8 +37,7 @@ class AuditView(QWidget):
     error_occurred = pyqtSignal(object)  # FailurePayload
     ops_per_board_change_requested = pyqtSignal(int, object)  # (audit_id, float | None)
     second_ops_requested = pyqtSignal(int)
-    aoi_xy_requested = pyqtSignal(int)
-
+    
     # Local
     settings_requested = pyqtSignal()
     drawing_fetch_requested = pyqtSignal(int, bool)  # (audit_id, secondary)
@@ -107,7 +106,6 @@ class AuditView(QWidget):
         self._actions_bar.ops_per_board_change_requested.connect(self.ops_per_board_change_requested.emit)
         self._actions_bar.exit_requested.connect(self._on_exit_requested)
         self._actions_bar.second_ops_requested.connect(self.second_ops_requested.emit)
-        self._actions_bar.aoi_xy_requested.connect(self.aoi_xy_requested.emit)
         self._actions_bar.drawing_fetch_requested.connect(self.drawing_fetch_requested.emit)
         self._actions_bar.audit_fields_changed.connect(self.refresh_audit_fields)
         header_layout.addWidget(self._actions_bar)

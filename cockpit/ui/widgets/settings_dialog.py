@@ -89,7 +89,6 @@ class SettingsDialog(QDialog):
         source_root_controller=None,
         mpn_library_controller=None,
         enrichment_in_flight=None,
-        program_root_controller=None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Settings")
@@ -113,7 +112,6 @@ class SettingsDialog(QDialog):
         self._probe_in_flight = False
         self._probe_admission = None
         self._source_root_admission = None
-        self._program_root_admission = None
         # Supplied by MainWindow, which is the only object that can see a
         # running enrichment. Absent in tests that build the dialog alone.
         self._enrichment_in_flight = enrichment_in_flight or (lambda: False)
@@ -166,12 +164,7 @@ class SettingsDialog(QDialog):
             source_root_group = self._build_source_root_settings(source_root_controller)
             layout.addWidget(source_root_group)
             layout.addSpacing(12)
-
-        if program_root_controller is not None:
-            program_root_group = self._build_program_root_settings(program_root_controller)
-            layout.addWidget(program_root_group)
-            layout.addSpacing(12)
-
+            
         if mpn_library_controller is not None:
             mpn_library_group = self._build_mpn_library_settings(mpn_library_controller)
             layout.addWidget(mpn_library_group)
@@ -356,80 +349,6 @@ class SettingsDialog(QDialog):
             self._source_root_admission = start_bounded_probe(
                 owner=self,
                 work=partial(probe_source_root, current_path),
-                watchdog_ms=FETCH_WATCHDOG_TIMEOUT_MS,
-                on_outcome=on_outcome,
-                on_timeout=on_timeout,
-                on_error=on_error,
-            )
-
-        validate_btn.clicked.connect(on_validate)
-        return group
-
-    def _build_program_root_settings(self, controller) -> QGroupBox:
-        """Phase 52: the Juki host's program folder, one subfolder per job."""
-        from cockpit.settings.program_root import (
-            ProgramRootProbeResult, ProgramRootState, probe_program_root,
-        )
-
-        group = QGroupBox("HLC Program Folder")
-        layout = QVBoxLayout(group)
-
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Path:"))
-        edit = QLineEdit()
-        edit.setObjectName("program_root_edit")
-        edit.setPlaceholderText(r"e.g. \\hlc\PRG\<line folder>  (optional; used by AOI XY)")
-        state, path = controller.program_root()
-        if state in (ProgramRootState.CONFIGURED, ProgramRootState.MALFORMED):
-            edit.setText(str(path))
-        row.addWidget(edit)
-        layout.addLayout(row)
-
-        status_lbl = QLabel("")
-        status_lbl.setObjectName("program_root_status")
-        layout.addWidget(status_lbl)
-
-        btn_row = QHBoxLayout()
-        btn_row.addStretch()
-        validate_btn = QPushButton("Validate")
-        validate_btn.setObjectName("program_root_validate")
-        btn_row.addWidget(validate_btn)
-        layout.addLayout(btn_row)
-
-        edit.textChanged.connect(controller.set_program_root)
-
-        def on_validate():
-            current_state, current_path = controller.program_root()
-            if current_state != ProgramRootState.CONFIGURED:
-                status_lbl.setText("Error: Path must be absolute.")
-                return
-
-            validate_btn.setEnabled(False)
-            status_lbl.setText("Checking...")
-
-            def on_outcome(result: ProgramRootProbeResult) -> None:
-                validate_btn.setEnabled(True)
-                if result == ProgramRootProbeResult.REACHABLE:
-                    status_lbl.setText("Reachable.")
-                elif result == ProgramRootProbeResult.REACHABLE_BUT_NO_JOB_FOLDERS:
-                    status_lbl.setText("Reachable, but no job folders found.")
-                else:
-                    status_lbl.setText("Unreachable.")
-
-            def on_timeout() -> None:
-                validate_btn.setEnabled(True)
-                status_lbl.setText(
-                    f"No answer from the share within "
-                    f"{FETCH_WATCHDOG_TIMEOUT_MS // 1000} seconds."
-                )
-
-            def on_error(exc: BaseException) -> None:
-                validate_btn.setEnabled(True)
-                status_lbl.setText("Could not check the path; see the log.")
-
-            self._program_root_admission = start_bounded_probe(
-                owner=self,
-                work=partial(probe_program_root, current_path),
                 watchdog_ms=FETCH_WATCHDOG_TIMEOUT_MS,
                 on_outcome=on_outcome,
                 on_timeout=on_timeout,

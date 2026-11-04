@@ -136,9 +136,6 @@ def main() -> None:
     from cockpit.settings.mpn_library import MpnLibrarySettingsController
     mpn_library_controller = MpnLibrarySettingsController(settings)
 
-    from cockpit.settings.program_root import ProgramRootController
-    program_root_controller = ProgramRootController(settings)
-
     window = MainWindow(
         theme=theme,
         app=app,
@@ -148,7 +145,6 @@ def main() -> None:
         second_ops_settings_controller=second_ops_settings_controller,
         source_root_controller=source_root_controller,
         mpn_library_controller=mpn_library_controller,
-        program_root_controller=program_root_controller,
         bootstrapped_app=bootstrapped,
         audit_read_svc=bootstrapped.audit_read_svc,
         checklist_svc=bootstrapped.checklist_svc,

@@ -41,60 +41,6 @@ class FailurePayload:
         )
 
 
-_AOI_DETAIL_LIMIT = 25
-
-
-def _render_aoi(exc: Exception) -> FailurePayload | None:
-    """Phase 52 AOI XY export failures; None for anything else."""
-    from cockpit.services.aoi.errors import (
-        AoiBuildError, AoiDestinationExists, AoiDestinationRejected, AoiError, AoiReadError,
-        AoiWriteError, BomUnavailable, XyFileTooLarge, XyParseError, XyRowLimitExceeded,
-    )
-
-    if not isinstance(exc, AoiError):
-        return None
-    exc_class = exc.__class__.__name__
-
-    def payload(title: str, summary: str, detail: list[tuple[str, str]], code: str) -> FailurePayload:
-        return FailurePayload(exc_class, title, summary, detail[:_AOI_DETAIL_LIMIT], code)
-
-    if isinstance(exc, XyFileTooLarge):
-        return payload("XY file too large",
-                       f"The XY file is {exc.size:,} bytes; the limit is {exc.limit:,}.",
-                       [("path", str(exc.path))], "AOI_XY_TOO_LARGE")
-    if isinstance(exc, XyRowLimitExceeded):
-        return payload("XY file too long",
-                       f"The XY file has more than {exc.limit:,} rows.",
-                       [("path", str(exc.path))], "AOI_XY_TOO_MANY_ROWS")
-    if isinstance(exc, XyParseError):
-        return payload("XY file has unusable rows",
-                       f"{len(exc.bad_lines)} row(s) in {exc.path.name} could not be read. Nothing was exported.",
-                       [(f"line {n}", reason) for n, reason in exc.bad_lines], "AOI_XY_PARSE")
-    if isinstance(exc, AoiBuildError):
-        return payload(f"{exc.side_label} side cannot be written",
-                       f"{len(exc.problems)} row(s) cannot be written to the Mirtec file. Nothing was exported.",
-                       [(ref, reason) for ref, reason in exc.problems], "AOI_BUILD")
-    if isinstance(exc, BomUnavailable):
-        return payload("Audit BOM unavailable", str(exc), [], "AOI_BOM_UNAVAILABLE")
-    if isinstance(exc, AoiDestinationRejected):
-        return payload("Folder not allowed", f"AOI files cannot be written there: {exc.reason}.",
-                       [("folder", str(exc.destination))], "AOI_DESTINATION_REJECTED")
-    if isinstance(exc, AoiDestinationExists):
-        return payload("Files already exist", str(exc),
-                       [("file", str(p)) for p in exc.existing], "AOI_DESTINATION_EXISTS")
-    if isinstance(exc, AoiWriteError):
-        detail = [("cause", str(exc.cause))]
-        detail += [("written", str(p)) for p in exc.written]
-        detail += [("replaced", str(p)) for p in exc.replaced]
-        return payload("Could not write AOI files",
-                       "Writing stopped part-way. Temporary files were removed; any file listed as "
-                       "written already holds its new content.",
-                       detail, "AOI_WRITE")
-    if isinstance(exc, AoiReadError):
-        return payload("Could not read AOI file", exc.reason, [("path", str(exc.path))], "AOI_READ")
-    return payload("AOI export failed", str(exc), [], "AOI_ERROR")
-
-
 def render(exc: Exception) -> FailurePayload:
     """Turn a Phase 1 / Phase 2 exception into a FailurePayload."""
     
@@ -416,10 +362,6 @@ def render(exc: Exception) -> FailurePayload:
             detail=[],
             reason_code="LIBRARY_DISABLED"
         )
-
-    aoi_payload = _render_aoi(exc)
-    if aoi_payload is not None:
-        return aoi_payload
 
     # Catch-all
     logger.error("Unexpected error during ingestion", exc_info=exc)

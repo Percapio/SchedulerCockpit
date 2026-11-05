@@ -42,6 +42,7 @@ class AuditView(QWidget):
     # Local
     settings_requested = pyqtSignal()
     drawing_fetch_requested = pyqtSignal(int, bool)  # (audit_id, secondary)
+    xray_toggle_requested = pyqtSignal(int, bool)
 
     def __init__(
         self,
@@ -83,6 +84,7 @@ class AuditView(QWidget):
         
         self._identity_bar = AuditIdentityBar()
         self._identity_bar.back_requested.connect(self._on_exit_requested)
+        self._identity_bar.xray_toggle_requested.connect(self.xray_toggle_requested.emit)
         header_layout.addWidget(self._identity_bar)
         
         self.search_input = QLineEdit()
@@ -205,6 +207,7 @@ class AuditView(QWidget):
 
     def _on_rows_replaced(self, view) -> None:
         self.checklist_tht.populate_section(view.tht_rows, f"T/H - MPN Count: {len(view.tht_rows)} | Total Placements: {view.tht_placement_count}")
+        self._identity_bar.set_requirements_context(view.audit_id, view.requirements, view.xray_tick)
         
 
 

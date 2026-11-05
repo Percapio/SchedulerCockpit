@@ -93,7 +93,13 @@ def palette(preset: str | None = None) -> Palette:
 # Retained for callers that still address columns positionally. The Audit List
 # itself no longer does: it owns the Column -> role mapping and calls
 # semantic_color, so inserting a column cannot silently re-point these.
-_SEMANTIC_LIST_COLUMNS = {2: "part_number", 5: "quantity", 9: "process"}
+from cockpit.ui.widgets.open_audit_picker import Column
+
+_SEMANTIC_LIST_COLUMNS: dict[Column, str] = {
+    Column.PART_NUMBER: "part_number",
+    Column.QUANTITY: "quantity",
+    Column.PROCESS: "process",
+}
 
 # Semantic roles the List View may ask for by name.
 SEMANTIC_ROLES = frozenset({"part_number", "quantity", "process"})

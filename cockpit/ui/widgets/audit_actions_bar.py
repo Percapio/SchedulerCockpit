@@ -53,6 +53,7 @@ class AuditActionsBar(QWidget):
         # from it here.
         self._source_root_controller = source_root_controller
         self._session: AuditSession | None = None
+        self._vocabulary_provider = None
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -81,6 +82,9 @@ class AuditActionsBar(QWidget):
         self.complete_btn = QPushButton("Complete")
         self.complete_btn.clicked.connect(self._on_complete_clicked)
         layout.addWidget(self.complete_btn)
+
+    def set_vocabulary_provider(self, provider) -> None:
+        self._vocabulary_provider = provider
 
     def bind(self, session: AuditSession) -> None:
         self._session = session
@@ -363,7 +367,32 @@ class AuditActionsBar(QWidget):
             return
             
         from cockpit.ui.widgets.dialogs import confirm_destructive
-        if not confirm_destructive("Complete Audit", "Are you sure you want to complete this audit? This action cannot be undone and will delete the audit files.", "Complete", self):
+        from cockpit.services.requirements import DEFAULT_VOCABULARY
+        from cockpit.services.requirements_reconciler import pending_xray_warning
+
+        body = "Are you sure you want to complete this audit? This action cannot be undone and will delete the audit files."
+        conn = getattr(self._completion_service, "_conn", None) or getattr(self._ingestion_service, "conn", None)
+        win = self.window()
+        if self._vocabulary_provider is not None:
+            vocab = self._vocabulary_provider()
+        elif hasattr(win, "current_requirements_vocabulary"):
+            vocab = win.current_requirements_vocabulary()
+        else:
+            vocab = DEFAULT_VOCABULARY
+        if conn is not None:
+            from PyQt6.QtWidgets import QApplication
+            from PyQt6.QtCore import Qt
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            try:
+                extra = pending_xray_warning(conn, audit_id, vocab)
+                if extra:
+                    body = f"{body}\n\n{extra}"
+            except Exception:
+                logger.exception("Could not check pending X-ray warning for audit %s", audit_id)
+            finally:
+                QApplication.restoreOverrideCursor()
+        if not confirm_destructive("Complete Audit", body, "Complete", self):
+            self.audit_fields_changed.emit(audit_id)
             return
             
         try:

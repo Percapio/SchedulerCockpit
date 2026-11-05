@@ -21,6 +21,7 @@ class ReplacementCasualty:
     is_labeled: bool
     are_photos_uploaded: bool
     tht_item_count: int
+    xray_images_done: bool = False
 
     @property
     def label(self) -> str:
@@ -53,5 +54,6 @@ def summarise_family(family: list[ActiveAudit], tht_repo) -> list[ReplacementCas
             is_labeled=audit.is_labeled,
             are_photos_uploaded=audit.are_photos_uploaded,
             tht_item_count=tht_count,
+            xray_images_done=bool(getattr(audit, "xray_images_done", False)),
         ))
     return casualties

@@ -1,14 +1,16 @@
 """Audit read service."""
 
-from cockpit.persistence.repositories.audits import AuditRepository
-from cockpit.services.views import OpenAuditDigest
-
-
 from datetime import date, timedelta
 import math
-from cockpit.services.repeat import derive_repeat_marker
-from cockpit.services.itar import classification_display, is_itar
+import sqlite3
+
+from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.services.date_urgency import classify_urgency
+from cockpit.services.itar import classification_display, is_itar
+from cockpit.services.repeat import derive_repeat_marker
+from cockpit.services.requirements import RequirementSummary, XrayTick
+from cockpit.services.views import OpenAuditDigest
+
 
 def start_by(ship_date: date | None, total_runtime_hours: float | None, holidays: set[date]) -> date | None:
     if ship_date is None or total_runtime_hours is None:
@@ -28,12 +30,13 @@ def start_by(ship_date: date | None, total_runtime_hours: float | None, holidays
         
     return cursor
 
+
 class AuditReadService:
     def __init__(self, audit_repo: AuditRepository, holiday_svc=None) -> None:
         self._audit_repo = audit_repo
         self._holiday_svc = holiday_svc
 
-    def _map_to_digest(self, a, holidays, today_val) -> OpenAuditDigest:
+    def _map_to_digest(self, a, holidays, today_val, req_summary: RequirementSummary | None = None) -> OpenAuditDigest:
         meta = a.traveler_metadata or {}
         
         classification = classification_display(meta)
@@ -89,18 +92,35 @@ class AuditReadService:
             are_photos_uploaded=a.are_photos_uploaded,
             start_by_urgency=start_by_urgency,
             ship_urgency=ship_urgency,
+            requirements=req_summary,
+            xray_tick=XrayTick(
+                is_done=bool(getattr(a, "xray_images_done", False)),
+                task_at_tick=getattr(a, "xray_images_done_task", None),
+                ticked_at=getattr(a, "xray_images_done_at", None),
+            ),
         )
+
+    def _load_summaries(self) -> dict[int, RequirementSummary]:
+        req_repo = getattr(self._audit_repo, "requirements_repo", None)
+        if req_repo is None:
+            return {}
+        try:
+            return req_repo.find_summaries_for_open_audits()
+        except sqlite3.OperationalError:
+            return {}
 
     def list_open(self) -> list[OpenAuditDigest]:
         audits = self._audit_repo.list_open()
+        summaries = self._load_summaries()
         
         holidays = self._holiday_svc.list_holidays() if self._holiday_svc else set()
         today_val = date.today()
         
-        return [self._map_to_digest(a, holidays, today_val) for a in audits]
+        return [self._map_to_digest(a, holidays, today_val, summaries.get(a.id)) for a in audits]
 
     def open_audits_for_part_number(self, part_number: str) -> list[OpenAuditDigest]:
         audits = self._audit_repo.list_open_by_part_number(part_number)
+        summaries = self._load_summaries()
         holidays = self._holiday_svc.list_holidays() if self._holiday_svc else set()
         today_val = date.today()
-        return [self._map_to_digest(a, holidays, today_val) for a in audits]
+        return [self._map_to_digest(a, holidays, today_val, summaries.get(a.id)) for a in audits]

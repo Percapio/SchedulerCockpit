@@ -1,6 +1,7 @@
 """Main window."""
 
 import pathlib
+import sqlite3
 from datetime import datetime, timedelta
 from PyQt6.QtCore import Qt, QThread, QSettings, QTimer, QEvent
 from PyQt6.QtGui import QCloseEvent
@@ -38,6 +39,9 @@ logger = logging.getLogger(__name__)
 # legitimate value meaning today's unchanged ingest behaviour.
 _PREFLIGHT_ABORTED = object()
 RENDER_SHUTDOWN_TIMEOUT_MS = 10_000
+# Phase 54 section 9: the list shows new scans at most this often during a
+# reconciler pass, and once more when the pass ends.
+REQUIREMENTS_LIST_REFRESH_MS = 1_000
 
 
 class MainWindow(QMainWindow):
@@ -112,6 +116,7 @@ class MainWindow(QMainWindow):
         self.picker.fetch_job_requested.connect(self._on_picker_fetch_job_requested)
         self.picker.holidays_requested.connect(self._on_holidays_requested)
         self.picker.second_ops_requested.connect(self._on_overview_second_ops_requested)
+        self.picker.xray_toggle_requested.connect(self._on_xray_toggle_requested)
         self.stacked.addWidget(self.picker)
         
         self._load_epoch = 0
@@ -135,10 +140,36 @@ class MainWindow(QMainWindow):
         self._audit_view.second_ops_requested.connect(self._on_audit_second_ops_requested)
         self._audit_view.cleaning_report_requested.connect(self._on_audit_cleaning_report_requested)
         self._audit_view.drawing_fetch_requested.connect(self._on_drawing_fetch_requested)
+        self._audit_view.xray_toggle_requested.connect(self._on_xray_toggle_requested)
         self.stacked.addWidget(self._audit_view)
         
         self.toast = Toast(self)
         self._term_merge_announced = False
+        self._pattern_merge_announced = False
+        from cockpit.services.requirements import load_vocabulary
+        from cockpit.services.requirements_reconciler import RequirementsReconciler
+        self._pattern_merge_outcome = load_vocabulary(self._settings)
+        self._requirements_vocabulary = self._pattern_merge_outcome.vocabulary
+        # An ingest holds its savepoint on a worker thread over the shared
+        # connection; a UI-thread write meanwhile would join it.
+        self._requirements_reconciler = RequirementsReconciler(
+            self._bootstrapped.conn, self.current_requirements_vocabulary, self,
+            can_write=lambda: not getattr(self, "_operation_in_flight", False),
+        )
+        self._requirements_reconciler.audit_updated.connect(self._on_reconciler_audit_updated)
+        self._requirements_reconciler.pass_completed.connect(self._on_reconciler_pass_completed)
+        # A pass after the upgrade writes a row per open audit; repopulating
+        # the list for each would rebuild it hundreds of times.
+        self._requirements_list_refresh = QTimer(self)
+        self._requirements_list_refresh.setSingleShot(True)
+        self._requirements_list_refresh.setInterval(REQUIREMENTS_LIST_REFRESH_MS)
+        self._requirements_list_refresh.timeout.connect(self._refresh_list_for_requirements)
+        req_repo = self._bootstrapped.audit_repo.requirements_repo
+        self.picker.model.set_evidence_loader(req_repo.find_evidence)
+        self.picker.model.set_stale_scan_checker(self._is_audit_scan_stale)
+        self._audit_view._identity_bar.set_evidence_loader(req_repo.find_evidence)
+        self._audit_view._identity_bar.set_stale_scan_checker(self._is_audit_scan_stale)
+        self._audit_view._actions_bar.set_vocabulary_provider(self.current_requirements_vocabulary)
         self._pending_drawing_target = None
         self._pending_plan = None
         self._pending_article_folder = None
@@ -180,6 +211,7 @@ class MainWindow(QMainWindow):
         self._render_thread.start()
         
         self._resolve_initial_page()
+        QTimer.singleShot(0, self._requirements_reconciler.trigger)
         
         self._idle_timer = QTimer(self)
         self._idle_timer.setSingleShot(True)
@@ -193,6 +225,84 @@ class MainWindow(QMainWindow):
         self._midnight_timer.timeout.connect(self._on_midnight_timer)
         self._schedule_midnight_timer()
         
+    def current_requirements_vocabulary(self):
+        from cockpit.services.requirements import DEFAULT_VOCABULARY
+        return getattr(self, "_requirements_vocabulary", DEFAULT_VOCABULARY)
+
+    def announce_pattern_merge(self, outcome) -> None:
+        """Surfaces the Process Requirements migration notice exactly once (§10.2)."""
+        if getattr(self, "_pattern_merge_announced", False):
+            return
+        self._pattern_merge_announced = True
+        if outcome is None or not outcome.added:
+            return
+        self.toast.show_toast(
+            f"{len(outcome.added)} new process requirement patterns added",
+            "Settings › Process Requirements",
+        )
+
+    def _is_audit_scan_stale(self, audit_id: int, stored_fingerprint: str) -> bool:
+        try:
+            cur = self._bootstrapped.conn.cursor()
+            cur.execute("SELECT traveler_metadata FROM active_audits WHERE id = ?", (audit_id,))
+            row = cur.fetchone()
+            if not row:
+                return False
+            from cockpit.services.requirements_reconciler import _build_scan_inputs_for_audit
+            from cockpit.services.requirements import scan_fingerprint
+            inputs = _build_scan_inputs_for_audit(
+                self._bootstrapped.conn,
+                audit_id,
+                row["traveler_metadata"],
+                self.current_requirements_vocabulary(),
+            )
+            return scan_fingerprint(inputs) != stored_fingerprint
+        except Exception:
+            return False
+
+    def _on_requirements_vocabulary_saved(self, vocab) -> None:
+        self._requirements_vocabulary = vocab
+        if hasattr(self, "_requirements_reconciler"):
+            self._requirements_reconciler.trigger(notify_toast=True)
+
+    def _on_reconciler_audit_updated(self, audit_id: int) -> None:
+        if self._audit_view.current_audit_id() == audit_id:
+            self._audit_view.refresh_audit_fields(audit_id)
+        if not self._requirements_list_refresh.isActive():
+            self._requirements_list_refresh.start()
+
+    def _refresh_list_for_requirements(self) -> None:
+        """Repaints the list with new scans, at most once per interval, keeping your place in it."""
+        if self.stacked.currentWidget() == self.picker:
+            self.picker.populate(self._audit_read_svc.list_open(), keep_scroll=True)
+
+    def _on_reconciler_pass_completed(self, summary, notify_toast: bool) -> None:
+        if summary.written > 0:
+            self._requirements_list_refresh.stop()
+            self._refresh_list_for_requirements()
+        if notify_toast:
+            self.toast.show_toast(
+                f"Process requirements: {summary.changed_state} audits changed state",
+                "Settings › Process Requirements",
+            )
+
+    def _on_xray_toggle_requested(self, audit_id: int, checked: bool) -> None:
+        from cockpit.persistence.repositories.requirements import set_xray_images_done
+        try:
+            res = set_xray_images_done(self._bootstrapped.conn, audit_id, checked)
+            if res.is_err:
+                self.toast.show_toast(
+                    "X-ray & save images is not required",
+                    "The X-ray requirement changed for this audit",
+                )
+        except (PersistenceError, sqlite3.Error) as e:
+            self._on_failed(FailurePayload.from_exception(e, "X-ray update failed"))
+            return
+        if self._audit_view.current_audit_id() == audit_id:
+            self._audit_view.refresh_audit_fields(audit_id)
+        if self.stacked.currentWidget() == self.picker:
+            self.picker.populate(self._audit_read_svc.list_open())
+
     def _on_runtime_constants_changed(self) -> None:
         self._runtime_constants_dirty = True
 
@@ -241,9 +351,14 @@ class MainWindow(QMainWindow):
                 self,
                 source_root_controller=self._source_root_controller,
                 mpn_library_controller=self._mpn_library_controller,
-                enrichment_in_flight=self._audit_view.is_enrichment_in_flight
+                enrichment_in_flight=self._audit_view.is_enrichment_in_flight,
+                settings=self._settings,
+                conn=self._bootstrapped.conn,
+                current_audit_id=self._audit_view.current_audit_id(),
+                initial_vocabulary=self.current_requirements_vocabulary(),
             )
             dialog.reset_requested.connect(self._on_reset_requested)
+            dialog.requirements_vocabulary_saved.connect(self._on_requirements_vocabulary_saved)
             dialog.exec()
         finally:
             if self._runtime_constants_dirty and self._runtime_settings_controller is not None:
@@ -323,6 +438,8 @@ class MainWindow(QMainWindow):
     def _run_idle_maintenance(self) -> None:
         from cockpit.persistence.connection import run_idle_maintenance
         run_idle_maintenance(self._bootstrapped.conn)
+        if not self._operation_in_flight and hasattr(self, "_requirements_reconciler"):
+            self._requirements_reconciler.trigger()
 
     def _schedule_midnight_timer(self) -> None:
         now = datetime.now()
@@ -409,6 +526,27 @@ class MainWindow(QMainWindow):
             self._library_module = None
             self._audit_view.bind_library(None, None)
 
+    def _complete_confirm_body(self, audit_id: int) -> str:
+        body = "This permanently deletes the audit and its source files. This cannot be undone."
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            from cockpit.services.requirements_reconciler import pending_xray_warning
+            extra_warning = pending_xray_warning(
+                self._bootstrapped.conn,
+                audit_id,
+                self.current_requirements_vocabulary(),
+            )
+        except Exception:
+            logger.exception("Could not check pending X-ray warning for audit %s", audit_id)
+            extra_warning = None
+        finally:
+            QApplication.restoreOverrideCursor()
+        if self.stacked.currentWidget() == self.picker:
+            self.picker.populate(self._audit_read_svc.list_open())
+        if extra_warning:
+            body = f"{body}\n\n{extra_warning}"
+        return body
+
     def _on_complete_requested(self, audit_id: int) -> None:
         entry = self._second_ops_review_dialogs.get(audit_id)
         if entry is not None and entry[1].is_read_in_flight():
@@ -417,7 +555,7 @@ class MainWindow(QMainWindow):
 
         if not confirm_destructive(
             title="Complete audit",
-            body="This permanently deletes the audit and its source files. This cannot be undone.",
+            body=self._complete_confirm_body(audit_id),
             confirm_label="Complete",
             parent=self
         ):
@@ -956,7 +1094,10 @@ class MainWindow(QMainWindow):
         
         self._thread = QThread()
         self._worker = IngestionWorker(
-            self._bootstrapped.ingestion_service, paths, plan=self._pending_plan
+            self._bootstrapped.ingestion_service,
+            paths,
+            plan=self._pending_plan,
+            requirements_vocabulary=self.current_requirements_vocabulary(),
         )
         self._worker.moveToThread(self._thread)
         
@@ -1089,9 +1230,13 @@ class MainWindow(QMainWindow):
         self._worker = None
         self._thread = None
         self.drop_area.setEnabled(True)
-        
+
         if self._close_requested:
             self.close()
+            return
+        # Phase 54 section 7.2: scans the ingest's transaction kept out are
+        # written now, rather than at the next idle pass.
+        self._requirements_reconciler.resume_if_deferred()
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self._operation_in_flight:
@@ -1119,8 +1264,10 @@ class MainWindow(QMainWindow):
                 pass
 
             self._audit_view.unload()
+            # Stops the requirements reconciler too, before the connection
+            # closes (Phase 54 section 7.2).
             self.shutdown_render_thread()
-                
+
             from cockpit.persistence.connection import run_idle_maintenance
             run_idle_maintenance(self._bootstrapped.conn)
             self._bootstrapped.conn.close()
@@ -1134,16 +1281,21 @@ class MainWindow(QMainWindow):
     def shutdown_render_thread(self, timeout_ms: int = RENDER_SHUTDOWN_TIMEOUT_MS) -> bool:
         """
         Intent: Stop the render thread without hanging the exit path on an
-                in-flight rasterize.
+                in-flight rasterize, and the requirements reconciler with it
+                (Phase 54 section 7.2), so every caller that tears a window
+                down stops both.
         Pre:    timeout_ms > 0.
-        Post:   Returns True if the thread exited within timeout_ms. On False
-                the thread is left running, the caller still accepts the close
-                event, and the condition is logged at WARNING -- a still-
+        Post:   Returns True if the render thread exited within timeout_ms. On
+                False the thread is left running, the caller still accepts the
+                close event, and the condition is logged at WARNING -- a still-
                 rasterizing worker holds no DB handle and no widget reference,
-                so process exit is safe.
+                so process exit is safe. The reconciler follows the same
+                contract under its own bound.
         Raises: Nothing.
         """
         self._audit_view.set_render_worker_alive(False)
+        if hasattr(self, "_requirements_reconciler"):
+            self._requirements_reconciler.shutdown(timeout_ms)
         if getattr(self, "_render_thread", None) is None:
             return True
 

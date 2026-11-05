@@ -14,6 +14,12 @@ from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
 from cockpit.persistence.repositories.bom_components import AuditBomComponentRepository
 from cockpit.persistence.repositories.pdf_coords import PdfComponentCoordRepository
+from cockpit.persistence.repositories.requirements import AuditRequirementsRepository
+from cockpit.services.requirements import (
+    RequirementVocabulary,
+    ScanInputs,
+    scan_documents,
+)
 from cockpit.persistence.types import (
     ActiveAudit, AuditBomComponentDraft, PdfComponentCoordDraft,
     SourceFileCategory, SourceFileDraft, ThtChecklistItemDraft
@@ -133,7 +139,8 @@ class IngestionService:
         layout_parser: Any,
         coord_map: coordinate_map.TravelerCoordinateMap,
         file_storage_root: pathlib.Path,
-        runtime_calc_svc = None
+        runtime_calc_svc = None,
+        requirements_repo: AuditRequirementsRepository | None = None,
     ) -> None:
         self.conn = conn
         self.audit_repo = audit_repo
@@ -145,6 +152,7 @@ class IngestionService:
         self.coord_map = coord_map
         self.file_storage_root = file_storage_root
         self._runtime_calc_svc = runtime_calc_svc
+        self.requirements_repo = requirements_repo or AuditRequirementsRepository(conn)
 
     def _assert_matches_probe(self, plan, intent, trav_hash: str) -> None:
         """Refuses an ingest whose identity drifted from what was confirmed.
@@ -213,6 +221,7 @@ class IngestionService:
         progress: Callable[[ProgressEvent], None] | None = None,
         *,
         plan: IngestionPlan | None = None,
+        requirements_vocabulary: RequirementVocabulary | None = None,
     ) -> ActiveAudit:
         """Ingest a dropped trio, atomically persist, and return the new audit.
 
@@ -367,6 +376,24 @@ class IngestionService:
 
         # Section 3.5: captured before the savepoint so a rollback cannot leave
         # a reap pointing at rows that still exist.
+        # Phase 54 section 7.1: the requirement scan is computed here, before
+        # the savepoint, and written inside it. Only when MainWindow snapshotted
+        # a vocabulary for this ingest: with none, the reconciler fills the row
+        # later, which is what every caller from before Phase 54 expects.
+        # scan_documents never raises, so the scan can't fail the ingest.
+        req_scan = None
+        if requirements_vocabulary is not None:
+            meta = intent.audit_draft.traveler_metadata
+            wash_raw = meta.get("process_clean") if isinstance(meta, dict) else None
+            req_scan = scan_documents(ScanInputs(
+                notes_path=stored_notes,
+                notes_hash=notes_hash,
+                bom_path=stored_bom,
+                bom_hash=bom_hash,
+                traveler_wash_text=str(wash_raw) if wash_raw is not None else None,
+                vocabulary=requirements_vocabulary,
+            ))
+
         superseded_files = []
         seen_paths = set()
         for doomed_id in plan.replace_family:
@@ -391,6 +418,8 @@ class IngestionService:
                 intent.audit_draft, article_revision=plan.article_revision
             )
             audit = self.audit_repo.create(draft)
+            if req_scan is not None:
+                self.requirements_repo.upsert_scan(audit.id, req_scan)
 
             bom_file = self.source_file_repo.register(SourceFileDraft(
                 audit_id=audit.id, file_category=SourceFileCategory.BOM,

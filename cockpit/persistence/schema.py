@@ -623,6 +623,7 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     v17_migrated = migrate_to_v17(conn, parser_registry)
     v18_migrated = migrate_to_v18(conn)
     v19_migrated = migrate_to_v19(conn)
+    migrate_to_v20(conn)
     return (v7_migrated or v8_migrated or v9_migrated or v11_migrated or v13_migrated
             or v14_migrated or v15_migrated or v16_migrated or v17_migrated or v18_migrated
             or v19_migrated)
@@ -1374,3 +1375,73 @@ def migrate_to_v19(conn: sqlite3.Connection) -> bool:
     except Exception as e:
         conn.rollback()
         raise SchemaInitializationError(statement="v19 migration failed", cause=e)
+
+
+SCHEMA_V20_DDL_AUDIT_REQUIREMENTS: str = """
+CREATE TABLE audit_requirements (
+    audit_id          INTEGER PRIMARY KEY REFERENCES active_audits(id) ON DELETE CASCADE,
+    xray_save_images  INTEGER NULL,
+    xray              INTEGER NULL,
+    press_fit         INTEGER NULL,
+    aquanox           INTEGER NULL,
+    xray_task         TEXT    NULL,
+    evidence          TEXT    NOT NULL,
+    unknown_reasons   TEXT    NOT NULL,
+    fingerprint       TEXT    NOT NULL,
+    scanned_at        TEXT    NOT NULL
+)
+"""
+
+SCHEMA_V20_DDL_XRAY_DONE: str = (
+    "ALTER TABLE active_audits ADD COLUMN xray_images_done INTEGER NOT NULL DEFAULT 0"
+)
+SCHEMA_V20_DDL_XRAY_DONE_TASK: str = (
+    "ALTER TABLE active_audits ADD COLUMN xray_images_done_task TEXT NULL"
+)
+SCHEMA_V20_DDL_XRAY_DONE_AT: str = (
+    "ALTER TABLE active_audits ADD COLUMN xray_images_done_at TEXT NULL"
+)
+
+
+def migrate_to_v20(conn: sqlite3.Connection) -> bool:
+    """Adds audit_requirements and X-ray tick columns on active_audits (§5.1).
+
+    pre:  schema_version >= 19
+    post: audit_requirements table and active_audits.xray_images_done,
+          xray_images_done_task, xray_images_done_at exist; schema_version == 20.
+          Returns False without touching the database when already >= 20.
+    raises: SchemaMismatch when version < 19;
+            SchemaInitializationError on DDL failure
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=19)
+
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=19)
+
+    version = row[0] if isinstance(row, tuple) and not hasattr(row, "keys") else row["version"]
+    if version < 19:
+        raise SchemaMismatch(found_version=version, expected_version=19)
+    if version >= 20:
+        return False
+
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        cur.execute(SCHEMA_V20_DDL_AUDIT_REQUIREMENTS)
+        cur.execute(SCHEMA_V20_DDL_XRAY_DONE)
+        cur.execute(SCHEMA_V20_DDL_XRAY_DONE_TASK)
+        cur.execute(SCHEMA_V20_DDL_XRAY_DONE_AT)
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 20, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,),
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception as e:
+        conn.rollback()
+        raise SchemaInitializationError(statement="v20 migration failed", cause=e)

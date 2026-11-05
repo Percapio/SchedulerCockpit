@@ -72,14 +72,16 @@ def data_row_index(picker, column):
 def test_wash_sits_right_of_process_and_photos_moved_to_the_end():
     assert Column.PROCESS == 9
     assert Column.WASH == 10
-    assert Column.FSU == 11
-    assert Column.PHOTOS == 19
+    assert Column.AQUANOX == 11
+    assert Column.PRESS_FIT == 12
+    assert Column.FSU == 13
+    assert Column.PHOTOS == 21
 
 
 def test_column_count_and_header_label(qtbot):
     picker = OpenAuditPicker()
     qtbot.addWidget(picker)
-    assert len(picker.model.COLUMNS) == 21
+    assert len(picker.model.COLUMNS) == 24
     assert picker.model.COLUMNS[Column.WASH] == "Wash"
 
 
@@ -93,7 +95,7 @@ def test_status_stage_highlight_follows_the_enum(qtbot):
     qtbot.addWidget(picker)
     picker.populate([create_digest(status=AuditStatus.FSU)])
 
-    assert _STATUS_STAGE_COLUMN[AuditStatus.FSU] == Column.FSU == 11
+    assert _STATUS_STAGE_COLUMN[AuditStatus.FSU] == Column.FSU == 13
     idx = data_row_index(picker, Column.FSU)
     assert idx.data(Qt.ItemDataRole.ForegroundRole) == facelift.attention_color()
 

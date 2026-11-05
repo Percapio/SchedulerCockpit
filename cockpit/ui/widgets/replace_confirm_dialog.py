@@ -25,6 +25,8 @@ def _casualty_lines(casualty: ReplacementCasualty) -> list[str]:
         lines.append("Labelled")
     if casualty.are_photos_uploaded:
         lines.append("Photos uploaded")
+    if casualty.xray_images_done:
+        lines.append("X-ray & save images done")
     if casualty.tht_item_count:
         lines.append(f"{casualty.tht_item_count} THT checklist items")
     return lines

@@ -160,6 +160,7 @@ def main() -> None:
     # minimise and restore and would need explicit disconnection.
     from PyQt6.QtCore import QTimer
     QTimer.singleShot(0, lambda: window.announce_term_merge(term_merge_outcome))
+    QTimer.singleShot(0, lambda: window.announce_pattern_merge(window._pattern_merge_outcome))
 
     report = bootstrapped.reconciliation_report
     if report.errors or report.orphan_delete_failed:

@@ -9,6 +9,12 @@ import pathlib
 from cockpit.persistence.types import AuditStatus
 from cockpit.services.repeat import RepeatMarker, derive_repeat_marker
 from cockpit.services.date_urgency import DateUrgency
+from cockpit.services.requirements import (
+    RequirementBadges,
+    RequirementSummary,
+    XrayTick,
+    build_requirement_badges,
+)
 
 
 class ChecklistRowKind(StrEnum):
@@ -172,6 +178,8 @@ class ActiveAuditView:
     are_photos_uploaded: bool = False
     notes_docx_path: pathlib.Path | None = None
     has_bom: bool = True
+    requirements: RequirementSummary | None = None
+    xray_tick: XrayTick = field(default_factory=XrayTick)
 
 
 
@@ -188,6 +196,7 @@ class AuditIdentityBanner:
     repeat_marker: RepeatMarker   # label and reference, kept separable
     status: str
     is_itar: bool
+    requirements: RequirementBadges = field(default_factory=RequirementBadges)
 
 def build_identity_banner(view: ActiveAuditView) -> AuditIdentityBanner:
     from cockpit.services.itar import is_itar
@@ -225,6 +234,7 @@ def build_identity_banner(view: ActiveAuditView) -> AuditIdentityBanner:
         repeat_marker=repeat_marker,
         status=view.status.value,
         is_itar=is_itar(meta),
+        requirements=build_requirement_badges(view.requirements, view.xray_tick),
     )
 
 
@@ -270,6 +280,8 @@ class OpenAuditDigest:
     are_photos_uploaded: bool = False
     start_by_urgency: DateUrgency = DateUrgency.COMFORTABLE
     ship_urgency: DateUrgency = DateUrgency.COMFORTABLE
+    requirements: RequirementSummary | None = None
+    xray_tick: XrayTick = field(default_factory=XrayTick)
 
 
 import pathlib

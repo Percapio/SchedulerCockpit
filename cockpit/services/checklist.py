@@ -18,6 +18,7 @@ from cockpit.services.views import (
 )
 
 import sqlite3
+from cockpit.services.requirements import XrayTick
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,24 @@ class ChecklistService:
             is_labeled=audit.is_labeled,
             are_photos_uploaded=audit.are_photos_uploaded,
             has_bom=bom_sf is not None,
+            requirements=self._load_requirement_summary(audit.id),
+            xray_tick=XrayTick(
+                is_done=bool(getattr(audit, "xray_images_done", False)),
+                task_at_tick=getattr(audit, "xray_images_done_task", None),
+                ticked_at=getattr(audit, "xray_images_done_at", None),
+            ),
         )
+
+    def _load_requirement_summary(self, audit_id: int):
+        """The audit's stored scan without evidence; absent when not scanned yet (Phase 54 section 9)."""
+        req_repo = getattr(self._audit_repo, "requirements_repo", None)
+        if req_repo is None:
+            return None
+        try:
+            return req_repo.find_summary(audit_id)
+        except sqlite3.OperationalError:
+            return None
+
     def complete(self, audit_id: int) -> ActiveAuditView:
         self._audit_repo.transition_status(audit_id, AuditStatus.COMPLETED)
         return self.load_active_audit(audit_id)

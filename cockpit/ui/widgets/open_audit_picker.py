@@ -2,10 +2,10 @@
 
 import logging
 from datetime import datetime, timezone, timedelta, date
-from typing import Sequence, Any, List
+from typing import Sequence, Any, List, Callable
 from enum import IntEnum
-from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex, QSortFilterProxyModel, QSettings, QByteArray, QRect, QEvent, QTimer
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtCore import Qt, pyqtSignal, QAbstractTableModel, QModelIndex, QSortFilterProxyModel, QSettings, QByteArray, QRect, QEvent, QTimer, QPointF
+from PyQt6.QtGui import QFont, QColor, QPen, QPainter, QPalette
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QTableView, QHeaderView, QStyledItemDelegate, QMenu, QLineEdit,
     QStyle, QStyleOptionViewItem, QStyleOptionButton, QApplication
@@ -13,19 +13,38 @@ from PyQt6.QtWidgets import (
 
 from cockpit.persistence.types import AuditStatus
 from cockpit.persistence.traveler_flags import WashState, is_class_3, wash_state
+from cockpit.services.requirements import (
+    EvidenceCache,
+    RequirementEvidence,
+    RequirementKind,
+    RequirementState,
+    XrayCellState,
+    format_requirement_tooltip,
+    xray_cell_state,
+)
 from cockpit.services.views import OpenAuditDigest
 from cockpit.ui.widgets.toast import Toast  # Phase 3
 
 logger = logging.getLogger(__name__)
 
 _HEADER_STATE_KEY = "audit_list/header_state"
+# The column count the saved header state was taken with. Qt's restoreState
+# accepts a state with fewer sections and appends the new ones at the end, so
+# after Phase 54 inserted AQ, PF and X-ray mid-row every saved width from Wash
+# onward would land on the wrong column. A count that differs, or none, as on
+# every pre-Phase 54 install, resets the saved layout once.
+_HEADER_COLUMNS_KEY = "audit_list/header_state_columns"
+XRAY_STALE_ROLE = int(Qt.ItemDataRole.UserRole) + 1
+
 
 def _format_list_date(value: date | None) -> str:
     return "" if value is None else f"{value:%b} {value.day}"
 
+
 def _article_text(digest) -> str:
     """NULL and "FA" both mean first article; only NULL reaches an old row."""
     return digest.article_revision or FIRST_ARTICLE_TEXT
+
 
 def _centered_square(cell: QRect, extent: int) -> QRect:
     return QRect(
@@ -35,7 +54,9 @@ def _centered_square(cell: QRect, extent: int) -> QRect:
         extent
     )
 
+
 PST = timezone(timedelta(hours=-8))
+
 
 class Column(IntEnum):
     START_BY = 0
@@ -49,16 +70,20 @@ class Column(IntEnum):
     ASSEMBLY_CLASS = 8
     PROCESS = 9
     WASH = 10
-    FSU = 11
-    SMT = 12
-    THT = 13
-    AOI = 14
-    OPS = 15
-    SHIP = 16
-    DATE_INGESTED = 17
-    LABEL = 18
-    PHOTOS = 19
-    ARTICLE_REVISION = 20
+    AQUANOX = 11
+    PRESS_FIT = 12
+    FSU = 13
+    SMT = 14
+    THT = 15
+    AOI = 16
+    OPS = 17
+    SHIP = 18
+    DATE_INGESTED = 19
+    LABEL = 20
+    PHOTOS = 21
+    XRAY = 22
+    ARTICLE_REVISION = 23
+
 
 # Phase 49 (2.2): no Audit List code compares a column against an integer
 # literal. Column order is a property of the enum alone.
@@ -88,11 +113,57 @@ WASH_SEARCH_TOKEN = {
     WashState.UNRECOGNISED: "",
 }
 
+_HEADER_TOOLTIPS: dict[Column, str] = {
+    Column.WASH: "The traveler's flux designation",
+    Column.AQUANOX: "Chemical or solvent wash required by the ECO, BOM or traveler",
+    Column.PRESS_FIT: "Press-fit parts or instructions",
+    Column.XRAY: "The X-ray & save-images task; XR means X-ray without saving images",
+}
+
+_CHECKABLE_XRAY_STATES = frozenset({
+    XrayCellState.PENDING,
+    XrayCellState.DONE,
+    XrayCellState.DONE_STALE,
+})
+
+_XRAY_SORT_RANK: dict[XrayCellState, int] = {
+    XrayCellState.PENDING: 0,
+    XrayCellState.DONE_STALE: 1,
+    XrayCellState.DONE: 2,
+    XrayCellState.XR_ONLY: 3,
+    XrayCellState.UNKNOWN: 4,
+    XrayCellState.NOT_SCANNED: 4,
+    XrayCellState.BLANK: 5,
+}
+
 
 def wash_state_of(digest) -> WashState:
     return wash_state({"process_clean": digest.process_clean})
 
-_CHECKBOX_COLUMNS = frozenset({Column.LABEL, Column.PHOTOS})
+
+def _req_badge_text(digest: OpenAuditDigest, kind: RequirementKind, code: str) -> str:
+    if digest.requirements is None:
+        return "?"
+    st = digest.requirements.states.get(kind, RequirementState.UNKNOWN)
+    if st == RequirementState.DETECTED:
+        return code
+    if st == RequirementState.UNKNOWN:
+        return "?"
+    return ""
+
+
+def _req_sort_rank(digest: OpenAuditDigest, kind: RequirementKind) -> int:
+    if digest.requirements is None:
+        return 1
+    st = digest.requirements.states.get(kind, RequirementState.UNKNOWN)
+    if st == RequirementState.DETECTED:
+        return 0
+    if st == RequirementState.UNKNOWN:
+        return 1
+    return 2
+
+
+_CHECKBOX_COLUMNS = frozenset({Column.LABEL, Column.PHOTOS, Column.XRAY})
 _STATUS_STAGE_COLUMN = {
     AuditStatus.FSU: Column.FSU,
     AuditStatus.SMT: Column.SMT,
@@ -105,26 +176,31 @@ _DEFAULT_COLUMN_WIDTHS: dict[Column, int] = {
     Column.START_BY: 90, Column.SHIP_DATE: 90, Column.PART_NUMBER: 120, Column.WORK_ORDER_REF: 80,
     Column.LEAD_TIME: 50, Column.QUANTITY: 55, Column.REPEAT: 70, Column.CLASSIFICATION: 110,
     Column.ASSEMBLY_CLASS: 55, Column.PROCESS: 90, Column.WASH: 55,
+    Column.AQUANOX: 40, Column.PRESS_FIT: 40,
     Column.FSU: 70, Column.SMT: 70, Column.THT: 70,
     Column.AOI: 70, Column.OPS: 70, Column.SHIP: 70, Column.DATE_INGESTED: 100,
-    Column.LABEL: 55, Column.PHOTOS: 60, Column.ARTICLE_REVISION: 70,
+    Column.LABEL: 55, Column.PHOTOS: 60, Column.XRAY: 55, Column.ARTICLE_REVISION: 70,
 }
 _DATE_COLUMNS = frozenset({Column.START_BY, Column.SHIP_DATE})
+
 
 class RowKind:
     DATA = "data"
     GROUP_HEADER = "group_header"
 
+
 class AuditListModel(QAbstractTableModel):
     label_toggle_requested = pyqtSignal(int, bool)
     photos_toggle_requested = pyqtSignal(int, bool)
+    xray_toggle_requested = pyqtSignal(int, bool)
 
     COLUMNS = [
         "Start-By Date", "Ship Date", "B#", "S/O", "LT",
         "QTY", "Type", "Classification", "Class", "Process", "Wash",
+        "AQ", "PF",
         "FSU (hrs)", "SMT (hrs)", "THT (hrs)",
         "AOI (hrs)", "OPS (hrs)", "SHIP (hrs)", "Date Ingested",
-        "Label", "Photos", "Article"
+        "Label", "Photos", "X-ray", "Article"
     ]
     
     GROUP_ORDER = AuditStatus.ordered()
@@ -133,8 +209,21 @@ class AuditListModel(QAbstractTableModel):
         super().__init__(parent)
         self._digests: List[OpenAuditDigest] = []
         self._rows: List[dict] = []
-        self._sort_col = 0 # Start-By Date default
+        self._sort_col = 0  # Start-By Date default
         self._sort_asc = True
+        self._evidence_cache = EvidenceCache()
+        self._evidence_loader: Callable[[int], list[RequirementEvidence]] = lambda _aid: []
+        self._stale_fingerprint_checker: Callable[[OpenAuditDigest], bool] = lambda _d: False
+        self._stale_scan_checker: Callable[[int, str], bool] | None = None
+
+    def set_evidence_loader(self, loader: Callable[[int], list[RequirementEvidence]]) -> None:
+        self._evidence_loader = loader
+
+    def set_stale_fingerprint_checker(self, checker: Callable[[OpenAuditDigest], bool]) -> None:
+        self._stale_fingerprint_checker = checker
+
+    def set_stale_scan_checker(self, checker: Callable[[int, str], bool]) -> None:
+        self._stale_scan_checker = checker
 
     def set_sort(self, column: int, ascending: bool):
         self._sort_col = column
@@ -184,6 +273,8 @@ class AuditListModel(QAbstractTableModel):
         if col == Column.ASSEMBLY_CLASS: return (d.assembly_class is not None, d.assembly_class)
         if col == Column.PROCESS: return str(d.process)
         if col == Column.WASH: return WASH_COLUMN_TEXT[wash_state_of(d)]
+        if col == Column.AQUANOX: return _req_sort_rank(d, RequirementKind.AQUANOX)
+        if col == Column.PRESS_FIT: return _req_sort_rank(d, RequirementKind.PRESS_FIT)
         if col == Column.FSU: return (d.feeder_setuptime is not None, d.feeder_setuptime)
         if col == Column.SMT: return (d.smt_runtime is not None, d.smt_runtime)
         if col == Column.THT: return (d.tht_runtime is not None, d.tht_runtime)
@@ -193,6 +284,7 @@ class AuditListModel(QAbstractTableModel):
         if col == Column.DATE_INGESTED: return (d.date_ingested is not None, d.date_ingested)
         if col == Column.LABEL: return d.is_labeled
         if col == Column.PHOTOS: return d.are_photos_uploaded
+        if col == Column.XRAY: return _XRAY_SORT_RANK[xray_cell_state(d.requirements, d.xray_tick)]
         if col == Column.ARTICLE_REVISION: return _article_text(d)
         return 0
 
@@ -203,8 +295,13 @@ class AuditListModel(QAbstractTableModel):
         if row_data["kind"] == RowKind.GROUP_HEADER:
             return Qt.ItemFlag.ItemIsEnabled
         col = index.column()
-        if col in _CHECKBOX_COLUMNS:
+        if col in (Column.LABEL, Column.PHOTOS):
             return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
+        if col == Column.XRAY:
+            d: OpenAuditDigest = row_data["digest"]
+            if xray_cell_state(d.requirements, d.xray_tick) in _CHECKABLE_XRAY_STATES:
+                return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
+            return super().flags(index)
         return super().flags(index)
 
     def rowCount(self, parent=QModelIndex()) -> int:
@@ -231,11 +328,70 @@ class AuditListModel(QAbstractTableModel):
             if row_data["kind"] == RowKind.DATA:
                 return Qt.AlignmentFlag.AlignCenter
 
-        if role == Qt.ItemDataRole.CheckStateRole:
-            if row_data["kind"] == RowKind.DATA and index.column() in _CHECKBOX_COLUMNS:
+        if role == XRAY_STALE_ROLE:
+            if row_data["kind"] == RowKind.DATA and index.column() == Column.XRAY:
                 d: OpenAuditDigest = row_data["digest"]
-                val = d.is_labeled if index.column() == Column.LABEL else d.are_photos_uploaded
-                return Qt.CheckState.Checked if val else Qt.CheckState.Unchecked
+                return xray_cell_state(d.requirements, d.xray_tick) == XrayCellState.DONE_STALE
+            return False
+
+        if role == Qt.ItemDataRole.CheckStateRole:
+            if row_data["kind"] == RowKind.DATA:
+                col = index.column()
+                d: OpenAuditDigest = row_data["digest"]
+                if col == Column.LABEL:
+                    return Qt.CheckState.Checked if d.is_labeled else Qt.CheckState.Unchecked
+                if col == Column.PHOTOS:
+                    return Qt.CheckState.Checked if d.are_photos_uploaded else Qt.CheckState.Unchecked
+                if col == Column.XRAY:
+                    x_st = xray_cell_state(d.requirements, d.xray_tick)
+                    if x_st == XrayCellState.PENDING:
+                        return Qt.CheckState.Unchecked
+                    if x_st in (XrayCellState.DONE, XrayCellState.DONE_STALE):
+                        return Qt.CheckState.Checked
+                    return None
+            return None
+
+        if role == Qt.ItemDataRole.ToolTipRole and row_data["kind"] == RowKind.DATA:
+            col = index.column()
+            if col in (Column.AQUANOX, Column.PRESS_FIT, Column.XRAY):
+                d: OpenAuditDigest = row_data["digest"]
+                if d.requirements is None:
+                    return format_requirement_tooltip(
+                        kinds=(),
+                        summary=None,
+                    )
+                ev_list = self._evidence_cache.get(
+                    d.audit_id,
+                    d.requirements.fingerprint,
+                    self._evidence_loader,
+                )
+                if self._stale_scan_checker is not None:
+                    is_stale = self._stale_scan_checker(d.audit_id, d.requirements.fingerprint)
+                else:
+                    is_stale = self._stale_fingerprint_checker(d)
+                if col == Column.AQUANOX:
+                    return format_requirement_tooltip(
+                        kinds=(RequirementKind.AQUANOX,),
+                        summary=d.requirements,
+                        evidence=ev_list,
+                        is_stale_scan=is_stale,
+                    )
+                if col == Column.PRESS_FIT:
+                    return format_requirement_tooltip(
+                        kinds=(RequirementKind.PRESS_FIT,),
+                        summary=d.requirements,
+                        evidence=ev_list,
+                        is_stale_scan=is_stale,
+                    )
+                if col == Column.XRAY:
+                    return format_requirement_tooltip(
+                        kinds=(RequirementKind.XRAY_SAVE_IMAGES, RequirementKind.XRAY),
+                        summary=d.requirements,
+                        tick=d.xray_tick,
+                        evidence=ev_list,
+                        is_xray_column=True,
+                        is_stale_scan=is_stale,
+                    )
             return None
 
         if role == Qt.ItemDataRole.FontRole and row_data["kind"] == RowKind.DATA:
@@ -277,10 +433,19 @@ class AuditListModel(QAbstractTableModel):
                 return color
 
         if role == Qt.ItemDataRole.DisplayRole:
-            if index.column() in _CHECKBOX_COLUMNS:
+            col = index.column()
+            if col in (Column.LABEL, Column.PHOTOS):
                 return None
             d: OpenAuditDigest = row_data["digest"]
-            col = index.column()
+            if col == Column.XRAY:
+                x_st = xray_cell_state(d.requirements, d.xray_tick)
+                if x_st in _CHECKABLE_XRAY_STATES:
+                    return None
+                if x_st == XrayCellState.XR_ONLY:
+                    return "XR"
+                if x_st in (XrayCellState.UNKNOWN, XrayCellState.NOT_SCANNED):
+                    return "?"
+                return ""
             
             if col == Column.START_BY: return _format_list_date(d.start_by)
             if col == Column.SHIP_DATE: return _format_list_date(d.ship_date)
@@ -293,6 +458,8 @@ class AuditListModel(QAbstractTableModel):
             if col == Column.ASSEMBLY_CLASS: return str(d.assembly_class) if d.assembly_class is not None else ""
             if col == Column.PROCESS: return d.process or ""
             if col == Column.WASH: return WASH_COLUMN_TEXT[wash_state_of(d)]
+            if col == Column.AQUANOX: return _req_badge_text(d, RequirementKind.AQUANOX, "AQ")
+            if col == Column.PRESS_FIT: return _req_badge_text(d, RequirementKind.PRESS_FIT, "PF")
             if col == Column.FSU: return f"{d.feeder_setuptime:.1f}" if d.feeder_setuptime is not None else ""
             if col == Column.SMT: return f"{d.smt_runtime:.1f}" if d.smt_runtime is not None else ""
             if col == Column.THT: return f"{d.tht_runtime:.1f}" if d.tht_runtime is not None else ""
@@ -318,9 +485,15 @@ class AuditListModel(QAbstractTableModel):
             checked = (value == Qt.CheckState.Checked.value or value == Qt.CheckState.Checked or value == 2 or value is True)
             if index.column() == Column.LABEL:
                 self.label_toggle_requested.emit(d.audit_id, checked)
-            else:
+                return True
+            if index.column() == Column.PHOTOS:
                 self.photos_toggle_requested.emit(d.audit_id, checked)
-            return True
+                return True
+            if index.column() == Column.XRAY:
+                if xray_cell_state(d.requirements, d.xray_tick) not in _CHECKABLE_XRAY_STATES:
+                    return False
+                self.xray_toggle_requested.emit(d.audit_id, checked)
+                return True
         return super().setData(index, value, role)
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
@@ -329,6 +502,11 @@ class AuditListModel(QAbstractTableModel):
                 return self.COLUMNS[section]
             if role == Qt.ItemDataRole.TextAlignmentRole:
                 return Qt.AlignmentFlag.AlignCenter
+            if role == Qt.ItemDataRole.ToolTipRole:
+                try:
+                    return _HEADER_TOOLTIPS.get(Column(section))
+                except ValueError:
+                    return None
         return None
 
 
@@ -338,6 +516,10 @@ class CenteredCheckDelegate(QStyledItemDelegate):
         if not row_data or row_data.get("kind") != RowKind.DATA:
             super().paint(painter, option, index)
             return
+        state = index.data(Qt.ItemDataRole.CheckStateRole)
+        if state is None:
+            super().paint(painter, option, index)
+            return
         opt = QStyleOptionViewItem(option)
         self.initStyleOption(opt, index)
         opt.features &= ~QStyleOptionViewItem.ViewItemFeature.HasCheckIndicator
@@ -345,21 +527,41 @@ class CenteredCheckDelegate(QStyledItemDelegate):
         style = option.widget.style() if option.widget else QApplication.style()
         style.drawControl(QStyle.ControlElement.CE_ItemViewItem, opt, painter, option.widget)
         
-        state = index.data(Qt.ItemDataRole.CheckStateRole)
         indicator = QStyleOptionButton()
         extent = style.pixelMetric(QStyle.PixelMetric.PM_IndicatorWidth, option, option.widget)
         indicator.rect = _centered_square(option.rect, extent)
         indicator_state = QStyle.StateFlag.State_Enabled
-        if state == Qt.CheckState.Checked or state == Qt.CheckState.Checked.value or state == 2 or state is True:
+        is_checked = (state == Qt.CheckState.Checked or state == Qt.CheckState.Checked.value or state == 2 or state is True)
+        is_stale = bool(index.data(XRAY_STALE_ROLE))
+        if is_checked and not is_stale:
             indicator_state |= QStyle.StateFlag.State_On
         else:
             indicator_state |= QStyle.StateFlag.State_Off
         indicator.state = indicator_state
         style.drawPrimitive(QStyle.PrimitiveElement.PE_IndicatorCheckBox, indicator, painter, option.widget)
 
+        if is_checked and is_stale:
+            from cockpit.ui import facelift
+            painter.save()
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            pen = QPen(facelift.due_soon_color(), 2.0)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+            r = indicator.rect
+            p1 = QPointF(r.left() + r.width() * 0.22, r.top() + r.height() * 0.52)
+            p2 = QPointF(r.left() + r.width() * 0.44, r.top() + r.height() * 0.74)
+            p3 = QPointF(r.left() + r.width() * 0.78, r.top() + r.height() * 0.28)
+            painter.drawLine(p1, p2)
+            painter.drawLine(p2, p3)
+            painter.restore()
+
     def editorEvent(self, event, model, option, index):
         row_data = index.data(Qt.ItemDataRole.UserRole)
         if not row_data or row_data.get("kind") != RowKind.DATA:
+            return False
+        current = index.data(Qt.ItemDataRole.CheckStateRole)
+        if current is None:
             return False
         toggled = False
         if event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton and option.rect.contains(event.pos()):
@@ -368,7 +570,6 @@ class CenteredCheckDelegate(QStyledItemDelegate):
             toggled = True
         if not toggled:
             return False
-        current = index.data(Qt.ItemDataRole.CheckStateRole)
         is_checked = (current == Qt.CheckState.Checked or current == Qt.CheckState.Checked.value or current == 2 or current is True)
         next_state = Qt.CheckState.Unchecked if is_checked else Qt.CheckState.Checked
         return model.setData(index, next_state, Qt.ItemDataRole.CheckStateRole)
@@ -465,6 +666,7 @@ class OpenAuditPicker(QWidget):
     settings_requested = pyqtSignal()
     label_toggle_requested = pyqtSignal(int, bool)
     photos_toggle_requested = pyqtSignal(int, bool)
+    xray_toggle_requested = pyqtSignal(int, bool)
     second_ops_requested = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None, *, settings: QSettings | None = None) -> None:
@@ -486,6 +688,7 @@ class OpenAuditPicker(QWidget):
         self.model = AuditListModel(self)
         self.model.label_toggle_requested.connect(self.label_toggle_requested.emit)
         self.model.photos_toggle_requested.connect(self.photos_toggle_requested.emit)
+        self.model.xray_toggle_requested.connect(self.xray_toggle_requested.emit)
         self.table_view.setModel(self.model)
 
         header = self.table_view.horizontalHeader()
@@ -503,7 +706,7 @@ class OpenAuditPicker(QWidget):
         header.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         header.customContextMenuRequested.connect(self._on_header_context_menu)
         
-        for col in (Column.LABEL, Column.PHOTOS):
+        for col in (Column.LABEL, Column.PHOTOS, Column.XRAY):
             self.table_view.setItemDelegateForColumn(col, CenteredCheckDelegate(self.table_view))
         self.table_view.setItemDelegateForColumn(
             Column.REPEAT, RepeatReferenceDelegate(self.table_view)
@@ -578,11 +781,17 @@ class OpenAuditPicker(QWidget):
         layout.addWidget(self.search_edit)
         return layout
 
-    def populate(self, digests: Sequence[OpenAuditDigest]) -> None:
+    def populate(self, digests: Sequence[OpenAuditDigest], *, keep_scroll: bool = False) -> None:
+        """Shows digests; keep_scroll holds your place, for refreshes you didn't ask for."""
+        scroll_bar = self.table_view.verticalScrollBar()
+        scroll_position = scroll_bar.value()
         self._last_digests = list(digests)
         self.table_view.clearSpans()
         self.model.rebuild(self._filtered_digests())
-        self.table_view.scrollToTop()
+        if keep_scroll:
+            scroll_bar.setValue(min(scroll_position, scroll_bar.maximum()))
+        else:
+            self.table_view.scrollToTop()
         self._apply_group_header_spans()
 
     def _apply_group_header_spans(self) -> None:
@@ -612,6 +821,7 @@ class OpenAuditPicker(QWidget):
         if self._settings is None:
             return
         self._settings.setValue(_HEADER_STATE_KEY, self.table_view.horizontalHeader().saveState())
+        self._settings.setValue(_HEADER_COLUMNS_KEY, len(Column))
 
     def _restore_header_state(self) -> None:
         if self._settings is None:
@@ -620,7 +830,9 @@ class OpenAuditPicker(QWidget):
         if blob is None:
             return
         header = self.table_view.horizontalHeader()
-        if not header.restoreState(blob):
+        # A state saved with another column set is treated as unreadable, so
+        # it takes the same fallback, which persists the default (Phase 49).
+        if self._saved_column_count() != len(Column) or not header.restoreState(blob):
             logger.warning("Audit list: header state failed to restore; reverting to defaults")
             header.restoreState(self._default_header_state)
             # Phase 49 (2.4): overwrite the stale blob now. It is only otherwise
@@ -629,11 +841,18 @@ class OpenAuditPicker(QWidget):
             self._persist_header_state()
         self._apply_group_header_spans()
 
+    def _saved_column_count(self) -> int | None:
+        try:
+            return int(self._settings.value(_HEADER_COLUMNS_KEY))
+        except (TypeError, ValueError):
+            return None
+
     def _reset_columns(self) -> None:
         self.table_view.horizontalHeader().restoreState(self._default_header_state)
         self._enforce_start_by_pinned()
         if self._settings is not None:
             self._settings.remove(_HEADER_STATE_KEY)
+            self._settings.remove(_HEADER_COLUMNS_KEY)
         self._apply_group_header_spans()
 
     def _on_header_context_menu(self, position) -> None:
@@ -642,10 +861,38 @@ class OpenAuditPicker(QWidget):
         reset_action.triggered.connect(self._reset_columns)
         menu.exec(self.table_view.horizontalHeader().mapToGlobal(position))
 
-    # --- Global search (Phase 32, 2.3) ---
+    # --- Global search (Phase 32, 2.3; Phase 54, §9) ---
 
     def _searchable_text(self, d: OpenAuditDigest) -> str:
         """Concatenation of every visible List View column, mirroring the model's display."""
+        aq_tok = (
+            "aquanox"
+            if d.requirements is not None
+            and d.requirements.states.get(RequirementKind.AQUANOX) == RequirementState.DETECTED
+            else ""
+        )
+        pf_tok = (
+            "pressfit"
+            if d.requirements is not None
+            and d.requirements.states.get(RequirementKind.PRESS_FIT) == RequirementState.DETECTED
+            else ""
+        )
+        x_st = xray_cell_state(d.requirements, d.xray_tick)
+        xray_tokens: list[str] = []
+        if x_st in (
+            XrayCellState.XR_ONLY,
+            XrayCellState.PENDING,
+            XrayCellState.DONE,
+            XrayCellState.DONE_STALE,
+        ):
+            xray_tokens.append("xray")
+        if x_st == XrayCellState.PENDING:
+            xray_tokens.append("xraypending")
+        elif x_st == XrayCellState.DONE:
+            xray_tokens.append("xraydone")
+        elif x_st == XrayCellState.DONE_STALE:
+            xray_tokens.append("xraystale")
+
         parts = [
             _format_list_date(d.start_by),
             _format_list_date(d.ship_date),
@@ -660,6 +907,8 @@ class OpenAuditPicker(QWidget):
             # Not the displayed C / NC: "c" would match any cell containing a c,
             # and "clean" is a substring of "noclean". These two share none.
             WASH_SEARCH_TOKEN[wash_state_of(d)],
+            aq_tok,
+            pf_tok,
             f"{d.feeder_setuptime:.1f}" if d.feeder_setuptime is not None else "",
             f"{d.smt_runtime:.1f}" if d.smt_runtime is not None else "",
             f"{d.tht_runtime:.1f}" if d.tht_runtime is not None else "",
@@ -669,6 +918,7 @@ class OpenAuditPicker(QWidget):
             f"{d.date_ingested.astimezone(PST):%Y-%m-%d}" if d.date_ingested else "",
             "labeled" if d.is_labeled else "",
             "photos" if d.are_photos_uploaded else "",
+            " ".join(xray_tokens),
             _article_text(d),
         ]
         return " ".join(parts).casefold()
@@ -700,7 +950,11 @@ class OpenAuditPicker(QWidget):
         self._apply_group_header_spans()
 
     def _on_table_clicked(self, index: QModelIndex) -> None:
-        if not index.isValid() or index.column() in _CHECKBOX_COLUMNS:
+        if not index.isValid():
+            return
+        if index.column() in (Column.LABEL, Column.PHOTOS):
+            return
+        if index.column() == Column.XRAY and bool(index.flags() & Qt.ItemFlag.ItemIsUserCheckable):
             return
             
         row_data = index.data(Qt.ItemDataRole.UserRole)

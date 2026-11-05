@@ -69,10 +69,15 @@ class ActiveAudit:
     article_revision: str | None = None
     is_labeled: bool = False
     are_photos_uploaded: bool = False
+    xray_images_done: bool = False
+    xray_images_done_task: str | None = None
+    xray_images_done_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.status, AuditStatus):
             object.__setattr__(self, 'status', AuditStatus(self.status))
+        if not isinstance(self.xray_images_done, bool):
+            object.__setattr__(self, 'xray_images_done', bool(self.xray_images_done))
 
 
 @dataclass(frozen=True)

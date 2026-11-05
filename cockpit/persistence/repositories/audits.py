@@ -36,6 +36,8 @@ class AuditRepository:
         self.conn = conn
         self.bom_component_repo = bom_component_repo
         self.pdf_coord_repo = pdf_coord_repo
+        from .requirements import AuditRequirementsRepository
+        self.requirements_repo = AuditRequirementsRepository(conn)
 
     def create(self, draft: ActiveAuditDraft) -> ActiveAudit:
         if not draft.part_number:
@@ -451,4 +453,5 @@ class AuditRepository:
                 )
             )
             
+        self.requirements_repo.clone_scan(source_audit_id, sibling_id)
         return self.find_by_id(sibling_id)  # type: ignore

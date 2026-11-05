@@ -46,14 +46,15 @@ def data_index(picker, column):
 # --- section 4.3, the column ------------------------------------------------
 
 def test_article_is_column_twenty():
-    assert Column.PHOTOS == 19
-    assert Column.ARTICLE_REVISION == 20
+    assert Column.PHOTOS == 21
+    assert Column.XRAY == 22
+    assert Column.ARTICLE_REVISION == 23
 
 
 def test_column_count_and_header(qtbot):
     picker = OpenAuditPicker()
     qtbot.addWidget(picker)
-    assert len(picker.model.COLUMNS) == 21
+    assert len(picker.model.COLUMNS) == 24
     assert picker.model.COLUMNS[Column.ARTICLE_REVISION] == "Article"
 
 

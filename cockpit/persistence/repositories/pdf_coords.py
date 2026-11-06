@@ -1,7 +1,7 @@
 """PDF component coordinate repository."""
 
 import sqlite3
-from typing import Sequence
+from typing import Iterable, Sequence
 
 from ..errors import DuplicatePdfCoordError, InvalidArgumentError, PersistenceUnavailable
 from ..types import PdfComponentCoord, PdfComponentCoordDraft
@@ -60,6 +60,26 @@ class PdfComponentCoordRepository:
                 )
                 for row in cur.fetchall()
             ]
+        except sqlite3.Error as e:
+            raise PersistenceUnavailable(self._conn, e) from e
+
+    def delete_ref_des(self, source_file_id: int, ref_des: Iterable[str]) -> int:
+        """Deletes a drawing's coordinates for the given designators.
+
+        post: no row of source_file_id names any of ref_des, on any page; rows
+              for other designators are untouched; returns the number deleted
+        raises: PersistenceUnavailable
+        """
+        doomed = [(source_file_id, rd) for rd in ref_des]
+        if not doomed:
+            return 0
+        try:
+            cur = self._conn.cursor()
+            cur.executemany(
+                "DELETE FROM pdf_component_coords WHERE source_file_id = ? AND ref_des = ?",
+                doomed,
+            )
+            return cur.rowcount
         except sqlite3.Error as e:
             raise PersistenceUnavailable(self._conn, e) from e
 

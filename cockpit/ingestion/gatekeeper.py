@@ -5,6 +5,10 @@ from typing import Sequence
 
 from .errors import GatekeeperViolation
 
+# Shared with Phase 55's document updates, which gate one revised file at a
+# time against the same set rather than a copy of it.
+ACCEPTED_EXTENSIONS = frozenset({".xlsx", ".csv", ".docx", ".pdf"})
+
 
 def validate(paths: Sequence[pathlib.Path]) -> None:
     """Enforce exactly 3 or 4 files, where a 4th file must be a PDF."""
@@ -22,7 +26,7 @@ def validate(paths: Sequence[pathlib.Path]) -> None:
                 raise GatekeeperViolation("UNREADABLE_FILE", {"path": str(p)})
                 
         ext = p.suffix.lower()
-        if ext not in {".xlsx", ".csv", ".docx", ".pdf"}:
+        if ext not in ACCEPTED_EXTENSIONS:
             raise GatekeeperViolation("UNSUPPORTED_EXTENSION", {"path": str(p), "extension": ext})
 
     from .roles import role_of, SourceRole

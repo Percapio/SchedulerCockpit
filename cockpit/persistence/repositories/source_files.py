@@ -48,6 +48,35 @@ class SourceFileRepository:
         
         return SourceFile(**row)
 
+    def replace(
+        self,
+        audit_id: int,
+        category: SourceFileCategory,
+        draft: SourceFileDraft,
+    ) -> SourceFile:
+        """Replaces an audit's row for one category with the draft.
+
+        pre:  called inside the caller's savepoint
+        post: the audit holds exactly one row for category, the draft's; the
+              old row's side-table rows went with it (ON DELETE CASCADE); the
+              old file is not touched, because reaping it is the caller's, after
+              RELEASE and behind reference_count
+        raises: InvalidArgumentError when the draft names another audit or
+                category, or carries a malformed hash; AuditNotFound
+
+        The drawing path still does this with raw SQL inside the ingestion
+        service (add_pdf_to_audit); this is the seam it can adopt.
+        """
+        if draft.audit_id != audit_id or draft.file_category != category:
+            raise InvalidArgumentError(
+                "draft", draft, "Must name the audit and category being replaced"
+            )
+        self.conn.execute(
+            "DELETE FROM source_files WHERE audit_id = ? AND file_category = ?",
+            (audit_id, category.value),
+        )
+        return self.register(draft)
+
     def list_for_audit(self, audit_id: int) -> list[SourceFile]:
         cur = self.conn.cursor()
         cur.execute("SELECT * FROM source_files WHERE audit_id = ? ORDER BY id ASC", (audit_id,))

@@ -19,8 +19,13 @@ from .errors import (
 )
 from .categorizer import CategorizedQuartet
 from .filename_rules import derive_part_number_from_filename
+from .version_tags import Dated, version_tag
 
 JOB_NUMBER_GRAMMAR = re.compile(r"^[A-Z][0-9]{6}$")
+
+# Phase 55 section 8: the roles a revision can arrive for. The drawing is not
+# among them, so its candidate set keeps no preselection.
+VERSIONED_ROLES = (SourceRole.BOM, SourceRole.NOTES, SourceRole.TRAVELER)
 
 
 class IngestionScope(Enum):
@@ -95,6 +100,37 @@ def revision_rank(file_name: str) -> tuple[int, int, str]:
     if rev is None:
         return (0, 0, "")
     return (1, len(rev), rev)
+
+
+def choose_current_version(role: SourceRole, file_names: list[str]) -> str | None:
+    """Chooses a role's current version by name alone, or None when the names can't rank it.
+
+    post: the only name, when there is one; else the name whose Dated tag is
+          latest, when exactly one name holds that date; else, for TRAVELER
+          only and only when no name is Dated, the one name with the highest
+          revision_rank, when that rank names a revision; else None
+
+    Shared by locate's preselection and Phase 55's update check, so the two
+    never disagree about which file is current.
+    """
+    if not file_names:
+        return None
+    if len(file_names) == 1:
+        return file_names[0]
+
+    dated = [(name, tag.date) for name in file_names if isinstance(tag := version_tag(name), Dated)]
+    if dated:
+        latest = max(date for _, date in dated)
+        at_latest = [name for name, date in dated if date == latest]
+        return at_latest[0] if len(at_latest) == 1 else None
+
+    if role == SourceRole.TRAVELER:
+        ranks = [(name, revision_rank(name)) for name in file_names]
+        top_rank = max(rank for _, rank in ranks)
+        top_names = [name for name, rank in ranks if rank == top_rank]
+        if len(top_names) == 1 and top_rank != (0, 0, ""):
+            return top_names[0]
+    return None
 
 def locate(
     job_number: str,
@@ -222,13 +258,10 @@ def locate(
         else:
             has_ambiguity = True
             preselected = None
-            if role == SourceRole.TRAVELER:
-                ranks = [(c, revision_rank(c.name)) for c in cands]
-                top_rank = max(r[1] for r in ranks)
-                top_cands = [c for c, r in ranks if r == top_rank]
-                if len(top_cands) == 1 and top_rank != (0, 0, ""):
-                    preselected = top_cands[0]
-                    
+            if role in VERSIONED_ROLES:
+                chosen = choose_current_version(role, [c.name for c in cands])
+                preselected = next((c for c in cands if c.name == chosen), None)
+
             pending_sets.append(CandidateSet(role=role, candidates=cands, preselected=preselected))
             
     if has_ambiguity:

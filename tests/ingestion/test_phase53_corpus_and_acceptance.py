@@ -73,17 +73,20 @@ def test_local_corpus_regression():
         except MalformedBomError as exc:
             failures[rel] = exc.reason
 
-    assert parsed_count >= 1696
+    assert parsed_count >= 1697
     reason_counts = dict(Counter(failures.values()))
+    # Patch 13: B139596 parses again. Its " *DNI*" lines had been cleaned to bare part numbers
+    # that duplicated live lines; they are DNI lines now.
     assert reason_counts == {
-        "DUPLICATE_MPN": 15,
+        "DUPLICATE_MPN": 14,
         "NO_HEADERED_SHEET": 6,
         "MISSING_COLUMN": 1,
         "INVALID_REFDES_TOKEN": 2,
         "INVALID_FIND_NUMBER": 1,
     }
     assert sorted(changed_from_old) == sorted(expectations["changed_files"])
-    assert len(changed_from_old) == 6
+    # Phase 53 changed 6 files; Patch 13's continuation rows and *DNI* lines change 202 more.
+    assert len(changed_from_old) == len(expectations["changed_files"]) == 208
 
 
 @pytest.mark.skipif(

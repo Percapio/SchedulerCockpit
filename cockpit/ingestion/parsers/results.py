@@ -30,6 +30,7 @@ class BomResult:
     cleaning: Any = None
     sheet_name_used: str = ""
     header_row: int = 1
+    dni_designators: frozenset[str] = frozenset()  # every DNI line's designators (Patch 13 §3)
 
 
 @dataclass(frozen=True)

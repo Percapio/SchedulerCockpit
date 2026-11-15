@@ -50,6 +50,15 @@ def test_a_scanned_audit_with_nothing_required_shows_blank_cells(qtbot):
 
 
 def test_a_layout_saved_with_another_column_set_resets_once(qtbot, tmp_path, caplog):
+    # The default layout as the header actually applies it. Qt raises any width
+    # below the header's minimum section size, which follows the font, so AQ's
+    # seeded 40 px can come out wider (48 px once earlier tests enlarge the
+    # application font on the real display). Compare with that, not the table.
+    reference = OpenAuditPicker()
+    qtbot.addWidget(reference)
+    default_width = reference.table_view.horizontalHeader().sectionSize(Column.AQUANOX)
+    assert default_width >= _DEFAULT_COLUMN_WIDTHS[Column.AQUANOX]
+
     settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
     before = OpenAuditPicker(settings=settings)
     qtbot.addWidget(before)
@@ -62,16 +71,18 @@ def test_a_layout_saved_with_another_column_set_resets_once(qtbot, tmp_path, cap
         upgraded = OpenAuditPicker(settings=settings)
         qtbot.addWidget(upgraded)
     assert any("header state failed to restore" in r.message for r in caplog.records)
-    assert upgraded.table_view.horizontalHeader().sectionSize(Column.AQUANOX) == _DEFAULT_COLUMN_WIDTHS[Column.AQUANOX]
+    upgraded_header = upgraded.table_view.horizontalHeader()
+    assert upgraded_header.sectionSize(Column.AQUANOX) == default_width != 222
     assert int(settings.value(_HEADER_COLUMNS_KEY)) == len(Column)
 
-    upgraded.table_view.horizontalHeader().resizeSection(Column.AQUANOX, 77)
+    upgraded_header.resizeSection(Column.AQUANOX, 177)
+    chosen_width = upgraded_header.sectionSize(Column.AQUANOX)
     caplog.clear()
     with caplog.at_level(logging.WARNING):
         later = OpenAuditPicker(settings=settings)
         qtbot.addWidget(later)
     assert not any("header state failed to restore" in r.message for r in caplog.records)
-    assert later.table_view.horizontalHeader().sectionSize(Column.AQUANOX) == 77
+    assert later.table_view.horizontalHeader().sectionSize(Column.AQUANOX) == chosen_width != default_width
 
 
 def test_a_refresh_you_didnt_ask_for_keeps_your_place(qtbot):

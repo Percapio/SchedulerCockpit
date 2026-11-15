@@ -21,9 +21,11 @@ from cockpit.ingestion.parsers.audit_bom import (
     CleaningAction,
     CleaningReport,
     CleaningSummary,
+    ContinuationJoined,
     DesignatorPlaceholder,
     DesignatorRepeatDropped,
     DesignatorsStruck,
+    DesignatorsWithoutPartNumber,
     EnclosingQuotesRemoved,
     FreeTextInRefDes,
     HiddenSheetRead,
@@ -42,8 +44,47 @@ from cockpit.services.second_ops import ReadFailureCause, resolve_bom_workbook
 from cockpit.ui.widgets.qt_lifecycle import disconnect_all_signals_quietly
 
 
+def _row_list(rows: Sequence[int]) -> str:
+    """'Row 9', 'Rows 9–14' for consecutive rows, otherwise 'Rows 9, 11 and 13'."""
+    if len(rows) == 1:
+        return f"Row {rows[0]}"
+    if all(b == a + 1 for a, b in zip(rows, rows[1:])):
+        return f"Rows {rows[0]}–{rows[-1]}"
+    return "Rows " + ", ".join(str(r) for r in rows[:-1]) + f" and {rows[-1]}"
+
+
+def _describe_continuation(action: ContinuationJoined) -> str:
+    rows = action.continuation_rows
+    single = len(rows) == 1
+    verb = "continues" if single else "continue"
+    owner = "its" if single else "their"
+    n = action.designators_joined
+    if n == 0:
+        tail = f"every designator on {'it' if single else 'them'} was already on the line."
+    elif n == 1:
+        tail = f"{owner} 1 designator was read with it."
+    else:
+        tail = f"{owner} {n:,} designators were read with it."
+    return f"{_row_list(rows)} {verb} this line; {tail}"
+
+
 def describe_cleaning_action(action: CleaningAction) -> tuple[str, str]:
     """Formats a CleaningAction as (row_text, description_text) in plain text."""
+    if isinstance(action, ContinuationJoined):
+        return (str(action.sheet_row), _describe_continuation(action))
+    if isinstance(action, DesignatorsWithoutPartNumber):
+        n = action.designator_count
+        if n == 1:
+            text = (
+                "1 designator with no part number, not continuing the line above; "
+                "the part was left out."
+            )
+        else:
+            text = (
+                f"{n:,} designators with no part number, not continuing the line above; "
+                "the parts were left out."
+            )
+        return (str(action.sheet_row), text)
     if isinstance(action, HiddenSheetRead):
         return ("\u2014", f"The BOM was read from hidden sheet {action.sheet_name}.")
     if isinstance(action, LineRemovedByStrike):

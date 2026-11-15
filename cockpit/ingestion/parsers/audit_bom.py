@@ -1,6 +1,6 @@
 """Audit BOM parser."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as replace_fields
 from enum import StrEnum
 import logging
 import pathlib
@@ -78,7 +78,7 @@ DISPLAY_COLUMNS: Final[list[ColumnName]] = [
     ColumnName.BAKED_DATE,
 ]
 HEADER_SEARCH_ROWS: Final[int] = 5
-CLEANING_RULES_VERSION: Final[int] = 1
+CLEANING_RULES_VERSION: Final[int] = 2
 
 REFDES_TOKEN_REGEX: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z0-9_.+$/-]+$")
 DESIGNATOR_SHAPE: Final[re.Pattern[str]] = re.compile(r"^[A-Za-z]+\S*[0-9]")
@@ -92,7 +92,9 @@ QUOTE_PAIRS: Final[dict[str, str]] = {
     "'": "'",
     "\u2018": "\u2019",
 }
-SILENT_MOUNT_TEXTS: Final[frozenset[str]] = frozenset({"PCB", "DNI"})
+# DNI lines are silent too, but through is_dni_line_text, which also knows the *DNI* suffix.
+SILENT_MOUNT_TEXTS: Final[frozenset[str]] = frozenset({"PCB"})
+_DNI_SUFFIX: Final[str] = "*DNI*"
 
 _PAIRED_NOTE_RE: Final[re.Pattern[str]] = re.compile(
     r"\*([^*]*)\*"
@@ -324,6 +326,21 @@ class HiddenSheetRead:
     sheet_name: str
 
 
+@dataclass(frozen=True)
+class ContinuationJoined:
+    """Rows that carried only more of a line's designators were read as part of that line."""
+    sheet_row: int
+    continuation_rows: list[int]
+    designators_joined: int
+
+
+@dataclass(frozen=True)
+class DesignatorsWithoutPartNumber:
+    """A row with designators, no part number, and no line it continues: its parts are left out."""
+    sheet_row: int
+    designator_count: int
+
+
 CleaningAction = (
     StruckTextRemoved
     | EnclosingQuotesRemoved
@@ -337,6 +354,8 @@ CleaningAction = (
     | DesignatorRepeatDropped
     | UnknownMountTypeSkipped
     | HiddenSheetRead
+    | ContinuationJoined
+    | DesignatorsWithoutPartNumber
 )
 
 CleaningActionKind = type[CleaningAction]
@@ -350,6 +369,8 @@ CONSEQUENTIAL_ACTIONS: Final[frozenset[type]] = frozenset({
     FreeTextInRefDes,
     UnknownMountTypeSkipped,
     HiddenSheetRead,
+    ContinuationJoined,
+    DesignatorsWithoutPartNumber,
 })
 
 ROUTINE_ORDER: Final[list[type]] = [
@@ -831,8 +852,28 @@ def split_ref_des(text: str) -> RefDesSplit | TokenRejected:
     )
 
 
+def is_dni_line_text(part_number: str, mount_type: str) -> bool:
+    """Whether a BOM line is a DNI line: its designators aren't the audit's parts (Patch 13 §3).
+
+    True for a part number that is DNI with or without a star on either side (DNI, *DNI, DNI*,
+    *DNI*), for one that ends with *DNI* (BOM Builder marks every such designator unstuffed or
+    unplaced), and for a mount type of DNI. NA and NONE stay live lines.
+    """
+    pn = part_number.strip().upper()
+    if pn.strip("*").strip() == "DNI" or pn.endswith(_DNI_SUFFIX):
+        return True
+    return mount_type.strip().upper() == "DNI"
+
+
 def split_part_number(text: str) -> PartNumberSplit:
-    """Separates a note written after a part number."""
+    """Separates a note written after a part number.
+
+    A trailing *DNI* is the line's DNI marker, not a note, so it stays with the part number
+    even when whitespace precedes it (Patch 13 §3).
+    """
+    stripped = text.strip()
+    if stripped.upper().endswith(_DNI_SUFFIX):
+        return PartNumberSplit(part_number=stripped, note=None)
     match = re.search(r"\s+\*", text)
     if match is None:
         return PartNumberSplit(part_number=text.strip(), note=None)
@@ -988,6 +1029,144 @@ def clean_row(
     )
 
 
+# ---- Continuation rows (Patch 13 §2) ----------------------------------------
+
+def find_number_key(text: str) -> str:
+    """A Find# as coerce_find_number reads it, for comparing two rows; never raises.
+
+    Blank text gives "", a whole number written as a float ("12.0") gives that integer, and
+    anything else gives the stripped, upper-cased text.
+    """
+    candidate = text.strip().upper()
+    float_match = _WHOLE_FLOAT_STR_RE.match(candidate)
+    if float_match is not None:
+        return str(int(float_match.group(1)))
+    return candidate
+
+
+def mount_types_agree(continuation_text: str, line_text: str) -> bool:
+    """Whether a continuation row's mount type leaves it on its line: blank, the same mount
+    type as the line's, or the same text, ignoring case (DNI beside DNI)."""
+    here = continuation_text.strip()
+    if here == "":
+        return True
+    there = line_text.strip()
+    here_type = mount_type_of(here)
+    if here_type is not None and here_type == mount_type_of(there):
+        return True
+    return here.upper() == there.upper()
+
+
+def continues_line(row: CleanedRow, line: CleanedRow) -> bool:
+    """Whether a row with designators and no part number continues the given line: its Find#
+    is blank or the line's, and its mount type agrees with the line's."""
+    find_here = find_number_key(row.cells.get(ColumnName.FIND_NUMBER, ""))
+    find_line = find_number_key(line.cells.get(ColumnName.FIND_NUMBER, ""))
+    if find_here and find_here != find_line:
+        return False
+    return mount_types_agree(
+        row.cells.get(ColumnName.MOUNT_TYPE, ""),
+        line.cells.get(ColumnName.MOUNT_TYPE, ""),
+    )
+
+
+@dataclass
+class _LineBeingJoined:
+    """The line that continuation rows are joining onto, while the sheet is walked."""
+    anchor: CleanedRow
+    index: int
+    designators: list[RefDes]
+    notes: list[BomNote] = field(default_factory=list)
+    actions: list[CleaningAction] = field(default_factory=list)
+    continuation_rows: list[int] = field(default_factory=list)
+    designators_joined: int = 0
+
+    def absorb(self, row: CleanedRow) -> None:
+        self.notes.extend(row.notes)
+        self.actions.extend(row.actions)
+        on_line = set(self.designators)
+        for designator in row.designators:
+            if designator in on_line:
+                self.actions.append(
+                    DesignatorRepeatDropped(sheet_row=row.sheet_row, designator=designator)
+                )
+                continue
+            on_line.add(designator)
+            self.designators.append(designator)
+            self.designators_joined += 1
+        self.continuation_rows.append(row.sheet_row)
+
+    def joined_anchor(self) -> CleanedRow:
+        return replace_fields(
+            self.anchor,
+            designators=list(self.designators),
+            notes=list(self.anchor.notes) + self.notes,
+            actions=list(self.anchor.actions)
+            + [
+                ContinuationJoined(
+                    sheet_row=self.anchor.sheet_row,
+                    continuation_rows=list(self.continuation_rows),
+                    designators_joined=self.designators_joined,
+                )
+            ]
+            + self.actions,
+        )
+
+
+def join_continuation_rows(
+    rows: Sequence[CleanedRow | DesignatorRejected],
+) -> list[CleanedRow | DesignatorRejected]:
+    """Joins each row that only continues a line's designator list onto that line (Patch 13 §2).
+
+    A long designator list can wrap onto the rows below its line: designators, no part number,
+    Find# blank or repeated. A continuation leaves the list as a row of its own and adds its
+    designators, notes and actions to the line's; a designator already on the line is dropped as
+    a repeat. Any row that isn't a continuation ends the line, and a row with designators and no
+    part number that continues nothing is reported, its parts left out as before.
+    """
+    joined: list[CleanedRow | DesignatorRejected] = []
+    line: _LineBeingJoined | None = None
+
+    def close_line() -> None:
+        nonlocal line
+        if line is not None and line.continuation_rows:
+            joined[line.index] = line.joined_anchor()
+        line = None
+
+    for row in rows:
+        if isinstance(row, CleanedRow) and not row.is_removed_line:
+            if row.cells.get(ColumnName.PART_NUMBER, "").strip():
+                close_line()
+                joined.append(row)
+                line = _LineBeingJoined(
+                    anchor=row, index=len(joined) - 1, designators=list(row.designators)
+                )
+                continue
+            if row.designators:
+                if line is not None and continues_line(row, line.anchor):
+                    line.absorb(row)
+                    continue
+                close_line()
+                joined.append(
+                    replace_fields(
+                        row,
+                        actions=list(row.actions)
+                        + [
+                            DesignatorsWithoutPartNumber(
+                                sheet_row=row.sheet_row,
+                                designator_count=len(row.designators),
+                            )
+                        ],
+                    )
+                )
+                continue
+        close_line()
+        joined.append(row)
+
+    close_line()
+    return joined
+
+
 # ---- Report & Summary assembly (§4.7, §5.1, §8.1) --------------------------
 
 def mount_gate_actions(sheet: CleanedSheet) -> list[CleaningAction]:
@@ -1003,6 +1182,8 @@ def mount_gate_actions(sheet: CleanedSheet) -> list[CleaningAction]:
             continue
         part_number = row_res.cells.get(ColumnName.PART_NUMBER, "").strip()
         if not part_number:
+            continue
+        if is_dni_line_text(part_number, mount_text):
             continue
         if part_number.upper() in SILENT_MOUNT_TEXTS:
             continue
@@ -1183,8 +1364,16 @@ def _open_workbook(path: pathlib.Path) -> openpyxl.Workbook:
     return openpyxl.load_workbook(**load_kwargs)
 
 
-def read_cleaned_sheet(path: pathlib.Path) -> CleanedSheet:
-    """Opens an Audit BOM and cleans every data row, without the ingest gates."""
+def read_cleaned_sheet(
+    path: pathlib.Path,
+    *,
+    join_continuations: bool = True,
+) -> CleanedSheet:
+    """Opens an Audit BOM and cleans every data row, without the ingest gates.
+
+    Rows that only continue a line's designator list are joined onto that line (Patch 13 §2),
+    unless join_continuations is false: the 2nd OPS table shows the sheet's rows as they are.
+    """
     declared_job_number = derive_part_number_from_filename(path)
 
     try:
@@ -1279,7 +1468,7 @@ def read_cleaned_sheet(path: pathlib.Path) -> CleanedSheet:
             sheet=chosen,
             column_map=resolved,
             header_layout=header_layout,
-            rows=rows,
+            rows=join_continuation_rows(rows) if join_continuations else rows,
         )
     finally:
         wb.close()
@@ -1296,6 +1485,8 @@ def parse(path: pathlib.Path) -> BomResult:
     notes: list[BomNote] = []
     excluded_dni_count = 0
     excluded_pcb_count = 0
+    dni_designators: set[RefDes] = set()
+    rows_read = len(sheet.rows)
     mpn_occurrences: dict[str, list[tuple[str, int]]] = {}
 
     for row_res in sheet.rows:
@@ -1314,11 +1505,21 @@ def parse(path: pathlib.Path) -> BomResult:
         if row_res.is_removed_line:
             continue
 
+        rows_read += sum(
+            len(action.continuation_rows)
+            for action in row_res.actions
+            if isinstance(action, ContinuationJoined)
+        )
+
         part_number = row_res.cells.get(ColumnName.PART_NUMBER, "").strip()
         mount_raw = row_res.cells.get(ColumnName.MOUNT_TYPE, "").strip()
-        is_dni_line = part_number.upper() == "DNI" or mount_raw.upper() == "DNI"
-        if not is_dni_line:
-            notes.extend(row_res.notes)
+        # Patch 13 §3: before the mount gate, so a DNI line counts whatever its mount type,
+        # and its designators reach dni_designators. Its notes don't apply.
+        if is_dni_line_text(part_number, mount_raw):
+            excluded_dni_count += 1
+            dni_designators.update(row_res.designators)
+            continue
+        notes.extend(row_res.notes)
 
         mt = mount_type_of(mount_raw)
         if mt is None:
@@ -1327,9 +1528,6 @@ def parse(path: pathlib.Path) -> BomResult:
         if not part_number:
             continue
 
-        if part_number.upper() == "DNI":
-            excluded_dni_count += 1
-            continue
         if part_number.upper() == "PCB":
             excluded_pcb_count += 1
             continue
@@ -1383,7 +1581,7 @@ def parse(path: pathlib.Path) -> BomResult:
     return BomResult(
         declared_part_number=declared_part_number,
         items=items,
-        raw_row_count=len(sheet.rows),
+        raw_row_count=rows_read,
         excluded_dni_count=excluded_dni_count,
         excluded_pcb_count=excluded_pcb_count,
         header_layout=sheet.header_layout,
@@ -1391,12 +1589,17 @@ def parse(path: pathlib.Path) -> BomResult:
         cleaning=cleaning_report,
         sheet_name_used=sheet.sheet.sheet_name,
         header_row=sheet.sheet.header_row,
+        dni_designators=frozenset(dni_designators),
     )
 
 
 def read_raw_rows(workbook_path: pathlib.Path) -> list[RawBomRow]:
-    """Lists the rows of an Audit BOM for the 2nd OPS table, cleaned but not gated."""
-    sheet = read_cleaned_sheet(workbook_path)
+    """Lists the rows of an Audit BOM for the 2nd OPS table, cleaned but not gated.
+
+    Continuation rows stay rows of their own here: the table shows and copies the sheet's cells,
+    and a line's Ref_Des cell holds only its own part of a wrapped list (Patch 13 §2).
+    """
+    sheet = read_cleaned_sheet(workbook_path, join_continuations=False)
     results: list[RawBomRow] = []
 
     for row_res in sheet.rows:

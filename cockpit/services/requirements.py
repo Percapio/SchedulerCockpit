@@ -26,6 +26,7 @@ from cockpit.ingestion.parsers.audit_bom import (
     RefDes,
     RefDesSplit,
     TokenRejected,
+    is_dni_line_text,
     read_cleaned_sheet,
     split_ref_des,
     unwrap_enclosing_quotes,
@@ -95,7 +96,8 @@ NormalisedToken = str
 FileHash = str
 Fingerprint = str
 
-EXTRACTOR_VERSION: int = 1
+# 2: Patch 13's DNI predicate decides which lines read_bom_units skips.
+EXTRACTOR_VERSION: int = 2
 MAX_EVIDENCE: int = 20
 MAX_EXCERPT_CHARS: int = 160
 MAX_DOCX_ENTRY_BYTES: int = 16_777_216
@@ -1261,10 +1263,14 @@ def read_eco_units(
 # ---- §3.2, §14.1 Reading the BOM -------------------------------------------
 
 def is_dni_line(row: CleanedRow | DesignatorRejected) -> bool:
-    """Whether a cleaned BOM row is a DNI line, whose notes don't apply (§14.1)."""
-    part_num = row.cells.get(ColumnName.PART_NUMBER, "").strip().upper()
-    mount_txt = row.cells.get(ColumnName.MOUNT_TYPE, "").strip().upper()
-    return part_num == "DNI" or mount_txt == "DNI"
+    """Whether a cleaned BOM row is a DNI line, whose notes don't apply (§14.1).
+
+    The same predicate audit_bom.parse excludes lines by (Patch 13 §3).
+    """
+    return is_dni_line_text(
+        row.cells.get(ColumnName.PART_NUMBER, ""),
+        row.cells.get(ColumnName.MOUNT_TYPE, ""),
+    )
 
 
 def read_bom_units(bom_path: Path) -> Result[list[TextUnit], DocumentUnreadable]:

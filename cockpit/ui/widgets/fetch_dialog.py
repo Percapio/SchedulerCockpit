@@ -77,8 +77,15 @@ class FetchJobDialog(QDialog):
 
 
 class SelectSourcesDialog(QDialog):
-    def __init__(self, pending: PendingSelection, parent=None):
+    """Asks for one file per ambiguous role.
+
+    Phase 55b §7.3: Accept waits for every set whose role isn't in optional_roles, so a placements
+    choice can be left unpicked. Shipped callers pass none, and every set stays required.
+    """
+
+    def __init__(self, pending: PendingSelection, parent=None, optional_roles: frozenset = frozenset()):
         super().__init__(parent)
+        self.optional_roles = frozenset(optional_roles)
         self.setWindowTitle("Select Source Files")
         self.setModal(True)
         self.setMinimumWidth(500)
@@ -160,7 +167,7 @@ class SelectSourcesDialog(QDialog):
     def _update_accept_btn(self) -> None:
         # Check if all roles have a choice
         for cset in self.pending.sets:
-            if cset.role not in self.choices:
+            if cset.role not in self.choices and cset.role not in self.optional_roles:
                 self.accept_btn.setEnabled(False)
                 return
         self.accept_btn.setEnabled(True)

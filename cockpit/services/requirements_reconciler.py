@@ -15,6 +15,7 @@ from PyQt6.QtCore import QObject, QThread, pyqtSignal
 from cockpit.persistence.clock import utcnow
 from cockpit.persistence.repositories.requirements import AuditRequirementsRepository
 from cockpit.services.requirements import (
+    wash_text_of,
     DEFAULT_VOCABULARY,
     RequirementKind,
     RequirementScan,
@@ -62,21 +63,7 @@ class PassSummary:
     stopped_early: bool
 
 
-def _extract_wash_text(raw_meta: str | dict | None) -> str | None:
-    if raw_meta is None:
-        return None
-    if isinstance(raw_meta, str):
-        try:
-            meta = json.loads(raw_meta)
-        except json.JSONDecodeError:
-            return None
-    elif isinstance(raw_meta, dict):
-        meta = raw_meta
-    else:
-        return None
-    val = meta.get("process_clean")
-    return str(val) if val is not None else None
-
+_extract_wash_text = wash_text_of
 
 def _build_scan_inputs_for_audit(
     conn: sqlite3.Connection,

@@ -179,20 +179,23 @@ def pick_placements(
     snapshot: FamilySnapshot,
     source_root: pathlib.Path,
     read_hash: HashReader,
+    share_call: Any = None,
 ) -> RoleUpdate | str | None:
     """Turns your pick between .bmb files into an update (§8.3); a failure is its reason, never a block.
 
-    post: the pick is re-checked inside source_root and hashed, as _pick_update does; the members are
-          decided by decide_placements' rule against that hash; None when no member needs it
+    post: the pick is re-checked inside source_root and hashed, as _pick_update does, each through
+          share_call (Phase 55b §4.4); the members are decided by decide_placements' rule against that
+          hash; None when no member needs it
     """
+    guard = share_call or direct_share_call
     candidate = next((c for c in status.candidates if c.path == pick), None)
     if candidate is None:
         return "PICK_NOT_A_CANDIDATE"
     try:
-        assert_within_root(candidate.path, source_root)
+        guard(lambda: assert_within_root(candidate.path, source_root))
     except JobDirectoryEscapesRoot:
         return "ESCAPES_ROOT"
-    candidate_hash = read_hash(candidate)
+    candidate_hash = guard(lambda: read_hash(candidate))
     if isinstance(candidate_hash, ShareReadFailure):
         return candidate_hash.cause
     needing = members_needing(snapshot, candidate_hash)
@@ -347,7 +350,7 @@ class _Extracts:
 
     def _extract(self, candidate: CandidateFile, expected_source_hash: str) -> StagedExtract | _ExtractFailure | Cancelled:
         try:
-            assert_within_root(candidate.path, self.source_root)
+            self.share_call(lambda: assert_within_root(candidate.path, self.source_root))
         except JobDirectoryEscapesRoot:
             return _ExtractFailure("the .bmb file is outside the Source Root")
         outcome = extract_bmb_sections(

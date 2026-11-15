@@ -1670,6 +1670,24 @@ def decide_requirements(
     )
 
 
+def wash_text_of(raw_meta: str | dict | None) -> str | None:
+    """The traveler's wash cell from its metadata (Phase 54 §3.3), as the reconciler and Phase 55b's
+    requirements preview both read it."""
+    if raw_meta is None:
+        return None
+    if isinstance(raw_meta, str):
+        try:
+            meta = json.loads(raw_meta)
+        except json.JSONDecodeError:
+            return None
+    elif isinstance(raw_meta, dict):
+        meta = raw_meta
+    else:
+        return None
+    val = meta.get("process_clean")
+    return str(val) if val is not None else None
+
+
 def scan_documents(inputs: ScanInputs) -> RequirementScan:
     """Reads one audit's documents and decides. Never raises (§4.6)."""
     try:

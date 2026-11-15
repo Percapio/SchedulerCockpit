@@ -18,9 +18,12 @@ class Toast(QWidget):
         
         self.title_label = QLabel()
         self.title_label.setObjectName("ToastTitle")
+        # Phase 55b §13: a reason or file name holding "<b>" shows as typed.
+        self.title_label.setTextFormat(Qt.TextFormat.PlainText)
         
         self.subtitle_label = QLabel()
         self.subtitle_label.setObjectName("ToastSubtitle")
+        self.subtitle_label.setTextFormat(Qt.TextFormat.PlainText)
         
         self.layout.addWidget(self.title_label)
         self.layout.addWidget(self.subtitle_label)

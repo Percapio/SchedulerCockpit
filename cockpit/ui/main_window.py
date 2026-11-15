@@ -3,7 +3,7 @@
 import pathlib
 import sqlite3
 from datetime import datetime, timedelta
-from PyQt6.QtCore import Qt, QThread, QSettings, QTimer, QEvent
+from PyQt6.QtCore import Qt, QThread, QSettings, QTimer, QEvent, pyqtSignal
 from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox, QApplication, QDialog
 
@@ -28,6 +28,9 @@ from cockpit.layout.renderer import PdfRenderer
 from cockpit.ui.theme import Theme
 from cockpit.ui.font_scale_controller import FontScaleController
 from cockpit.ui.widgets.qt_lifecycle import FETCH_WATCHDOG_TIMEOUT_MS
+from cockpit.ui.busy_state import (
+    OPERATION_WORDING, PARKED_WORDING, BusyState, Entry, Operation, reconciler_can_write, unavailable_reason,
+)
 import logging
 logger = logging.getLogger(__name__)
 
@@ -44,7 +47,25 @@ RENDER_SHUTDOWN_TIMEOUT_MS = 10_000
 REQUIREMENTS_LIST_REFRESH_MS = 1_000
 
 
+class _IngestLatch:
+    """Phase 55b §9: when the check after ingest starts, per ingest."""
+
+    def __init__(self) -> None:
+        self.audit_id: int | None = None
+        self.handler_done = False
+        self.worker_done = False
+
+
 class MainWindow(QMainWindow):
+    # Phase 55b §3.2: entries follow the busy state; Settings follows the last run.
+    busy_changed = pyqtSignal(object)
+    document_update_run_finished = pyqtSignal()
+
+    @property
+    def _operation_in_flight(self) -> bool:
+        """Read-only, for the code and tests that read it: an operation is running (§3.1)."""
+        return self._busy.operation is not None
+
     def __init__(
         self,
         app: QApplication,
@@ -82,7 +103,16 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Local Audit & Routing Checklist Utility")
         self.resize(800, 600)
         
-        self._operation_in_flight = False
+        self._busy = BusyState()
+        # Phase 55b: the running update run, the per-ingest latch, the open Settings, and closing.
+        self._update_run = None
+        self._placements_latch: _IngestLatch | None = None
+        self._settings_dialog = None
+        self._closing = False
+        # Set once a close has closed the connection; a later close does nothing.
+        self._closed = False
+        # Phase 55b §5.6: the update run's watchdog bound; tests shorten it.
+        self._update_watchdog_ms = FETCH_WATCHDOG_TIMEOUT_MS
         self._close_requested = False
         self._worker = None
         self._thread = None
@@ -151,6 +181,8 @@ class MainWindow(QMainWindow):
         self._audit_view.drawing_fetch_requested.connect(self._on_drawing_fetch_requested)
         self._audit_view.drawing_drop_requested.connect(self._on_drawing_dropped)
         self._audit_view.placements_report_requested.connect(self._on_placements_report_requested)
+        self._audit_view.document_update_check_requested.connect(self._on_check_family_requested)
+        self._audit_view.set_entry_reason_provider(self._entry_reason)
         self._audit_view.xray_toggle_requested.connect(self._on_xray_toggle_requested)
         self.stacked.addWidget(self._audit_view)
         
@@ -165,7 +197,7 @@ class MainWindow(QMainWindow):
         # connection; a UI-thread write meanwhile would join it.
         self._requirements_reconciler = RequirementsReconciler(
             self._bootstrapped.conn, self.current_requirements_vocabulary, self,
-            can_write=lambda: not getattr(self, "_operation_in_flight", False),
+            can_write=lambda: reconciler_can_write(self._busy),
         )
         self._requirements_reconciler.audit_updated.connect(self._on_reconciler_audit_updated)
         self._requirements_reconciler.pass_completed.connect(self._on_reconciler_pass_completed)
@@ -367,17 +399,33 @@ class MainWindow(QMainWindow):
                 conn=self._bootstrapped.conn,
                 current_audit_id=self._audit_view.current_audit_id(),
                 initial_vocabulary=self.current_requirements_vocabulary(),
+                document_updates=self._document_update_hooks(),
             )
             dialog.reset_requested.connect(self._on_reset_requested)
             dialog.requirements_vocabulary_saved.connect(self._on_requirements_vocabulary_saved)
-            dialog.exec()
+            # Phase 55b §3.2: bound methods, which Qt drops with the dialog; disconnected below too.
+            dialog.document_update_check_requested.connect(self._on_check_all_requested)
+            self.busy_changed.connect(dialog.refresh_document_updates)
+            self.document_update_run_finished.connect(dialog.refresh_document_updates)
+            self._settings_dialog = dialog
+            try:
+                dialog.exec()
+            finally:
+                self._settings_dialog = None
+                for signal in (self.busy_changed, self.document_update_run_finished):
+                    try:
+                        signal.disconnect(dialog.refresh_document_updates)
+                    except (TypeError, RuntimeError):
+                        pass
         finally:
-            if self._runtime_constants_dirty and self._runtime_settings_controller is not None:
+            if (not self._closing and self._runtime_constants_dirty
+                    and self._runtime_settings_controller is not None):
                 self._recompute_and_refresh()
 
     def _on_reset_requested(self) -> None:
-        if self._operation_in_flight:
-            QMessageBox.warning(self, "Cannot Reset", "An ingestion is currently in flight. Please wait for it to finish.")
+        reason = self._entry_reason(Entry.RESET)
+        if reason is not None:
+            QMessageBox.warning(self, "Cannot Reset", f"{reason} Please wait for it to finish.")
             return
 
         for audit_id, (serial, dialog) in self._second_ops_review_dialogs.items():
@@ -449,7 +497,7 @@ class MainWindow(QMainWindow):
     def _run_idle_maintenance(self) -> None:
         from cockpit.persistence.connection import run_idle_maintenance
         run_idle_maintenance(self._bootstrapped.conn)
-        if not self._operation_in_flight and hasattr(self, "_requirements_reconciler"):
+        if reconciler_can_write(self._busy) and hasattr(self, "_requirements_reconciler"):
             self._requirements_reconciler.trigger()
 
     def _schedule_midnight_timer(self) -> None:
@@ -664,7 +712,7 @@ class MainWindow(QMainWindow):
         if self._operation_in_flight:
             return
             
-        self._operation_in_flight = True
+        self._begin(Operation.JOB_FETCH)
         
         from cockpit.ui.job_fetch_worker import JobFetchWorker
         self._fetch_thread = QThread()
@@ -693,7 +741,7 @@ class MainWindow(QMainWindow):
 
     def _abandon_fetch_worker(self) -> None:
         # Phase 46 abandonment, corrected by Patch 11 section 6.
-        self._operation_in_flight = False
+        self._end_operation()
         if hasattr(self, "_fetch_watchdog"):
             self._fetch_watchdog.stop()
             
@@ -766,7 +814,7 @@ class MainWindow(QMainWindow):
             return
 
         self._pending_drawing_target = (audit_id, secondary)
-        self._operation_in_flight = True
+        self._begin(Operation.DRAWING_FETCH)
 
         from cockpit.ui.job_fetch_worker import DrawingFetchWorker
         self._fetch_thread = QThread()
@@ -838,7 +886,7 @@ class MainWindow(QMainWindow):
         self._drawing_thread = thread
         self._drawing_worker = worker
         self._drawing_dialog = dialog
-        self._operation_in_flight = True
+        self._begin(Operation.DRAWING_UPDATE)
         thread.start()
 
     def _finish_drawing_worker(self) -> None:
@@ -847,7 +895,7 @@ class MainWindow(QMainWindow):
         self._drawing_thread = None
         self._drawing_worker = None
         self._drawing_dialog = None
-        self._operation_in_flight = False
+        self._end_operation()
         if thread is not None:
             thread.quit()
             thread.wait()
@@ -905,7 +953,7 @@ class MainWindow(QMainWindow):
         self._drawing_thread = None
         self._drawing_worker = None
         self._drawing_dialog = None
-        self._operation_in_flight = False
+        self._end_operation()
         if thread is None or worker is None:
             return
         worker.stop.set()
@@ -976,8 +1024,192 @@ class MainWindow(QMainWindow):
         dialog.destroyed.connect(lambda obj=None, a=audit_id, s=serial: self._unregister_placements_report_dialog(a, s))
         dialog.show()
 
+    # --- Phase 55b section 3: the busy state -------------------------------
+
+    def _set_busy(self, busy: BusyState) -> None:
+        self._busy = busy
+        reason = self._entry_reason(Entry.NEW_AUDIT)
+        try:
+            self.picker.set_new_audit_unavailable(reason)
+            self.drop_area.setToolTip(reason or "")
+        except (AttributeError, RuntimeError):
+            pass
+        self.busy_changed.emit(busy)
+
+    def _begin(self, operation: Operation) -> None:
+        self._set_busy(self._busy.begin(operation))
+
+    def _end_operation(self) -> None:
+        self._set_busy(self._busy.end())
+
+    def _source_root_state_name(self) -> str | None:
+        if self._source_root_controller is None:
+            return None
+        state, _ = self._source_root_controller.source_root()
+        return state.name.lower()
+
+    def _entry_reason(self, entry: Entry, part_number: str | None = None, fetch_reason: str | None = None) -> str | None:
+        """Why an entry can't start now, or None (§3.2); the ⋯ menu and Settings ask it each time."""
+        return unavailable_reason(entry, self._busy, self._source_root_state_name(), part_number, fetch_reason)
+
+    def _document_update_hooks(self):
+        from cockpit.ui.widgets.settings_dialog import DocumentUpdateHooks
+        return DocumentUpdateHooks(
+            check_unavailable=lambda: self._entry_reason(Entry.CHECK_ALL),
+            reset_unavailable=lambda: self._entry_reason(Entry.RESET),
+            last_run_line=self._last_run_line,
+        )
+
+    def _last_run_line(self) -> str:
+        from cockpit.ui.document_update_settings import load_last_run
+        from cockpit.services.update_run import last_run_line
+        return last_run_line(load_last_run(self._settings))
+
+    # --- Phase 55b section 5: update runs -----------------------------------
+
+    def _run_services(self):
+        from cockpit.ui.document_update_run import RunServices
+        state, root_path = self._source_root_controller.source_root()
+        return RunServices(
+            repositories=self._bootstrapped.update_repositories,
+            runtime_calc=self._bootstrapped.runtime_calc_svc,
+            parsers=self._bootstrapped.parser_registry,
+            source_root=root_path,
+            storage_root=self._bootstrapped.config.file_storage_root,
+            vocabulary=self.current_requirements_vocabulary(),
+            requirements_refresh=lambda audit_ids: self._requirements_reconciler.trigger(),
+            orphan=self._orphan_check_worker,
+        )
+
+    def _start_update_run(self, keys, roles, confirm, operation: Operation, dialog_parent) -> bool:
+        from cockpit.services.update_run import RunRequest
+        from cockpit.ui.document_update_run import DocumentUpdateRun, new_run_id
+        if self._busy.operation is not None or not keys:
+            return False
+        request = RunRequest(frozenset(roles), confirm, new_run_id())
+        run = DocumentUpdateRun(request, keys, self._run_services(), dialog_parent=dialog_parent,
+                                watchdog_ms=self._update_watchdog_ms, parent=self)
+        run.finished.connect(self._on_update_run_finished)
+        self._update_run = run
+        self._begin(operation)
+        run.start()
+        return True
+
+    def _on_check_all_requested(self) -> None:
+        reason = self._entry_reason(Entry.CHECK_ALL)
+        parent = self._settings_dialog or self
+        if reason is not None:
+            QMessageBox.information(parent, "Check for document updates", reason)
+            return
+        from cockpit.services.document_updates import PROBED_ROLES, open_family_keys
+        from cockpit.services.update_run import ConfirmMode
+        keys = open_family_keys(self._bootstrapped.audit_repo)
+        if not keys:
+            QMessageBox.information(parent, "Check for document updates", "There are no open audits to check.")
+            return
+        self._last_run_from_entry = True
+        self._start_update_run(keys, PROBED_ROLES, ConfirmMode.PREVIEW, Operation.UPDATE_CHECK, parent)
+
+    def _on_check_family_requested(self, audit_id: int) -> None:
+        audit = self._bootstrapped.audit_repo.find_by_id(audit_id)
+        if audit is None:
+            return
+        reason = self._entry_reason(Entry.CHECK_FAMILY, audit.part_number)
+        if reason is not None:
+            QMessageBox.information(self, "Check for document updates", reason)
+            return
+        from cockpit.services.document_updates import PROBED_ROLES, FamilyKey
+        from cockpit.services.update_run import ConfirmMode
+        self._last_run_from_entry = True
+        self._start_update_run([FamilyKey(audit.part_number, audit.work_order_ref)], PROBED_ROLES,
+                               ConfirmMode.PREVIEW, Operation.UPDATE_CHECK, self)
+
+    def _on_update_run_finished(self, result) -> None:
+        from cockpit.services.update_run import ConfirmMode, placements_check_message
+        run = self._update_run
+        self._update_run = None
+        busy = self._busy.end()
+        if result.abandoned:
+            busy = busy.parked(True)
+        self._set_busy(busy)
+        if self._closing:
+            return
+        if result.request.confirm == ConfirmMode.PREVIEW and getattr(self, "_last_run_from_entry", False):
+            from cockpit.ui.document_update_settings import store_last_run
+            store_last_run(self._settings, result.summary)
+            self.document_update_run_finished.emit()
+        self._last_run_from_entry = False
+        if result.applied_audits:
+            self._refresh_after_update(result.applied_audits)
+        if result.request.confirm == ConfirmMode.AUTOMATIC and run is not None:
+            record = next(iter(result.records.values()), None)
+            message = placements_check_message(record, result.stop)
+            if message:
+                self.toast.show_toast(message, "")
+        if run is not None:
+            run.deleteLater()
+
+    def _refresh_after_update(self, applied_audits) -> None:
+        """§5.7: the list repopulated, keeping its scroll; an open audit that was applied reloaded."""
+        try:
+            self.picker.populate(self._audit_read_svc.list_open(), keep_scroll=True)
+        except Exception:
+            logger.exception("Refreshing the Audit List after an update failed")
+        current = self._audit_view.current_audit_id()
+        if current is not None and current in applied_audits:
+            try:
+                self._audit_view.flush_pending_writes()
+            except Exception:
+                logger.exception("Flushing the open audit before its reload failed")
+            self._audit_view.load(current)
+
+    def _orphan_check_worker(self, thread, worker) -> None:
+        """Phase 55 §7's parking: kept until it finishes; the checks wait, New audit doesn't (§5.6)."""
+        entry = (thread, worker)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda e=entry: self._on_check_worker_unparked(e))
+        self._orphaned_workers.append(entry)
+
+    def _on_check_worker_unparked(self, entry) -> None:
+        self._discard_orphan(entry)
+        if not self._closing:
+            self._set_busy(self._busy.parked(False))
+
+    # --- Phase 55b section 9: the check after ingest -------------------------
+
+    def _maybe_check_placements_after_ingest(self) -> None:
+        latch = self._placements_latch
+        if latch is None or latch.audit_id is None or not (latch.handler_done and latch.worker_done):
+            return
+        self._placements_latch = None
+        self.check_placements_after_ingest(latch.audit_id)
+
+    def check_placements_after_ingest(self, audit_id: int) -> None:
+        """Brings a newly ingested family its placements, through the update run (§9)."""
+        from cockpit.ingestion.roles import SourceRole
+        from cockpit.services.document_updates import FamilyKey
+        from cockpit.services.update_run import ConfirmMode
+        if self._closing or self._source_root_state_name() != "configured":
+            return
+        if self._busy.parked_check:
+            self.toast.show_toast(
+                "Placements not read: the share hasn't answered an earlier check. "
+                "Check for updates\u2026 will try again", "",
+            )
+            return
+        if self._busy.operation is not None:
+            return
+        audit = self._bootstrapped.audit_repo.find_by_id(audit_id)
+        if audit is None:
+            return
+        self._last_run_from_entry = False
+        self._start_update_run([FamilyKey(audit.part_number, audit.work_order_ref)],
+                               frozenset({SourceRole.PLACEMENTS}), ConfirmMode.AUTOMATIC,
+                               Operation.PLACEMENTS_CHECK, None)
+
     def _on_drawing_fetch_succeeded(self, outcome) -> None:
-        self._operation_in_flight = False
+        self._end_operation()
         self._fetch_watchdog.stop()
         self._fetch_thread.quit()
         self._fetch_thread.wait()
@@ -1038,7 +1270,7 @@ class MainWindow(QMainWindow):
         self._on_failed(FailurePayload.from_exception(err, "Fetch timed out"))
 
     def _on_fetch_failed(self, payload: FailurePayload) -> None:
-        self._operation_in_flight = False
+        self._end_operation()
         self._fetch_watchdog.stop()
         
         self._fetch_thread.quit()
@@ -1054,7 +1286,7 @@ class MainWindow(QMainWindow):
         self._on_failed(payload)
 
     def _on_fetch_succeeded(self, outcome) -> None:
-        self._operation_in_flight = False
+        self._end_operation()
         self._fetch_watchdog.stop()
         
         self._fetch_thread.quit()
@@ -1293,7 +1525,8 @@ class MainWindow(QMainWindow):
 
         self._pending_plan = plan
         
-        self._operation_in_flight = True
+        self._begin(Operation.INGEST)
+        self._placements_latch = _IngestLatch()
         self.drop_area.setEnabled(False)
         self.progress_view.reset()
         self.stacked.setCurrentWidget(self.progress_view)
@@ -1346,6 +1579,14 @@ class MainWindow(QMainWindow):
             pass
 
     def _on_ingest_succeeded(self, summary: AuditSummary) -> None:
+        if self._placements_latch is not None:
+            self._placements_latch.audit_id = summary.audit_id
+        self._on_ingest_succeeded_body(summary)
+        if self._placements_latch is not None:
+            self._placements_latch.handler_done = True
+        self._maybe_check_placements_after_ingest()
+
+    def _on_ingest_succeeded_body(self, summary: AuditSummary) -> None:
         # Before load(), which hands the BOM lines to whatever segment
         # bind_library created. Without this a freshly ingested job showed no
         # Library segment while the same job reopened from the picker did.
@@ -1432,7 +1673,12 @@ class MainWindow(QMainWindow):
         self.toast.show_cancel()
 
     def _on_worker_finished(self) -> None:
-        self._operation_in_flight = False
+        self._end_operation()
+        latch = self._placements_latch
+        if latch is not None:
+            latch.worker_done = True
+            if latch.audit_id is None:
+                self._placements_latch = None
         self._worker = None
         self._thread = None
         self.drop_area.setEnabled(True)
@@ -1443,13 +1689,30 @@ class MainWindow(QMainWindow):
         # Phase 54 section 7.2: scans the ingest's transaction kept out are
         # written now, rather than at the next idle pass.
         self._requirements_reconciler.resume_if_deferred()
+        self._maybe_check_placements_after_ingest()
 
     def closeEvent(self, event: QCloseEvent) -> None:
-        # Phase 57 section 9.2: a drawing update is treated as Phase 55's update worker: nothing of it
-        # is written until apply, so the close ends it without asking.
+        if self._closed:
+            event.accept()
+            return
+        # Phase 55b §3.3: only an ingest asks. A fetch, a drawing update or a check is ended without
+        # asking, since none of them writes before its apply on the UI thread. _closing is set first,
+        # so the handlers those endings run skip their refreshes and the last-run line.
+        if self._busy.operation != Operation.INGEST:
+            self._closing = True
+        if self._busy.operation in (Operation.JOB_FETCH, Operation.DRAWING_FETCH):
+            self._abandon_fetch_worker()
+            fetch_dialog = getattr(self, "_fetch_dialog", None)
+            if fetch_dialog is not None:
+                try:
+                    fetch_dialog.reject()
+                except RuntimeError:
+                    pass
         if self._drawing_worker is not None:
             self._abandon_drawing_worker()
-        if self._operation_in_flight:
+        if self._update_run is not None and self._update_run.active:
+            self._update_run.shutdown_for_close()
+        if self._busy.operation == Operation.INGEST:
             event.ignore()
             confirmed = QMessageBox.question(
                 self, 
@@ -1462,6 +1725,12 @@ class MainWindow(QMainWindow):
                 if self._worker:
                     self._worker.request_cancel()
         else:
+            self._closing = True
+            if self._settings_dialog is not None:
+                try:
+                    self._settings_dialog.reject()
+                except RuntimeError:
+                    pass
             for serial, dialog in list(self._cleaning_report_dialogs.values()):
                 dialog.close()
             for serial, dialog in list(self._second_ops_review_dialogs.values()):
@@ -1483,6 +1752,7 @@ class MainWindow(QMainWindow):
             from cockpit.persistence.connection import run_idle_maintenance
             run_idle_maintenance(self._bootstrapped.conn)
             self._bootstrapped.conn.close()
+            self._closed = True
             self._hand_orphans_to_cpp()
             event.accept()
 

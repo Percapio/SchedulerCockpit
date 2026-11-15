@@ -32,6 +32,8 @@ class AuditActionsBar(QWidget):
     # reports back to the dialog. This widget holds no threading code.
     drawing_drop_requested = pyqtSignal(object, object)  # (AddDrawingDialog, pathlib.Path)
     placements_report_requested = pyqtSignal(int)
+    # Phase 55b §8.2: a PREVIEW check of this audit's family; MainWindow runs it.
+    document_update_check_requested = pyqtSignal(int)
     # An audit's own scalar fields changed and nothing else did. No source
     # file, BOM row or PDF was touched, so no consumer may rebuild the BOM
     # panel or request a canvas render.
@@ -58,6 +60,8 @@ class AuditActionsBar(QWidget):
         self._source_root_controller = source_root_controller
         self._session: AuditSession | None = None
         self._vocabulary_provider = None
+        # Phase 55b §3.2: (entry, part number, Fetch's own reason) -> why it can't start, or None.
+        self._entry_reason = None
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -123,10 +127,20 @@ class AuditActionsBar(QWidget):
             return f"{view.part_number} is not a job number; use Manual."
         return None
 
+    def set_entry_reason_provider(self, provider) -> None:
+        self._entry_reason = provider
+
+    def _reason(self, entry_name: str, view, fetch_reason: str | None = None) -> str | None:
+        if self._entry_reason is None:
+            return fetch_reason
+        from cockpit.ui.busy_state import Entry
+        return self._entry_reason(Entry(entry_name), getattr(view, "part_number", None), fetch_reason)
+
     def _populate_role_menu(self, menu: QMenu, secondary: bool, view) -> None:
         menu.clear()
+        menu.setToolTipsVisible(True)
         fetch_action = menu.addAction("Fetch")
-        reason = self._fetch_unavailable_reason(view)
+        reason = self._reason("drawing_fetch", view, self._fetch_unavailable_reason(view))
         if reason is None:
             fetch_action.triggered.connect(
                 lambda _checked=False, sec=secondary: self.drawing_fetch_requested.emit(
@@ -138,7 +152,11 @@ class AuditActionsBar(QWidget):
             fetch_action.setToolTip(reason)
 
         manual_action = menu.addAction("Manual")
-        if secondary:
+        manual_reason = self._reason("drawing_manual", view)
+        if manual_reason is not None:
+            manual_action.setEnabled(False)
+            manual_action.setToolTip(manual_reason)
+        elif secondary:
             manual_action.triggered.connect(self._on_add_secondary_drawing_clicked)
         else:
             manual_action.triggered.connect(self._on_add_drawing_clicked)
@@ -200,6 +218,20 @@ class AuditActionsBar(QWidget):
         placements_report_action.triggered.connect(
             lambda _checked=False, audit_id=view.audit_id: self.placements_report_requested.emit(audit_id)
         )
+
+        # Phase 55b §8.2: after the two reports, blocked with its reason while it can't start.
+        self.actions_menu.setToolTipsVisible(True)
+        check_action = self.actions_menu.addAction("Check for document updates…")
+        check_reason = self._reason("check_family", view)
+        if check_reason is None and self._entry_reason is None:
+            check_reason = "Not available here."
+        if check_reason is not None:
+            check_action.setEnabled(False)
+            check_action.setToolTip(check_reason)
+        else:
+            check_action.triggered.connect(
+                lambda _checked=False, audit_id=view.audit_id: self.document_update_check_requested.emit(audit_id)
+            )
         
         ops_action = self.actions_menu.addAction("OPS per board…")
         ops_action.triggered.connect(self._on_ops_per_board_clicked)

@@ -31,7 +31,6 @@ from cockpit.ingestion.gatekeeper import ACCEPTED_EXTENSIONS
 from cockpit.ingestion.locator import (
     assert_within_root,
     choose_current_version,
-    resolve_job_directory,
 )
 from cockpit.ingestion.parsers import audit_bom
 from cockpit.ingestion.parsers.results import BomItem, BomResult, EcoResult
@@ -60,7 +59,16 @@ from cockpit.persistence.types import (
     SourceFileDraft,
     ThtChecklistItemDraft,
 )
+from cockpit.persistence.clock import utcnow
 from cockpit.protocols import ParserRegistry
+from cockpit.services.share_access import (
+    FolderMissing,
+    JobFolderIndex,
+    ShareCallGuard,
+    ShareEntry,
+    guarded,
+    list_share_folder,
+)
 from cockpit.services.storage_reaper import StorageReaper
 
 logger = logging.getLogger(__name__)
@@ -227,6 +235,19 @@ class HeldState:
 
 
 @dataclass(frozen=True)
+class HeldRequirements:
+    """Phase 55b §6: what the requirements preview needs that only the database holds.
+
+    summary is the reference member's stored scan, absent before Phase 54 has scanned it; ticks holds
+    every member's X-ray tick; vocabulary is the run's.
+    """
+
+    summary: Any
+    ticks: Mapping[int, Any]
+    vocabulary: Any
+
+
+@dataclass(frozen=True)
 class FamilySnapshot:
     key: FamilyKey
     members: tuple[FamilyMember, ...]
@@ -236,6 +257,8 @@ class FamilySnapshot:
     held: HeldState
     # Phase 57 §8.1: each member's recorded .bmb rejections and refusals, latest first.
     rejections: Mapping[int, tuple[PlacementRejection, ...]] = field(default_factory=dict)
+    # Phase 55b §6: present iff snapshot_family was given a vocabulary.
+    requirements: HeldRequirements | None = None
 
     @property
     def family(self) -> tuple[int, ...]:
@@ -430,83 +453,95 @@ def decide_role(
 def _job_root(
     snapshot: FamilySnapshot,
     source_root: pathlib.Path,
+    job_index: JobFolderIndex | None = None,
+    share_call: ShareCallGuard | None = None,
 ) -> pathlib.Path | Missing | ProbeFailure:
-    """The family's job folder on the share, as ingest would find it, checked inside source_root."""
+    """The family's job folder on the share, as ingest would find it, checked inside source_root.
+
+    Phase 55b §4.3: found through a JobFolderIndex, so a parent folder is read once per run, and
+    every share call goes through share_call.
+    """
+    guard = guarded(share_call)
+    index = job_index or JobFolderIndex(source_root, guard)
     try:
-        job_dir = resolve_job_directory(snapshot.key.part_number, source_root)
-        if not job_dir.is_dir():
-            return Missing(job_dir)
+        found = index.find(snapshot.key.part_number)
     except OSError as error:
         return ShareUnreachable(_describe(error))
+    if isinstance(found, FolderMissing):
+        return Missing(found.folder)
     try:
-        assert_within_root(job_dir, source_root)
+        guard(lambda: assert_within_root(found, source_root))
     except JobDirectoryEscapesRoot:
-        return EscapesRoot(job_dir)
-    return job_dir
+        return EscapesRoot(found)
+    return found
 
 
 def _is_first_article(snapshot: FamilySnapshot) -> bool:
     return (snapshot.article_revision or FIRST_ARTICLE).strip().lower() == FIRST_ARTICLE.lower()
 
 
-def _family_folder(
+def _article_folder(
     snapshot: FamilySnapshot,
+    job_dir: pathlib.Path,
     source_root: pathlib.Path,
+    guard: ShareCallGuard,
 ) -> pathlib.Path | Missing | ProbeFailure:
-    """The folder the family was first ingested from, as ingest would find it."""
-    job_dir = _job_root(snapshot, source_root)
-    if not isinstance(job_dir, pathlib.Path):
-        return job_dir
-
+    """A later article's subfolder of the job folder, from one guarded listing."""
     article = (snapshot.article_revision or FIRST_ARTICLE).strip().lower()
-    if _is_first_article(snapshot):
-        return job_dir
-
     try:
-        matches = sorted(
-            (
-                child for child in job_dir.iterdir()
-                if child.is_dir() and (article_designation(child.name) or "") == article
-            ),
-            key=lambda p: p.name,
-        )
+        listing = guard(lambda: list_share_folder(job_dir))
     except OSError as error:
         return ShareUnreachable(_describe(error))
+    if isinstance(listing, FolderMissing):
+        return Missing(job_dir)
+    matches = sorted(
+        (entry.path for entry in listing if entry.is_dir and (article_designation(entry.name) or "") == article),
+        key=lambda p: p.name,
+    )
     if not matches:
         return Missing(job_dir)
     if len(matches) > 1:
         return ArticleFolderAmbiguous(tuple(matches))
     try:
-        assert_within_root(matches[0], source_root)
+        guard(lambda: assert_within_root(matches[0], source_root))
     except JobDirectoryEscapesRoot:
         return EscapesRoot(matches[0])
     return matches[0]
 
 
-def _placement_candidates(
-    job_root: pathlib.Path,
-    entries: Sequence[pathlib.Path] | None,
-) -> tuple[CandidateFile, ...] | ShareReadFailure:
-    """The job root's .bmb files (Phase 57 §8.2), from the family folder's listing when it is the job root."""
-    try:
-        listing = list(entries) if entries is not None else list(job_root.iterdir())
-    except OSError as error:
-        return ShareReadFailure(job_root, _describe(error))
-    found: list[CandidateFile] = []
+def _family_folder(
+    snapshot: FamilySnapshot,
+    source_root: pathlib.Path,
+    job_index: JobFolderIndex | None = None,
+    share_call: ShareCallGuard | None = None,
+) -> pathlib.Path | Missing | ProbeFailure:
+    """The folder the family was first ingested from, as ingest would find it."""
+    guard = guarded(share_call)
+    job_dir = _job_root(snapshot, source_root, job_index, guard)
+    if not isinstance(job_dir, pathlib.Path) or _is_first_article(snapshot):
+        return job_dir
+    return _article_folder(snapshot, job_dir, source_root, guard)
+
+
+def _candidate_files(
+    listing: Sequence[ShareEntry],
+    wanted: Sequence[SourceRole],
+) -> dict[SourceRole, list[CandidateFile]] | CandidateUnreadable:
+    """The listing's files for each wanted role, with the size and time the listing brought."""
+    found: dict[SourceRole, list[CandidateFile]] = {role: [] for role in wanted}
     for entry in listing:
-        if role_of(entry.name) != SourceRole.PLACEMENTS:
+        role = role_of(entry.name)
+        if role not in found:
             continue
-        try:
-            if not entry.is_file():
-                continue
-            stat = entry.stat()
-        except OSError as error:
-            return ShareReadFailure(entry, _describe(error))
-        found.append(CandidateFile(
-            path=entry, name=entry.name, size=stat.st_size,
-            modified_at_ns=stat.st_mtime_ns, tag=version_tag(entry.name),
+        if entry.stat_error is not None:
+            return CandidateUnreadable(entry.path, entry.stat_error)
+        if not entry.is_file:
+            continue
+        found[role].append(CandidateFile(
+            path=entry.path, name=entry.name, size=entry.size,
+            modified_at_ns=entry.modified_ns, tag=version_tag(entry.name),
         ))
-    return tuple(sorted(found, key=lambda c: c.name))
+    return found
 
 
 def probe_family(
@@ -514,6 +549,8 @@ def probe_family(
     source_root: pathlib.Path,
     read_hash: HashReader = read_share_hash,
     roles: frozenset[SourceRole] = PROBED_ROLES,
+    share_call: ShareCallGuard | None = None,
+    job_index: JobFolderIndex | None = None,
 ) -> FamilyProbe | ProbeFailure:
     """Reads the share for one family without writing anything anywhere.
 
@@ -526,44 +563,51 @@ def probe_family(
           only. Phase 57 §8.2: when roles names PLACEMENTS, the job root's
           .bmb files are listed (one more listing for an article's folder) and
           decided by decide_placements; a .bmb that can't be listed, stat'ed or
-          read is the placements status, never the family's failure
+          read is the placements status, never the family's failure.
+          Phase 55b §4: every share call goes through share_call: the parent
+          folder's listing (once per run, through job_index), each folder read
+          (one call that brings sizes and times), each containment check and
+          each hash; a probe of placements alone resolves only the job root
     """
-    folder = _family_folder(snapshot, source_root)
-    if isinstance(folder, (ShareUnreachable, EscapesRoot, ArticleFolderAmbiguous)):
-        return folder
-
+    guard = guarded(share_call)
+    index = job_index or JobFolderIndex(source_root, guard)
     probed = tuple(role for role in UPDATED_ROLES if role in roles)
+
+    job_root = _job_root(snapshot, source_root, index, guard)
+    if isinstance(job_root, (ShareUnreachable, EscapesRoot)):
+        return job_root
+    folder: pathlib.Path | Missing | ProbeFailure = job_root
+    if probed and isinstance(job_root, pathlib.Path) and not _is_first_article(snapshot):
+        folder = _article_folder(snapshot, job_root, source_root, guard)
+        if isinstance(folder, (ShareUnreachable, EscapesRoot, ArticleFolderAmbiguous)):
+            return folder
+
     candidates_by_role: dict[SourceRole, list[CandidateFile]] = {role: [] for role in probed}
-    entries: list[pathlib.Path] | None = None
+    listing: list[ShareEntry] | None = None
     if isinstance(folder, pathlib.Path):
+        folder_path = folder
         try:
-            entries = list(folder.iterdir())
+            read = guard(lambda: list_share_folder(folder_path))
         except OSError as error:
             return ShareUnreachable(_describe(error))
-        for entry in entries:
-            role = role_of(entry.name)
-            if role not in candidates_by_role:
-                continue
-            try:
-                if not entry.is_file():
-                    continue
-                stat = entry.stat()
-            except OSError as error:
-                return CandidateUnreadable(entry, _describe(error))
-            candidates_by_role[role].append(CandidateFile(
-                path=entry, name=entry.name, size=stat.st_size,
-                modified_at_ns=stat.st_mtime_ns, tag=version_tag(entry.name),
-            ))
+        if isinstance(read, FolderMissing):
+            folder = Missing(folder_path)
+        else:
+            listing = read
+            found = _candidate_files(listing, probed)
+            if isinstance(found, CandidateUnreadable):
+                return found
+            candidates_by_role = found
 
     escaped: list[pathlib.Path] = []
 
     def contained_read(candidate: CandidateFile) -> str | ShareReadFailure:
         try:
-            assert_within_root(candidate.path, source_root)
+            guard(lambda: assert_within_root(candidate.path, source_root))
         except JobDirectoryEscapesRoot:
             escaped.append(candidate.path)
             return ShareReadFailure(candidate.path, "ESCAPES_ROOT")
-        return read_hash(candidate)
+        return guard(lambda: read_hash(candidate))
 
     statuses: dict[SourceRole, FamilyDocumentStatus] = {}
     for role in probed:
@@ -591,7 +635,9 @@ def probe_family(
     placements: Any = None
     placement_candidates: tuple[CandidateFile, ...] = ()
     if SourceRole.PLACEMENTS in roles:
-        placements, placement_candidates = _probe_placements(snapshot, source_root, folder, entries, read_hash)
+        placements, placement_candidates = _probe_placements(
+            snapshot, source_root, job_root, folder, listing, read_hash, guard,
+        )
 
     return FamilyProbe(
         snapshot=snapshot,
@@ -605,36 +651,40 @@ def probe_family(
 def _probe_placements(
     snapshot: FamilySnapshot,
     source_root: pathlib.Path,
-    folder: pathlib.Path | Missing,
-    entries: list[pathlib.Path] | None,
+    job_root: pathlib.Path | Missing,
+    folder: pathlib.Path | Missing | ProbeFailure,
+    listing: list[ShareEntry] | None,
     read_hash: HashReader,
+    guard: ShareCallGuard,
 ) -> tuple[Any, tuple[CandidateFile, ...]]:
     """Phase 57 §8.2: the job root's .bmb, decided member by member; a failure stays placements'."""
     from cockpit.services import placement_updates
 
-    if _is_first_article(snapshot):
-        job_root: pathlib.Path | Missing | ProbeFailure = folder
-        listing = entries
-    else:
-        job_root = _job_root(snapshot, source_root)
-        listing = None
-    if isinstance(job_root, Missing):
-        return placement_updates.NoBmb(), ()
-    if isinstance(job_root, EscapesRoot):
-        return ShareReadFailure(job_root.path, "ESCAPES_ROOT"), ()
     if not isinstance(job_root, pathlib.Path):
-        return ShareReadFailure(source_root, getattr(job_root, "cause", type(job_root).__name__)), ()
+        return placement_updates.NoBmb(), ()
+    if listing is not None and folder == job_root:
+        job_listing = listing
+    else:
+        root = job_root
+        try:
+            read = guard(lambda: list_share_folder(root))
+        except OSError as error:
+            return ShareReadFailure(job_root, _describe(error)), ()
+        if isinstance(read, FolderMissing):
+            return placement_updates.NoBmb(), ()
+        job_listing = read
 
-    candidates = _placement_candidates(job_root, listing)
-    if isinstance(candidates, ShareReadFailure):
-        return candidates, ()
+    found = _candidate_files(job_listing, (SourceRole.PLACEMENTS,))
+    if isinstance(found, CandidateUnreadable):
+        return ShareReadFailure(found.path, found.cause), ()
+    candidates = tuple(sorted(found[SourceRole.PLACEMENTS], key=lambda c: c.name))
 
     def contained_read(candidate: CandidateFile) -> str | ShareReadFailure:
         try:
-            assert_within_root(candidate.path, source_root)
+            guard(lambda: assert_within_root(candidate.path, source_root))
         except JobDirectoryEscapesRoot:
             return ShareReadFailure(candidate.path, "ESCAPES_ROOT")
-        return read_hash(candidate)
+        return guard(lambda: read_hash(candidate))
 
     return placement_updates.decide_placements(candidates, snapshot, contained_read), candidates
 
@@ -886,16 +936,18 @@ def _pick_update(
     probe: FamilyProbe,
     source_root: pathlib.Path,
     read_hash: HashReader,
+    share_call: ShareCallGuard | None = None,
 ) -> RoleUpdate | DocumentRejected | None:
     """Turns your pick for a NeedsChoice role into an update, re-checking the path."""
+    guard = guarded(share_call)
     candidate = next((c for c in status.candidates if c.path == pick), None)
     if candidate is None:
         return DocumentRejected(role, "PICK_NOT_A_CANDIDATE")
     try:
-        assert_within_root(candidate.path, source_root)
+        guard(lambda: assert_within_root(candidate.path, source_root))
     except JobDirectoryEscapesRoot:
         return DocumentRejected(role, "ESCAPES_ROOT")
-    candidate_hash = read_hash(candidate)
+    candidate_hash = guard(lambda: read_hash(candidate))
     if isinstance(candidate_hash, ShareReadFailure):
         return DocumentRejected(role, candidate_hash.cause)
     snapshot = probe.snapshot
@@ -915,8 +967,12 @@ def build_preview(
     source_root: pathlib.Path,
     requirements: RequirementPreviewer | None = None,
     read_hash: HashReader = read_share_hash,
+    share_call: ShareCallGuard | None = None,
 ) -> FamilyPreview:
     """Dry-runs one family's candidates against what it holds.
+
+    Phase 55b §4.4: each parse of a candidate on the share, each containment check and each hash is
+    one call through share_call.
 
     pre:  runs on the update worker
     post: each role that is Changed, OlderOnShare, or NeedsChoice with a pick in
@@ -926,6 +982,7 @@ def build_preview(
           without a pick is in awaiting_choice and has no diff; requirements is
           filled only when a previewer is given; nothing is copied or written
     """
+    guard = guarded(share_call)
     snapshot = probe.snapshot
     updates: dict[SourceRole, RoleUpdate] = {}
     rejected: dict[SourceRole, Union[DocumentRejected, IdentityMismatch]] = {}
@@ -942,7 +999,7 @@ def build_preview(
             if pick is None:
                 awaiting.append(role)
                 continue
-            picked = _pick_update(role, status, pick, probe, source_root, read_hash)
+            picked = _pick_update(role, status, pick, probe, source_root, read_hash, guard)
             if isinstance(picked, DocumentRejected):
                 rejected[role] = picked
             elif picked is not None:
@@ -951,17 +1008,20 @@ def build_preview(
     bom_diff = None
     traveler_diff = None
     if SourceRole.BOM in updates:
-        reading = _read_bom(updates[SourceRole.BOM].candidate.path, parsers, snapshot.key)
+        bom_path = updates[SourceRole.BOM].candidate.path
+        reading = guard(lambda: _read_bom(bom_path, parsers, snapshot.key))
         if isinstance(reading, (DocumentRejected, IdentityMismatch)):
             rejected[SourceRole.BOM] = reading
         else:
             bom_diff = diff_bom(snapshot.held, reading)
     if SourceRole.NOTES in updates:
-        reading = _read_eco(updates[SourceRole.NOTES].candidate.path, parsers, snapshot.key)
+        eco_path = updates[SourceRole.NOTES].candidate.path
+        reading = guard(lambda: _read_eco(eco_path, parsers, snapshot.key))
         if isinstance(reading, (DocumentRejected, IdentityMismatch)):
             rejected[SourceRole.NOTES] = reading
     if SourceRole.TRAVELER in updates:
-        reading = _read_traveler(updates[SourceRole.TRAVELER].candidate.path, parsers, snapshot.key)
+        traveler_path = updates[SourceRole.TRAVELER].candidate.path
+        reading = guard(lambda: _read_traveler(traveler_path, parsers, snapshot.key))
         if isinstance(reading, (DocumentRejected, IdentityMismatch)):
             rejected[SourceRole.TRAVELER] = reading
         else:
@@ -973,7 +1033,7 @@ def build_preview(
     for role in rejected:
         updates.pop(role, None)
 
-    placements_unavailable = _placements_update(probe, choices, source_root, read_hash, updates)
+    placements_unavailable = _placements_update(probe, choices, source_root, read_hash, updates, guard)
 
     document_updates = {role: u for role, u in updates.items() if role in UPDATED_ROLES}
     requirement_diff = None
@@ -1004,6 +1064,7 @@ def _placements_update(
     source_root: pathlib.Path,
     read_hash: HashReader,
     updates: dict[SourceRole, RoleUpdate],
+    share_call: ShareCallGuard | None = None,
 ) -> str | None:
     """Phase 57 §8.3: the PLACEMENTS update, with no parse; returns why none is offered, if it failed.
 
@@ -1025,7 +1086,9 @@ def _placements_update(
         pick = choices.get(SourceRole.PLACEMENTS)
         if pick is None:
             return None
-        picked = placement_updates.pick_placements(status, pick, probe.snapshot, source_root, read_hash)
+        picked = placement_updates.pick_placements(
+            status, pick, probe.snapshot, source_root, read_hash, share_call=share_call,
+        )
         if isinstance(picked, RoleUpdate):
             updates[SourceRole.PLACEMENTS] = picked
             return None
@@ -1050,6 +1113,8 @@ class PdfCoordinateChange:
     remove_ref_des: frozenset[str]
     add: tuple[PdfComponentCoordinate, ...]
     incomplete_reason: str | None
+    # Phase 55b §10: the drawing row's hash, checked with its id, since SQLite reuses a deleted row's id.
+    pdf_file_hash: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1124,15 +1189,18 @@ def _stage(
     stop: threading.Event,
     run_id: str,
     copy_file: CopyFile,
+    share_call: ShareCallGuard | None = None,
 ) -> StagedDocument | FamilyUpdateFailure:
     """Copies one candidate into managed storage, never leaving a partial file at its destination.
 
     post: on a StagedDocument the file at stored_path hashes to the candidate's
           hash; on any failure no temporary file of this run remains, and
-          nothing was moved into place
+          nothing was moved into place; the containment check and the copy are
+          each one call through share_call (Phase 55b §4.4)
     """
+    guard = guarded(share_call)
     try:
-        assert_within_root(update.candidate.path, source_root)
+        guard(lambda: assert_within_root(update.candidate.path, source_root))
     except JobDirectoryEscapesRoot:
         return DocumentRejected(update.role, "ESCAPES_ROOT")
 
@@ -1150,7 +1218,7 @@ def _stage(
         return Cancelled()
     partial = destination.with_name(f"{destination.name}.{run_id}{PARTIAL_COPY_SUFFIX}")
     try:
-        copy_file(update.candidate.path, partial)
+        guard(lambda: copy_file(update.candidate.path, partial))
     except OSError as error:
         _remove_quietly(partial)
         return StorageFailed(_describe(error))
@@ -1234,6 +1302,7 @@ def _coordinate_changes(
             causes.append(cause)
         changes[audit_id] = PdfCoordinateChange(
             pdf_source_file_id=drawing.source_file_id,
+            pdf_file_hash=drawing.file_hash,
             remove_ref_des=removed,
             add=tuple(c for designator in sorted(added) for c in coordinates.get(designator, [])),
             incomplete_reason=cause if added else None,
@@ -1301,7 +1370,7 @@ def prepare_family_update(
             continue
         if stop.is_set():
             return failed(Cancelled())
-        outcome = _stage(update, destination_dir, source_root, stop, run_id, copy_file)
+        outcome = _stage(update, destination_dir, source_root, stop, run_id, copy_file, share_call)
         if not isinstance(outcome, StagedDocument):
             return failed(outcome)
         staged.append(outcome)
@@ -1435,6 +1504,8 @@ def _family_changed(plan: FamilyUpdatePlan, repositories: FamilyUpdateRepositori
         row = repositories.source_files.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
         if row is None or row.id != change.pdf_source_file_id:
             return True
+        if change.pdf_file_hash is not None and row.file_hash != change.pdf_file_hash:
+            return True
     # Phase 57 §8.6: the Placements, drawing and BOM rows placements work was prepared from, by id
     # and hash, since SQLite reuses a deleted row's id.
     for audit_id, basis in plan.expected_placements.items():
@@ -1519,8 +1590,12 @@ def apply_family_update(
     repositories: FamilyUpdateRepositories,
     runtime_calc: Any,
     requirements_refresh: RequirementsRefresh | None = None,
+    cleanup: "DeferredCleanup | None" = None,
 ) -> FamilyUpdated | FamilyUpdateFailure:
     """Applies a prepared plan to the whole family in one savepoint.
+
+    Phase 55b §5.4: with a cleanup, every discard and reap this call would make is collected in it
+    instead, for the run to flush once its worker has stopped preparing; reaped_paths is then empty.
 
     pre:  called on the thread that owns the connection
     post: on FamilyUpdated, for every member a role names: its source_files row
@@ -1538,9 +1613,15 @@ def apply_family_update(
     """
     from cockpit.services import placement_updates
 
+    def discard(copies_to_discard: Sequence[StagedDocument]) -> None:
+        if cleanup is not None:
+            cleanup.discard(copies_to_discard)
+        else:
+            discard_copies(copies_to_discard, repositories.source_files)
+
     copies = plan.copies_moved()
     if _family_changed(plan, repositories):
-        discard_copies(copies, repositories.source_files)
+        discard(copies)
         return FamilyChangedSincePreview(plan.family)
 
     superseded: list[SourceFile] = []
@@ -1565,23 +1646,17 @@ def apply_family_update(
         conn.execute("ROLLBACK TO SAVEPOINT update_family")
         conn.execute("RELEASE SAVEPOINT update_family")
         logger.warning("Document update rolled back for audits %s: %s", list(plan.family), _describe(error))
-        discard_copies(copies, repositories.source_files)
+        discard(copies)
         return WriteFailed(_describe(error))
 
     placements = placement_updates.apply_family_placements(plan, repositories, runtime_calc)
-    discard_copies(tuple(extract.as_staged_document() for extract in plan.extracts_moved), repositories.source_files)
+    discard(tuple(extract.as_staged_document() for extract in plan.extracts_moved))
 
     reaped: tuple[pathlib.Path, ...] = ()
-    try:
-        report = StorageReaper(repositories.source_files).reap(superseded)
-        reaped = tuple(report.deleted_paths)
-        if report.failed_paths:
-            logger.warning(
-                "%d superseded file(s) could not be removed; the startup sweep will retry",
-                len(report.failed_paths),
-            )
-    except Exception as error:
-        logger.warning("Reaping superseded files failed: %s", _describe(error))
+    if cleanup is not None:
+        cleanup.reap(superseded)
+    else:
+        reaped = _reap(superseded, repositories.source_files)
 
     if requirements_refresh is not None:
         try:
@@ -1605,6 +1680,60 @@ def apply_family_update(
         quantity_not_applied=quantity_not_applied,
         placements=placements,
     )
+
+
+def _reap(superseded: Sequence[SourceFile], source_files: SourceFileRepository) -> tuple[pathlib.Path, ...]:
+    """Reaps superseded files whose reference_count is 0; a failure is logged and left to the sweep."""
+    try:
+        report = StorageReaper(source_files).reap(list(superseded))
+    except Exception as error:
+        logger.warning("Reaping superseded files failed: %s", _describe(error))
+        return ()
+    if report.failed_paths:
+        logger.warning(
+            "%d superseded file(s) could not be removed; the startup sweep will retry",
+            len(report.failed_paths),
+        )
+    return tuple(report.deleted_paths)
+
+
+class DeferredCleanup:
+    """What a run would unlink, held until its worker has stopped preparing (Phase 55b §5.4, D1).
+
+    The UI thread applies one family while the worker prepares the next. Families sharing a part
+    number share a storage folder, so an unlink at once could remove a file the next prepare has just
+    found in place and decided to reuse. reference_count still guards every unlink when it runs.
+    """
+
+    def __init__(self) -> None:
+        self._copies: list[StagedDocument] = []
+        self._superseded: list[SourceFile] = []
+
+    def discard(self, copies: Sequence[StagedDocument]) -> None:
+        self._copies.extend(copies)
+
+    def reap(self, superseded: Sequence[SourceFile]) -> None:
+        self._superseded.extend(superseded)
+
+    @property
+    def pending(self) -> int:
+        return len(self._copies) + len(self._superseded)
+
+    def flush(self, source_files: SourceFileRepository) -> tuple[pathlib.Path, ...]:
+        """Runs every collected unlink, guarded by reference_count; returns the paths removed.
+
+        pre:  UI thread; the run's worker has stopped preparing
+        """
+        copies, self._copies = self._copies, []
+        superseded, self._superseded = self._superseded, []
+        seen: set[pathlib.Path] = set()
+        unique = []
+        for row in superseded:
+            if row.local_storage_path not in seen:
+                seen.add(row.local_storage_path)
+                unique.append(row)
+        removed = discard_copies(copies, source_files)
+        return removed + _reap(unique, source_files)
 
 
 # ---------- reading the database, on the UI thread ----------
@@ -1635,14 +1764,20 @@ def _stored_document(role: SourceRole, row: SourceFile) -> StoredDocument:
     )
 
 
-def snapshot_family(key: FamilyKey, repositories: FamilyUpdateRepositories) -> FamilySnapshot | None:
+def snapshot_family(
+    key: FamilyKey,
+    repositories: FamilyUpdateRepositories,
+    vocabulary: Any = None,
+) -> FamilySnapshot | None:
     """Reads, as values, everything the worker needs about one family.
 
     pre:  UI thread
     post: None when the family no longer exists; otherwise every member's
           stored documents (the drawing and the Placements extract included,
           for section 5.2 and Phase 57 §8), its designators, its recorded .bmb
-          rejections, and the reference member's rows the preview diffs against
+          rejections, and the reference member's rows the preview diffs against;
+          with a vocabulary, also the held requirements (Phase 55b §6): the
+          reference member's stored scan and every member's X-ray tick
     """
     family = repositories.audits.list_family(key.part_number, key.work_order_ref)
     if not family:
@@ -1682,11 +1817,118 @@ def snapshot_family(key: FamilyKey, repositories: FamilyUpdateRepositories) -> F
         traveler_metadata=reference.traveler_metadata,
         ops_per_board_min=reference.ops_per_board_min,
     )
+    requirements = None
+    if vocabulary is not None:
+        requirements = _held_requirements(reference_id, family, repositories, vocabulary)
     return FamilySnapshot(
         key=key, members=members, reference_member=reference_id,
         article_revision=reference.article_revision or FIRST_ARTICLE,
-        stored=stored, held=held, rejections=rejections,
+        stored=stored, held=held, rejections=rejections, requirements=requirements,
     )
+
+
+def _held_requirements(
+    reference_id: int,
+    family: Sequence[ActiveAudit],
+    repositories: FamilyUpdateRepositories,
+    vocabulary: Any,
+) -> HeldRequirements:
+    """The reference member's stored scan, and every member's tick (Phase 55b §6)."""
+    from cockpit.persistence.repositories.requirements import AuditRequirementsRepository
+    from cockpit.services.requirements import XrayTick
+
+    try:
+        summary = AuditRequirementsRepository(repositories.conn).find_summary(reference_id)
+    except sqlite3.Error:
+        summary = None
+    ticks = {
+        audit.id: XrayTick(
+            is_done=bool(audit.xray_images_done),
+            task_at_tick=audit.xray_images_done_task,
+            ticked_at=audit.xray_images_done_at,
+        )
+        for audit in family
+    }
+    return HeldRequirements(summary=summary, ticks=ticks, vocabulary=vocabulary)
+
+
+def requirement_previewer(share_call: ShareCallGuard | None = None, parsers: Any = None) -> RequirementPreviewer:
+    """Builds the previewer a run hands build_preview (Phase 55b §6).
+
+    post: the previewer returns None when probe.snapshot.requirements is absent; otherwise after is
+          decide_requirements over the ECO's and BOM's units, each from its candidate when updated,
+          else from the reference member's stored copy, and the traveler's wash cell, from the
+          candidate traveler when updated, else from the held metadata; a share read is one call
+          through share_call; a read that raises, and a role the member doesn't store, is
+          Failure(DocumentUnreadable), so its requirements read "?"; a candidate traveler that can't
+          be parsed gives None; tick_will_need_recheck iff some member's tick is set and the X-ray
+          cell reads DONE_STALE after but not before
+    """
+    guard = guarded(share_call)
+
+    def preview(probe: FamilyProbe, paths: Mapping[SourceRole, pathlib.Path]) -> RequirementDiff | None:
+        from cockpit.services import requirements as req
+
+        snapshot = probe.snapshot
+        held = snapshot.requirements
+        if held is None:
+            return None
+        reference = snapshot.stored.get(snapshot.reference_member, {})
+
+        def hash_of(role: SourceRole) -> str:
+            status = probe.statuses.get(role)
+            if role in paths:
+                return getattr(status, "candidate_hash", "") or ""
+            stored = reference.get(role)
+            return stored.file_hash if stored is not None else ""
+
+        def units(role: SourceRole, reader: Callable[[pathlib.Path], Any]) -> tuple[Any, pathlib.Path]:
+            path = paths.get(role)
+            if path is not None:
+                try:
+                    return guard(lambda: reader(path)), path
+                except Exception as error:
+                    return req.Failure(req.DocumentUnreadable(role, type(error).__name__)), path
+            stored = reference.get(role)
+            if stored is None:
+                return req.Failure(req.DocumentUnreadable(role, "NOT_STORED")), pathlib.Path()
+            try:
+                return reader(stored.stored_path), stored.stored_path
+            except Exception as error:
+                return req.Failure(req.DocumentUnreadable(role, type(error).__name__)), stored.stored_path
+
+        eco, eco_path = units(SourceRole.NOTES, lambda path: req.read_eco_units(path, held.vocabulary))
+        bom, bom_path = units(SourceRole.BOM, req.read_bom_units)
+        if SourceRole.TRAVELER in paths:
+            traveler_path = paths[SourceRole.TRAVELER]
+            try:
+                parsed = guard(lambda: parsers.traveler_parser.parse(traveler_path, parsers.coord_map))
+            except Exception:
+                return None
+            wash_text = req.wash_text_of(dict(parsed.extracted_fields))
+        else:
+            wash_text = req.wash_text_of(snapshot.held.traveler_metadata)
+
+        inputs = req.ScanInputs(
+            notes_path=eco_path, notes_hash=hash_of(SourceRole.NOTES),
+            bom_path=bom_path, bom_hash=hash_of(SourceRole.BOM),
+            traveler_wash_text=wash_text, vocabulary=held.vocabulary,
+        )
+        scan = req.decide_requirements(eco, bom, req.traveler_unit(wash_text), inputs)
+        after = req.RequirementSummary(
+            states=dict(scan.states), unknown_reasons=dict(scan.unknown_reasons),
+            xray_task=scan.xray_task, fingerprint=scan.fingerprint, scanned_at=utcnow(),
+        )
+        stale = req.XrayCellState.DONE_STALE
+        recheck = any(
+            tick.is_done
+            and req.xray_cell_state(after, tick) == stale
+            and req.xray_cell_state(held.summary, tick) != stale
+            for tick in held.ticks.values()
+        )
+        return RequirementDiff(before=held.summary, after=after, tick_will_need_recheck=recheck)
+
+    return preview
 
 
 def open_family_keys(audits: AuditRepository) -> list[FamilyKey]:

@@ -88,6 +88,19 @@ _TRY_READS_IN_FLIGHT: set[tuple[QThread, QObject]] = set()
 
 
 @dataclass(frozen=True)
+class DocumentUpdateHooks:
+    """What Settings › Document Updates asks MainWindow (Phase 55b §8.1).
+
+    check_unavailable and reset_unavailable give the reason an entry is blocked, or None;
+    last_run_line words the stored last run.
+    """
+
+    check_unavailable: Callable[[], str | None]
+    reset_unavailable: Callable[[], str | None]
+    last_run_line: Callable[[], str]
+
+
+@dataclass(frozen=True)
 class FieldSpec:
     label: str
     min: float
@@ -401,6 +414,8 @@ class SettingsDialog(QDialog):
 
     reset_requested = pyqtSignal()
     requirements_vocabulary_saved = pyqtSignal(object)  # RequirementVocabulary
+    # Phase 55b §8.1: MainWindow starts the check, with this dialog as its dialogs' parent.
+    document_update_check_requested = pyqtSignal()
 
     def __init__(
         self,
@@ -418,8 +433,14 @@ class SettingsDialog(QDialog):
         conn: sqlite3.Connection | None = None,
         current_audit_id: int | None = None,
         initial_vocabulary: RequirementVocabulary | None = None,
+        document_updates: DocumentUpdateHooks | None = None,
     ) -> None:
         super().__init__(parent)
+        self._document_updates = document_updates
+        self._check_updates_btn: QPushButton | None = None
+        self._check_updates_reason: QLabel | None = None
+        self._last_run_label: QLabel | None = None
+        self._reset_btn: QPushButton | None = None
         self.setWindowTitle("Settings")
         self.setModal(True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -539,6 +560,10 @@ class SettingsDialog(QDialog):
             layout.addWidget(source_root_group)
             layout.addSpacing(12)
 
+        if document_updates is not None:
+            layout.addWidget(self._build_document_updates_settings())
+            layout.addSpacing(12)
+
         if mpn_library_controller is not None:
             mpn_library_group = self._build_mpn_library_settings(mpn_library_controller)
             layout.addWidget(mpn_library_group)
@@ -552,6 +577,7 @@ class SettingsDialog(QDialog):
         reset_btn = QPushButton("Reset application data...")
         reset_btn.clicked.connect(self.reset_requested.emit)
         reset_layout.addWidget(reset_btn)
+        self._reset_btn = reset_btn
         layout.addWidget(reset_group)
         layout.addSpacing(12)
 
@@ -572,6 +598,7 @@ class SettingsDialog(QDialog):
         close_btn.clicked.connect(self.accept)
         buttons.addWidget(close_btn)
         outer_layout.addLayout(buttons)
+        self.refresh_document_updates()
 
     # --- live-apply handlers ---
 
@@ -1116,6 +1143,7 @@ class SettingsDialog(QDialog):
         layout.addLayout(btn_row)
 
         edit.textChanged.connect(controller.set_source_root)
+        edit.textChanged.connect(self.refresh_document_updates)
 
         def on_validate():
             current_state, current_path = controller.source_root()
@@ -1162,6 +1190,42 @@ class SettingsDialog(QDialog):
 
         validate_btn.clicked.connect(on_validate)
         return group
+
+    def _build_document_updates_settings(self) -> QGroupBox:
+        """Phase 55b §8.1: Check for updates…, the last-run line, and why the check is blocked."""
+        group = QGroupBox("Document Updates")
+        layout = QVBoxLayout(group)
+        row = QHBoxLayout()
+        self._check_updates_btn = QPushButton("Check for updates…")
+        self._check_updates_btn.clicked.connect(self.document_update_check_requested.emit)
+        row.addWidget(self._check_updates_btn)
+        self._check_updates_reason = QLabel("")
+        self._check_updates_reason.setTextFormat(Qt.TextFormat.PlainText)
+        self._check_updates_reason.setWordWrap(True)
+        row.addWidget(self._check_updates_reason, stretch=1)
+        layout.addLayout(row)
+        self._last_run_label = QLabel("")
+        self._last_run_label.setTextFormat(Qt.TextFormat.PlainText)
+        layout.addWidget(self._last_run_label)
+        return group
+
+    def refresh_document_updates(self, *_args) -> None:
+        """Re-reads the check's availability, the last run, and Reset's availability (Phase 55b §3.2)."""
+        hooks = self._document_updates
+        if hooks is None:
+            return
+        reason = hooks.check_unavailable()
+        if self._check_updates_btn is not None:
+            self._check_updates_btn.setEnabled(reason is None)
+            self._check_updates_btn.setToolTip(reason or "")
+        if self._check_updates_reason is not None:
+            self._check_updates_reason.setText(reason or "")
+        if self._last_run_label is not None:
+            self._last_run_label.setText(hooks.last_run_line())
+        if self._reset_btn is not None:
+            reset_reason = hooks.reset_unavailable()
+            self._reset_btn.setEnabled(reset_reason is None)
+            self._reset_btn.setToolTip(reset_reason or "")
 
     def _build_mpn_library_settings(self, controller) -> QGroupBox:
         from cockpit.settings.mpn_library import (

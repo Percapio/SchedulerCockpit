@@ -63,18 +63,28 @@ class PendingSelection:
 
 FetchOutcome = Union[LocatedFiles, PendingSelection]
 
+def job_parent_directory(job_number: str, source_root: pathlib.Path) -> pathlib.Path:
+    """The folder that holds a job's folder: <root>/<first 4>xxx/<first 5>xx."""
+    return source_root / f"{job_number[:4]}xxx" / f"{job_number[:5]}xx"
+
+
+def is_job_folder_name(name: str, job_number: str) -> bool:
+    """Whether a folder name is a job's: the number alone, or followed by a non-alphanumeric
+    character, as in "B141752 Example". Shared by ingest and Phase 55b's JobFolderIndex."""
+    return name.startswith(job_number) and (
+        len(name) == len(job_number) or not name[len(job_number)].isalnum()
+    )
+
+
 def resolve_job_directory(job_number: str, source_root: pathlib.Path) -> pathlib.Path:
-    first_4 = job_number[:4]
-    first_5 = job_number[:5]
-    parent_dir = source_root / f"{first_4}xxx" / f"{first_5}xx"
-    
+    parent_dir = job_parent_directory(job_number, source_root)
+
     if parent_dir.exists() and parent_dir.is_dir():
         for child in parent_dir.iterdir():
-            if child.is_dir() and child.name.startswith(job_number):
-                # Ensure it's the exact job number, or followed by a non-alphanumeric char (like space)
-                if len(child.name) == len(job_number) or not child.name[len(job_number)].isalnum():
-                    return child
-                    
+            # The name first: is_dir is a round trip to the share, the name test isn't.
+            if is_job_folder_name(child.name, job_number) and child.is_dir():
+                return child
+
     return parent_dir / job_number
 
 def assert_within_root(candidate: pathlib.Path, source_root: pathlib.Path) -> None:

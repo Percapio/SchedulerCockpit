@@ -44,6 +44,7 @@ class AuditView(QWidget):
     drawing_fetch_requested = pyqtSignal(int, bool)  # (audit_id, secondary)
     drawing_drop_requested = pyqtSignal(object, object)  # (AddDrawingDialog, pathlib.Path)
     placements_report_requested = pyqtSignal(int)
+    document_update_check_requested = pyqtSignal(int)  # audit id (Phase 55b §8.2)
     xray_toggle_requested = pyqtSignal(int, bool)
 
     def __init__(
@@ -115,6 +116,7 @@ class AuditView(QWidget):
         self._actions_bar.drawing_fetch_requested.connect(self.drawing_fetch_requested.emit)
         self._actions_bar.drawing_drop_requested.connect(self.drawing_drop_requested.emit)
         self._actions_bar.placements_report_requested.connect(self.placements_report_requested.emit)
+        self._actions_bar.document_update_check_requested.connect(self.document_update_check_requested.emit)
         self._actions_bar.audit_fields_changed.connect(self.refresh_audit_fields)
         header_layout.addWidget(self._actions_bar)
         
@@ -295,6 +297,10 @@ class AuditView(QWidget):
         except Exception:
             logger.exception("Could not read BOM lines for the MPN library segment")
             return []
+
+    def set_entry_reason_provider(self, provider) -> None:
+        """Phase 55b §3.2: MainWindow's answer to "why can't this entry start now?"."""
+        self._actions_bar.set_entry_reason_provider(provider)
 
     def refresh_audit_fields(self, audit_id: int | None = None) -> None:
         """Re-reads the audit without rebuilding the BOM panel or the canvas.

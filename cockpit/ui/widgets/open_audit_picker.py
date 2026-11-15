@@ -717,6 +717,14 @@ class OpenAuditPicker(QWidget):
         
         self._install_context_menu()
 
+    def set_new_audit_unavailable(self, reason: str | None) -> None:
+        """Phase 55b §3.2: New audit… is disabled, with the reason, while an operation runs."""
+        button = getattr(self, "new_btn", None)
+        if button is None:
+            return
+        button.setEnabled(reason is None)
+        button.setToolTip(reason or "")
+
     def build_title_row(self) -> QHBoxLayout:
         title = QLabel("Select an Audit")
         title.setProperty("class", "h1")

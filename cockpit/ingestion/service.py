@@ -110,6 +110,19 @@ def probe_identity(
     )
 
 
+def stored_bom_dni_designators(bom_path: pathlib.Path) -> set[str]:
+    """A stored Audit BOM's DNI designators, for the label splitter's targets (Phase 57 §4).
+
+    post: the designators of every DNI line; none when the BOM can't be parsed, which costs only
+          the merged spans that hold a DNI designator
+    """
+    try:
+        return set(audit_bom.parse(pathlib.Path(bom_path)).dni_designators)
+    except Exception:
+        logger.warning("Stored BOM couldn't be parsed for its DNI designators; splitting without them")
+        return set()
+
+
 def content_addressed_path(
     audit_dir: pathlib.Path, source: pathlib.Path, source_hash: str
 ) -> pathlib.Path:
@@ -363,7 +376,12 @@ class IngestionService:
                     if item.ref_des_list:
                         target_ref_des.update(item.ref_des_list)
                         
-                pdf_result = self.layout_parser.parse(stored_pdf, target_ref_des)
+                # Phase 57 §4: DNI designators are split targets only, so a merged span that
+                # holds one can still be covered; they are never returned as labels.
+                pdf_result = self.layout_parser.parse(
+                    stored_pdf, target_ref_des,
+                    split_targets=target_ref_des | set(getattr(bom_result, "dni_designators", ())),
+                )
                 _emit(ProgressStage.PDF_PARSED)
                 
                 # Log missing RefDes
@@ -576,14 +594,18 @@ class IngestionService:
             raise StoredFileVerificationError(pdf_path, stored_pdf)
 
         target_ref_des = set()
+        dni_designators: set[str] = set()
         bom_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.BOM)
         if bom_sf:
             bom_components = self.bom_component_repo.list_for_source_file(bom_sf.id)
             for c in bom_components:
                 target_ref_des.add(c.ref_des)
+            dni_designators = stored_bom_dni_designators(bom_sf.local_storage_path)
 
         try:
-            pdf_result = self.layout_parser.parse(stored_pdf, target_ref_des)
+            pdf_result = self.layout_parser.parse(
+                stored_pdf, target_ref_des, split_targets=target_ref_des | dni_designators,
+            )
         except Exception:
             if copied:
                 try:

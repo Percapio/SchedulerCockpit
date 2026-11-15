@@ -60,6 +60,10 @@ class BootstrappedApp:
     audit_bom_component_repo: AuditBomComponentRepository
     storage_reaper: StorageReaper
     library_module: Any | None
+    # Phase 57: the drawing worker's inputs and parsers, and the placements read back.
+    parser_registry: Any = None
+    update_repositories: Any = None
+    placement_query_svc: Any = None
 
 
 def remove_notes_media_tree(app_data_root: pathlib.Path) -> bool:
@@ -178,10 +182,23 @@ def bootstrap(
     source_file_repo = SourceFileRepository(conn)
     tht_repo = ThtChecklistRepository(conn)
 
+    from cockpit.persistence.repositories.placements import (
+        BoardPlacementRepository, PageRegistrationRepository, PlacementRejectionRepository,
+    )
+    from cockpit.services.placements import PlacementQueryService
+    board_placement_repo = BoardPlacementRepository(conn)
+    page_registration_repo = PageRegistrationRepository(conn)
+    placement_rejection_repo = PlacementRejectionRepository(conn)
+    placement_query_svc = PlacementQueryService(
+        source_file_repo, bom_component_repo, pdf_coord_repo,
+        board_placement_repo, page_registration_repo, placement_rejection_repo,
+    )
+
     from cockpit.services.runtime_calc import RuntimeCalcService
     runtime_calc_svc = RuntimeCalcService(
         audit_repo, source_file_repo, bom_component_repo, pdf_coord_repo,
-        constants_provider=constants_provider
+        constants_provider=constants_provider,
+        placement_query=placement_query_svc,
     )
     
     if needs_backfill:
@@ -203,7 +220,8 @@ def bootstrap(
         source_file_repo=source_file_repo,
         pdf_renderer=pdf_renderer,
         bom_component_repo=bom_component_repo,
-        pdf_coord_repo=pdf_coord_repo
+        pdf_coord_repo=pdf_coord_repo,
+        placement_query=placement_query_svc,
     )
     
     coord_map = load_map(config.coord_map_path)
@@ -233,7 +251,16 @@ def bootstrap(
     completion_svc = CompletionService(conn, audit_repo, source_file_repo, storage_reaper)
     
     release_svc = ReleaseService(audit_repo)
-    setup_bom_svc = SetupBomService(audit_repo, bom_component_repo, pdf_coord_repo, source_file_repo)
+    setup_bom_svc = SetupBomService(
+        audit_repo, bom_component_repo, pdf_coord_repo, source_file_repo, placement_query=placement_query_svc,
+    )
+
+    from cockpit.services.document_updates import FamilyUpdateRepositories
+    update_repositories = FamilyUpdateRepositories(
+        conn=conn, audits=audit_repo, source_files=source_file_repo, bom_components=bom_component_repo,
+        tht_checklist=tht_repo, pdf_coords=pdf_coord_repo, board_placements=board_placement_repo,
+        page_registrations=page_registration_repo, placement_rejections=placement_rejection_repo,
+    )
     
     startup_reconciler = StartupReconciler(
         audit_repo=audit_repo,
@@ -268,5 +295,8 @@ def bootstrap(
         source_file_repo=source_file_repo,
         audit_bom_component_repo=bom_component_repo,
         storage_reaper=storage_reaper,
-        library_module=None
+        library_module=None,
+        parser_registry=parser_registry,
+        update_repositories=update_repositories,
+        placement_query_svc=placement_query_svc,
     )

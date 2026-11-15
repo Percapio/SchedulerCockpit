@@ -26,11 +26,16 @@ class ProcessFilter:
     BOTH = "Both"
 
 class SetupBomService:
-    def __init__(self, audit_repo: AuditRepository, bom_repo: AuditBomComponentRepository, pdf_repo: PdfComponentCoordRepository, source_file_repo):
+    def __init__(self, audit_repo: AuditRepository, bom_repo: AuditBomComponentRepository, pdf_repo: PdfComponentCoordRepository, source_file_repo,
+                 placement_query=None):
         self._audit_repo = audit_repo
         self._bom_repo = bom_repo
         self._pdf_repo = pdf_repo
         self._source_file_repo = source_file_repo
+        if placement_query is None:
+            from cockpit.services.placements import PlacementQueryService
+            placement_query = PlacementQueryService.over(audit_repo.conn, source_file_repo, bom_repo, pdf_repo)
+        self._placement_query = placement_query
 
     def build(self, audit_id: int, side: str, process: str) -> List[SetupBomRow]:
         from cockpit.persistence.types import SourceFileCategory
@@ -41,11 +46,8 @@ class SetupBomService:
             
         components = self._bom_repo.list_for_source_file(bom_sf.id)
         
-        pdf_sf = self._source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
-        coords = self._pdf_repo.list_for_source_file(pdf_sf.id) if pdf_sf is not None else []
-        
-        # coord mapping: ref_des -> page_index
-        ref_des_to_page = {c.ref_des: c.page_index for c in coords}
+        # Phase 57 §11: each designator's side from its placement first, then its label's page.
+        sides = self._placement_query.board_sides(audit_id)
         
         # group components by (find_number, component_mpn, description)
         grouped = {}
@@ -68,10 +70,10 @@ class SetupBomService:
             if side == SideFilter.BOTH:
                 matching_refs = ref_des_list
             else:
-                target_page = 0 if side == SideFilter.TOP else 1
+                target_side = "T" if side == SideFilter.TOP else "B"
                 for ref in ref_des_list:
-                    page = ref_des_to_page.get(ref)
-                    if page == target_page:
+                    found = sides.get(ref)
+                    if found is not None and found.side == target_side:
                         matching_refs.append(ref)
                 
             if matching_refs:

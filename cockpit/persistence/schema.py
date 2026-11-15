@@ -624,9 +624,10 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     v18_migrated = migrate_to_v18(conn)
     v19_migrated = migrate_to_v19(conn)
     migrate_to_v20(conn)
+    v21_migrated = migrate_to_v21(conn)
     return (v7_migrated or v8_migrated or v9_migrated or v11_migrated or v13_migrated
             or v14_migrated or v15_migrated or v16_migrated or v17_migrated or v18_migrated
-            or v19_migrated)
+            or v19_migrated or v21_migrated)
 
 SCHEMA_V5_DDL_DROP_SHIP_DATE: str = """
 ALTER TABLE active_audits DROP COLUMN ship_date
@@ -1445,3 +1446,170 @@ def migrate_to_v20(conn: sqlite3.Connection) -> bool:
     except Exception as e:
         conn.rollback()
         raise SchemaInitializationError(statement="v20 migration failed", cause=e)
+
+
+# ---------- v21: Phase 57, placements ----------
+
+FILE_CATEGORY_CHECK_V21: str = "('BOM','Traveler','Notes','PDF','SecondaryPDF','Placements')"
+
+SCHEMA_V21_DDL_SOURCE_FILES: str = f"""
+CREATE TABLE source_files_v21 (
+    id INTEGER PRIMARY KEY,
+    audit_id INTEGER NOT NULL,
+    file_category TEXT NOT NULL CHECK(file_category IN {FILE_CATEGORY_CHECK_V21}),
+    original_filename TEXT NOT NULL,
+    local_storage_path TEXT NOT NULL,
+    file_hash TEXT NOT NULL,
+    ingested_at DATETIME NOT NULL,
+    source_hash TEXT NOT NULL,
+    source_size INTEGER NULL,
+    source_modified_ns INTEGER NULL,
+    FOREIGN KEY(audit_id) REFERENCES active_audits(id) ON DELETE CASCADE
+);
+"""
+
+# Every category before v21 is stored as a verified copy, so its share hash is its file_hash.
+SCHEMA_V21_DML_COPY: str = """
+INSERT INTO source_files_v21 (
+    id, audit_id, file_category, original_filename, local_storage_path, file_hash, ingested_at,
+    source_hash
+)
+SELECT id, audit_id, file_category, original_filename, local_storage_path, file_hash, ingested_at,
+       file_hash
+FROM source_files;
+"""
+
+SCHEMA_V21_DDL_BOARD_PLACEMENTS: str = """
+CREATE TABLE IF NOT EXISTS board_placements (
+    id INTEGER PRIMARY KEY,
+    placement_file_id INTEGER NOT NULL,
+    designator TEXT NOT NULL,
+    x_mils INTEGER NOT NULL,
+    y_mils INTEGER NOT NULL,
+    rotation_ccw INTEGER NOT NULL,
+    side TEXT NOT NULL,
+    is_stuffed INTEGER NOT NULL,
+    mount TEXT NOT NULL,
+    part_number TEXT NOT NULL,
+    package_key TEXT NULL,
+    body_cx_mils REAL NULL,
+    body_cy_mils REAL NULL,
+    body_w_mils REAL NULL,
+    body_h_mils REAL NULL,
+    FOREIGN KEY(placement_file_id) REFERENCES source_files(id) ON DELETE CASCADE,
+    UNIQUE(placement_file_id, designator)
+);
+"""
+
+SCHEMA_V21_DDL_REGISTRATIONS: str = """
+CREATE TABLE IF NOT EXISTS drawing_page_registrations (
+    id INTEGER PRIMARY KEY,
+    drawing_file_id INTEGER NOT NULL,
+    placement_file_id INTEGER NOT NULL,
+    page_index INTEGER NOT NULL,
+    outcome TEXT NOT NULL,
+    side TEXT NULL,
+    scale_cos REAL NULL,
+    scale_sin REAL NULL,
+    offset_x_pt REAL NULL,
+    offset_y_pt REAL NULL,
+    mirrored INTEGER NULL,
+    inliers INTEGER NULL,
+    matched_labels INTEGER NOT NULL,
+    residual_p90_mils REAL NULL,
+    candidates_tried INTEGER NULL,
+    refusal_reasons TEXT NOT NULL DEFAULT '[]',
+    FOREIGN KEY(drawing_file_id) REFERENCES source_files(id) ON DELETE CASCADE,
+    FOREIGN KEY(placement_file_id) REFERENCES source_files(id) ON DELETE CASCADE,
+    UNIQUE(drawing_file_id, placement_file_id, page_index)
+);
+"""
+
+SCHEMA_V21_DDL_REGISTRATIONS_INDEX: str = (
+    "CREATE INDEX IF NOT EXISTS ix_page_registrations_placement "
+    "ON drawing_page_registrations(placement_file_id)"
+)
+
+SCHEMA_V21_DDL_REJECTIONS: str = """
+CREATE TABLE IF NOT EXISTS placement_rejections (
+    id INTEGER PRIMARY KEY,
+    audit_id INTEGER NOT NULL,
+    share_file_name TEXT NOT NULL,
+    share_hash TEXT NOT NULL,
+    share_size INTEGER NOT NULL,
+    share_modified_ns INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    bom_hash TEXT NULL,
+    seen_at TEXT NOT NULL,
+    FOREIGN KEY(audit_id) REFERENCES active_audits(id) ON DELETE CASCADE,
+    UNIQUE(audit_id, share_hash)
+);
+"""
+
+
+def migrate_to_v21(conn: sqlite3.Connection) -> bool:
+    """Phase 57 §7: the Placements category, source_hash, and the three placements tables.
+
+    pre:  schema_version >= 20
+    post: source_files is rebuilt with 'Placements' in its category CHECK and source_hash (equal to
+          file_hash on every existing row), source_size and source_modified_ns; board_placements,
+          drawing_page_registrations and placement_rejections exist; every row and foreign key is
+          kept; schema_version == 21. Returns False without touching the database when >= 21.
+    raises: SchemaMismatch when version < 20; SchemaInitializationError on DDL failure
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=20)
+
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=20)
+
+    version = row[0] if isinstance(row, tuple) and not hasattr(row, "keys") else row["version"]
+    if version >= 21:
+        return False
+    if version < 20:
+        raise SchemaMismatch(found_version=version, expected_version=20)
+
+    cur.execute("PRAGMA foreign_keys = OFF")
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        try:
+            cur.execute(SCHEMA_V21_DDL_SOURCE_FILES)
+            cur.execute(SCHEMA_V21_DML_COPY)
+            cur.execute("DROP TABLE source_files")
+            cur.execute("ALTER TABLE source_files_v21 RENAME TO source_files")
+            cur.execute("CREATE INDEX IF NOT EXISTS ix_source_files_audit ON source_files(audit_id)")
+            cur.execute("CREATE INDEX IF NOT EXISTS ix_source_files_hash ON source_files(file_hash)")
+            cur.execute(SCHEMA_V21_DDL_BOARD_PLACEMENTS)
+            cur.execute(SCHEMA_V21_DDL_REGISTRATIONS)
+            cur.execute(SCHEMA_V21_DDL_REGISTRATIONS_INDEX)
+            cur.execute(SCHEMA_V21_DDL_REJECTIONS)
+            cur.execute("PRAGMA foreign_key_check")
+            violations = cur.fetchall()
+            if violations:
+                raise SchemaInitializationError(
+                    statement="v21 foreign_key_check",
+                    cause=RuntimeError(f"Foreign key violations found: {len(violations)}"),
+                )
+        except sqlite3.Error as e:
+            raise SchemaInitializationError(statement="v21 migration", cause=e)
+
+        now_iso = utcnow().isoformat()
+        cur.execute(
+            "UPDATE schema_version SET version = 21, applied_at = ? WHERE singleton_guard = 1",
+            (now_iso,),
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+        except Exception as e:
+            logger.error("Failed to restore foreign_keys in v21 migration finally block.")
+            raise PersistenceError("Database state corrupted: failed to re-enable foreign keys") from e

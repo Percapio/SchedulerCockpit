@@ -62,12 +62,18 @@ class SelectionIntent:
 
 @dataclass(frozen=True)
 class HighlightCoord:
+    """One highlight on a page. x1..y2 bound it. Phase 57 §10.2: a PLACEMENT highlight carries its
+    footprint outline, drawn as a polygon, and its mapped placement point; a LABEL highlight is the
+    label box, drawn as today."""
     ref_des: str
     page_index: int
     x1: float
     y1: float
     x2: float
     y2: float
+    outline: tuple[tuple[float, float], ...] | None = None
+    source: str = "LABEL"
+    point: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +89,11 @@ class ResolvedSelection:
     mpn_set: frozenset[str] | None
     ref_des_list: tuple[str, ...]
     coords: tuple[HighlightCoord, ...]
+    # Phase 57 §10.2: what the hint needs. not_located holds the selection's designators with no
+    # highlight; has_placements and placements_unused_reason are the audit's (§10.4).
+    not_located: frozenset[str] = frozenset()
+    has_placements: bool = False
+    placements_unused_reason: str | None = None
 
     def __post_init__(self) -> None:
         is_multi = self.kind in (ResolutionKind.MULTI_MPN_GROUP, ResolutionKind.MULTI_MPN_GROUP_ABSENT)

@@ -28,6 +28,10 @@ class AuditActionsBar(QWidget):
     # Enumeration blocks on a network share, so it runs on MainWindow's
     # existing fetch worker and watchdog. This widget holds no threading code.
     drawing_fetch_requested = pyqtSignal(int, bool)  # (audit_id, secondary)
+    # Phase 57 §9.2: a dropped primary drawing is read on MainWindow's drawing worker, which
+    # reports back to the dialog. This widget holds no threading code.
+    drawing_drop_requested = pyqtSignal(object, object)  # (AddDrawingDialog, pathlib.Path)
+    placements_report_requested = pyqtSignal(int)
     # An audit's own scalar fields changed and nothing else did. No source
     # file, BOM row or PDF was touched, so no consumer may rebuild the BOM
     # panel or request a canvas render.
@@ -190,6 +194,12 @@ class AuditActionsBar(QWidget):
             cleaning_report_action.triggered.connect(self._on_cleaning_report_clicked)
         else:
             cleaning_report_action.setEnabled(False)
+
+        # Phase 57 §10.5: always enabled; an audit with nothing recorded says so.
+        placements_report_action = self.actions_menu.addAction("Placements report…")
+        placements_report_action.triggered.connect(
+            lambda _checked=False, audit_id=view.audit_id: self.placements_report_requested.emit(audit_id)
+        )
         
         ops_action = self.actions_menu.addAction("OPS per board…")
         ops_action.triggered.connect(self._on_ops_per_board_clicked)
@@ -221,6 +231,7 @@ class AuditActionsBar(QWidget):
             return
         from cockpit.ui.widgets.add_drawing_dialog import AddDrawingDialog
         dialog = AddDrawingDialog(self._ingestion_service, view.audit_id, self)
+        dialog.drawing_dropped.connect(lambda path, d=dialog: self.drawing_drop_requested.emit(d, path))
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.reload_requested.emit(view.audit_id)
 

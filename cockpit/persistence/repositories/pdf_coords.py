@@ -83,6 +83,19 @@ class PdfComponentCoordRepository:
         except sqlite3.Error as e:
             raise PersistenceUnavailable(self._conn, e) from e
 
+    def delete_for_source_file(self, source_file_id: int) -> int:
+        """Deletes every coordinate of one drawing (Phase 57 §8.5: re-read labels replace them whole).
+
+        post: no row names source_file_id; returns the number deleted
+        raises: PersistenceUnavailable
+        """
+        try:
+            return self._conn.execute(
+                "DELETE FROM pdf_component_coords WHERE source_file_id = ?", (source_file_id,)
+            ).rowcount
+        except sqlite3.Error as e:
+            raise PersistenceUnavailable(self._conn, e) from e
+
     def clone_for_source_file(
         self,
         src_source_file_id: int,

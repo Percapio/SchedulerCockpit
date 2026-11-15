@@ -6,7 +6,7 @@ from typing import Optional
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QLabel, QGraphicsLineItem, QGraphicsItem, QGraphicsRectItem, QPushButton
 )
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QWheelEvent, QMouseEvent, QTransform
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QWheelEvent, QMouseEvent, QTransform, QPolygonF
 from PyQt6.QtCore import QRectF, QPointF
 
 from cockpit.ui.theme import Theme
@@ -19,6 +19,8 @@ class HighlightItem(QGraphicsItem):
         self._theme = theme
         self.mode = "single"
         self.rect = QRectF()
+        # Phase 57 §10.3: a footprint outline; rect is then its bounding rectangle.
+        self.polygon: QPolygonF | None = None
         self.setZValue(self._theme.canvas_z("highlight"))
         self.setVisible(False)
         
@@ -34,7 +36,10 @@ class HighlightItem(QGraphicsItem):
             pen = self._theme.canvas_pen("highlight_pen")
             painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRect(self.rect)
+            if self.polygon is not None:
+                painter.drawPolygon(self.polygon)
+            else:
+                painter.drawRect(self.rect)
         elif self.mode == "group":
             painter.setPen(Qt.PenStyle.NoPen)
             halo_color = QColor(0, 255, 255, 80) # Cyan halo
@@ -72,6 +77,15 @@ class HighlightItem(QGraphicsItem):
     def set_rect(self, rect: QRectF, mode: str):
         self.prepareGeometryChange()
         self.rect = rect
+        self.polygon = None
+        self.mode = mode
+
+    def set_polygon(self, polygon: QPolygonF, mode: str):
+        """Phase 57 §10.3: items are pooled, so set_rect clears a polygon and this sets rect to the
+        polygon's bounding rectangle, on which group mode's halo and brackets sit."""
+        self.prepareGeometryChange()
+        self.polygon = QPolygonF(polygon)
+        self.rect = self.polygon.boundingRect()
         self.mode = mode
 
 from cockpit.persistence.errors import AuditNotFound
@@ -84,6 +98,7 @@ from cockpit.services.views import SelectionIntent, ResolvedSelection, Selection
 from cockpit.ui.workers.render_worker import RenderJob, RenderResult, RenderFailure, RenderedImage
 from cockpit.persistence.errors import PersistenceError
 from cockpit.ui.canvas.page_switcher import PageSwitcher
+from cockpit.placements.geometry import LABEL, PartHighlight, part_at
 import logging
 logger = logging.getLogger(__name__)
 
@@ -242,7 +257,8 @@ class LayoutCanvas(QWidget):
             prefetch_page_limit=self._theme.canvas_render_prefetch_page_limit()
         )
         self._raster_cache = RasterPageCache(self._render_budget)
-        self._coord_cache: dict[int, list[HighlightCoord]] = {}
+        # Phase 57 section 10.2: each page's located parts, for part_at.
+        self._coord_cache: dict[int, list[PartHighlight]] = {}
         self._worker_alive = False
         self._pending_pdf = None
         self._primary_pending: PendingPdf | None = None
@@ -288,6 +304,7 @@ class LayoutCanvas(QWidget):
         
         self._hint_label = QLabel(self)
         self._hint_label.setProperty("class", "hint-label bold")
+        self._hint_label.setTextFormat(Qt.TextFormat.PlainText)
         self._hint_label.setVisible(False)
         
         from cockpit.ui.widgets.empty_canvas import EmptyCanvasPlaceholder
@@ -457,9 +474,10 @@ class LayoutCanvas(QWidget):
         self._coord_cache.clear()
         if source == "primary":
             try:
-                coords = self._layout_query_service.list_pdf_coords_for_audit(self._current_audit_id)
-                for c in coords:
-                    self._coord_cache.setdefault(c.page_index, []).append(c)
+                # Phase 57 §10.2: every BOM designator's locations, placements first.
+                parts = self._layout_query_service.list_clickable_parts(self._current_audit_id)
+                for part in parts:
+                    self._coord_cache.setdefault(part.page_index, []).append(part)
             except Exception:
                 logger.exception('Exception caught in layout_canvas coords')
         self._apply_selection(clear=True)
@@ -686,13 +704,14 @@ class LayoutCanvas(QWidget):
             pdf_x = scene_pos.x() * scale_x
             pdf_y = scene_pos.y() * scale_y
             
-            page_coords = self._coord_cache.get(self._current_page_index, [])
-            for c in page_coords:
-                # Add a 2px logical tolerance (pdf space)
-                if (c.x1 - 2) <= pdf_x <= (c.x2 + 2) and (c.y1 - 2) <= pdf_y <= (c.y2 + 2):
-                    self.refdes_clicked.emit(c.ref_des)
-                    return
-                    
+            # Phase 57 §10.3: the smallest outline under the point, then the smallest label box
+            # within today's 2 pt tolerance; ties in natural order.
+            designator = part_at(
+                self._current_page_index, pdf_x, pdf_y, self._coord_cache.get(self._current_page_index, []),
+            )
+            if designator is not None:
+                self.refdes_clicked.emit(designator)
+                return
             self.empty_clicked.emit()
 
     def _update_pan_cursor(self) -> None:
@@ -752,6 +771,13 @@ class LayoutCanvas(QWidget):
         scale_x = pw / pdf_w
         scale_y = ph / pdf_h
         
+        if coord.outline:
+            # Phase 57 §10.3: a footprint outline, each vertex mapped as rectangles are; drawn at its
+            # true size, never enlarged by highlight_scale.
+            item.set_polygon(QPolygonF([QPointF(x * scale_x, y * scale_y) for x, y in coord.outline]), mode)
+            item.setVisible(True)
+            return
+        
         nx1 = coord.x1 * scale_x
         ny1 = coord.y1 * scale_y
         nx2 = coord.x2 * scale_x
@@ -770,14 +796,36 @@ class LayoutCanvas(QWidget):
         item.set_rect(QRectF(cx - new_w / 2.0, cy - new_h / 2.0, new_w, new_h), mode)
         item.setVisible(True)
 
+    @staticmethod
+    def _missing(resolved: ResolvedSelection) -> set[str]:
+        """The selection's designators with no highlight: resolve_selection's not_located."""
+        located = {c.ref_des for c in resolved.coords}
+        return (set(resolved.ref_des_list) - located) | (set(resolved.not_located) & set(resolved.ref_des_list))
+
     def _format_group_hint(self, resolved: ResolvedSelection) -> str:
         n = len(resolved.ref_des_list)
-        k = len(resolved.coords)
+        missing = len(self._missing(resolved))
+        k = n - missing
         prefix = resolved.mpn if resolved.mpn else "Selected components"
-        if k < n:
-            missing = n - k
+        if missing:
             return f"{prefix}: {k} of {n} footprints highlighted ({missing} missing)"
         return f"{prefix}: {n} of {n} footprints highlighted"
+
+    @staticmethod
+    def _unused_line(resolved: ResolvedSelection) -> list[str]:
+        """§10.4: the last line of a hint that already shows, never a hint of its own."""
+        if resolved.placements_unused_reason and not resolved.has_placements:
+            return [f"Placements not used: {resolved.placements_unused_reason}"]
+        return []
+
+    def _show_hint(self, lines: list[str]) -> None:
+        if not lines:
+            self._hint_label.setVisible(False)
+            return
+        self._hint_label.setText("\n".join(lines))
+        self._hint_label.adjustSize()
+        self._position_hint_label()
+        self._hint_label.setVisible(True)
 
     def _apply_selection(self, clear: bool = False) -> None:
         if self._reference_source_active():
@@ -791,22 +839,26 @@ class LayoutCanvas(QWidget):
             return
 
         if resolved.kind == ResolutionKind.SINGLE_REFDES:
-            coord = resolved.coords[0]
+            # Phase 57 §10.3: every highlight on the current page; the indicator for the rest.
+            on_page = [c for c in resolved.coords if c.page_index == self._current_page_index]
             self._dim_item.setVisible(True)
-            self._ensure_highlight_pool(1)
+            self._ensure_highlight_pool(max(1, len(on_page)))
             self._hide_all_highlights()
-            if coord.page_index == self._current_page_index:
-                self._paint_highlight_rect(self._highlight_items[0], coord, mode="single")
-            self._hint_label.setVisible(False)
-            self._page_switcher.set_other_page_indicator(coord.page_index != self._current_page_index)
+            for i, coord in enumerate(on_page):
+                self._paint_highlight_rect(self._highlight_items[i], coord, mode="single")
+            from_label = resolved.has_placements and any(c.source == LABEL for c in resolved.coords)
+            self._show_hint(["From its label"] if from_label else [])
+            self._page_switcher.set_other_page_indicator(
+                any(c.page_index != self._current_page_index for c in resolved.coords)
+            )
 
         elif resolved.kind == ResolutionKind.MULTI_REFDES:
             self._dim_item.setVisible(True)
             self._hide_all_highlights()
-            self._hint_label.setText(f"{resolved.mpn} has {len(resolved.ref_des_list)} footprints — click MPN to highlight.")
-            self._hint_label.adjustSize()
-            self._position_hint_label()
-            self._hint_label.setVisible(True)
+            self._show_hint(
+                [f"{resolved.mpn} has {len(resolved.ref_des_list)} footprints — click MPN to highlight."]
+                + self._unused_line(resolved)
+            )
             self._page_switcher.set_other_page_indicator(False)
 
         elif resolved.kind in (ResolutionKind.GROUP_REFDES, ResolutionKind.MULTI_MPN_GROUP):
@@ -819,13 +871,16 @@ class LayoutCanvas(QWidget):
             for i, coord in enumerate(coords_on_page):
                 self._paint_highlight_rect(self._highlight_items[i], coord, mode="group")
 
-            if len(resolved.coords) < len(resolved.ref_des_list):
-                self._hint_label.setText(self._format_group_hint(resolved))
-                self._hint_label.adjustSize()
-                self._position_hint_label()
-                self._hint_label.setVisible(True)
-            else:
-                self._hint_label.setVisible(False)
+            # Phase 57 §10.4: no line whose count is 0; k counts designators drawn from a label.
+            lines: list[str] = []
+            if self._missing(resolved):
+                lines.append(self._format_group_hint(resolved))
+            from_labels = {c.ref_des for c in resolved.coords if c.source == LABEL}
+            if from_labels and resolved.has_placements:
+                lines.append(f"{len(from_labels)} of {len(resolved.ref_des_list)} from labels")
+            if lines:
+                lines += self._unused_line(resolved)
+            self._show_hint(lines)
 
             has_other_page = any(c.page_index != self._current_page_index for c in resolved.coords)
             self._page_switcher.set_other_page_indicator(has_other_page)
@@ -834,19 +889,19 @@ class LayoutCanvas(QWidget):
             self._dim_item.setVisible(True)
             self._hide_all_highlights()
             prefix = resolved.mpn if resolved.mpn else "Selected components"
-            self._hint_label.setText(f"{prefix}: 0 of {len(resolved.ref_des_list)} footprints found on the assembly drawing.")
-            self._hint_label.adjustSize()
-            self._position_hint_label()
-            self._hint_label.setVisible(True)
+            self._show_hint(
+                [f"{prefix}: 0 of {len(resolved.ref_des_list)} footprints found on the assembly drawing."]
+                + self._unused_line(resolved)
+            )
             self._page_switcher.set_other_page_indicator(False)
 
         elif resolved.kind == ResolutionKind.ABSENT_FROM_PDF:
             self._dim_item.setVisible(True)
             self._hide_all_highlights()
-            self._hint_label.setText(f"{resolved.mpn}: RefDes {resolved.ref_des_list[0]} not found on the assembly drawing.")
-            self._hint_label.adjustSize()
-            self._position_hint_label()
-            self._hint_label.setVisible(True)
+            self._show_hint(
+                [f"{resolved.mpn}: RefDes {resolved.ref_des_list[0]} not found on the assembly drawing."]
+                + self._unused_line(resolved)
+            )
             self._page_switcher.set_other_page_indicator(False)
 
         elif resolved.kind == ResolutionKind.NO_PDF:

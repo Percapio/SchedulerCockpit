@@ -20,7 +20,7 @@ import pathlib
 import shutil
 import sqlite3
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Final, Mapping, Sequence, Union
 
 from cockpit.ingestion import hashing
@@ -42,6 +42,11 @@ from cockpit.layout.results import PdfComponentCoordinate
 from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.bom_components import AuditBomComponentRepository
 from cockpit.persistence.repositories.pdf_coords import PdfComponentCoordRepository
+from cockpit.persistence.repositories.placements import (
+    BoardPlacementRepository,
+    PageRegistrationRepository,
+    PlacementRejectionRepository,
+)
 from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
 from cockpit.persistence.types import (
@@ -49,6 +54,7 @@ from cockpit.persistence.types import (
     AuditBomComponent,
     AuditBomComponentDraft,
     PdfComponentCoordDraft,
+    PlacementRejection,
     SourceFile,
     SourceFileCategory,
     SourceFileDraft,
@@ -68,7 +74,11 @@ CATEGORY_OF_ROLE: Final[Mapping[SourceRole, SourceFileCategory]] = {
     SourceRole.NOTES: SourceFileCategory.NOTES,
     SourceRole.TRAVELER: SourceFileCategory.TRAVELER,
     SourceRole.PDF: SourceFileCategory.PDF,
+    SourceRole.PLACEMENTS: SourceFileCategory.PLACEMENTS,
 }
+
+# Phase 57 §8: placements have their own probe, prepare and apply, so they aren't in UPDATED_ROLES.
+PROBED_ROLES: Final[frozenset[SourceRole]] = frozenset(UPDATED_ROLES) | {SourceRole.PLACEMENTS}
 
 ROLE_OF_CATEGORY: Final[Mapping[SourceFileCategory, SourceRole]] = {
     category: role for role, category in CATEGORY_OF_ROLE.items()
@@ -98,6 +108,10 @@ class StoredDocument:
 
     size and modified_at_ns are None when the stored copy can't be stat'ed,
     which only disables the fast path: the candidate is then hashed.
+
+    Phase 57 §8.1: source_hash is the share file's hash, equal to file_hash for
+    a copy; source_size and source_modified_ns are the share file's, filled for
+    a Placements extract only.
     """
 
     role: SourceRole
@@ -107,6 +121,13 @@ class StoredDocument:
     file_hash: str
     size: int | None
     modified_at_ns: int | None
+    source_hash: str = ""
+    source_size: int | None = None
+    source_modified_ns: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.source_hash:
+            object.__setattr__(self, "source_hash", self.file_hash)
 
 
 @dataclass(frozen=True)
@@ -213,6 +234,8 @@ class FamilySnapshot:
     article_revision: str
     stored: Mapping[int, Mapping[SourceRole, StoredDocument]]
     held: HeldState
+    # Phase 57 §8.1: each member's recorded .bmb rejections and refusals, latest first.
+    rejections: Mapping[int, tuple[PlacementRejection, ...]] = field(default_factory=dict)
 
     @property
     def family(self) -> tuple[int, ...]:
@@ -225,9 +248,19 @@ class FamilySnapshot:
 
 @dataclass(frozen=True)
 class FamilyProbe:
+    """One family's probe.
+
+    Phase 57 §8.2: placements is None when the run doesn't include PLACEMENTS;
+    otherwise decide_placements' status, or the ShareReadFailure of a .bmb that
+    couldn't be read, which never fails the family's other roles.
+    placement_candidates are the job root's .bmb files.
+    """
+
     snapshot: FamilySnapshot
     folder: pathlib.Path | None
     statuses: Mapping[SourceRole, FamilyDocumentStatus]
+    placements: Any = None
+    placement_candidates: tuple[CandidateFile, ...] = ()
 
     @property
     def key(self) -> FamilyKey:
@@ -242,6 +275,9 @@ class FamilyUpdateRepositories:
     bom_components: AuditBomComponentRepository
     tht_checklist: ThtChecklistRepository
     pdf_coords: PdfComponentCoordRepository
+    board_placements: BoardPlacementRepository
+    page_registrations: PageRegistrationRepository
+    placement_rejections: PlacementRejectionRepository
 
 
 # ---------- failures of prepare and apply ----------
@@ -391,11 +427,11 @@ def decide_role(
     return Changed(chosen, candidate_hash, lagging)
 
 
-def _family_folder(
+def _job_root(
     snapshot: FamilySnapshot,
     source_root: pathlib.Path,
 ) -> pathlib.Path | Missing | ProbeFailure:
-    """The folder the family was first ingested from, as ingest would find it."""
+    """The family's job folder on the share, as ingest would find it, checked inside source_root."""
     try:
         job_dir = resolve_job_directory(snapshot.key.part_number, source_root)
         if not job_dir.is_dir():
@@ -406,9 +442,24 @@ def _family_folder(
         assert_within_root(job_dir, source_root)
     except JobDirectoryEscapesRoot:
         return EscapesRoot(job_dir)
+    return job_dir
+
+
+def _is_first_article(snapshot: FamilySnapshot) -> bool:
+    return (snapshot.article_revision or FIRST_ARTICLE).strip().lower() == FIRST_ARTICLE.lower()
+
+
+def _family_folder(
+    snapshot: FamilySnapshot,
+    source_root: pathlib.Path,
+) -> pathlib.Path | Missing | ProbeFailure:
+    """The folder the family was first ingested from, as ingest would find it."""
+    job_dir = _job_root(snapshot, source_root)
+    if not isinstance(job_dir, pathlib.Path):
+        return job_dir
 
     article = (snapshot.article_revision or FIRST_ARTICLE).strip().lower()
-    if article == FIRST_ARTICLE.lower():
+    if _is_first_article(snapshot):
         return job_dir
 
     try:
@@ -432,25 +483,58 @@ def _family_folder(
     return matches[0]
 
 
+def _placement_candidates(
+    job_root: pathlib.Path,
+    entries: Sequence[pathlib.Path] | None,
+) -> tuple[CandidateFile, ...] | ShareReadFailure:
+    """The job root's .bmb files (Phase 57 §8.2), from the family folder's listing when it is the job root."""
+    try:
+        listing = list(entries) if entries is not None else list(job_root.iterdir())
+    except OSError as error:
+        return ShareReadFailure(job_root, _describe(error))
+    found: list[CandidateFile] = []
+    for entry in listing:
+        if role_of(entry.name) != SourceRole.PLACEMENTS:
+            continue
+        try:
+            if not entry.is_file():
+                continue
+            stat = entry.stat()
+        except OSError as error:
+            return ShareReadFailure(entry, _describe(error))
+        found.append(CandidateFile(
+            path=entry, name=entry.name, size=stat.st_size,
+            modified_at_ns=stat.st_mtime_ns, tag=version_tag(entry.name),
+        ))
+    return tuple(sorted(found, key=lambda c: c.name))
+
+
 def probe_family(
     snapshot: FamilySnapshot,
     source_root: pathlib.Path,
     read_hash: HashReader = read_share_hash,
+    roles: frozenset[SourceRole] = PROBED_ROLES,
 ) -> FamilyProbe | ProbeFailure:
     """Reads the share for one family without writing anything anywhere.
 
     pre:  runs on the update worker; snapshot was read on the UI thread
     post: one directory listing of the family's folder (plus the job root for
-          an article's folder lookup); one status per role in UPDATED_ROLES,
-          NotStored for a role any member lacks; a candidate is only ever read
-          after it resolved inside source_root; a candidate that can't be
-          stat'ed or read is CandidateUnreadable for this family only
+          an article's folder lookup); one status per role in UPDATED_ROLES
+          that roles names, NotStored for a role any member lacks; a candidate
+          is only ever read after it resolved inside source_root; a candidate
+          that can't be stat'ed or read is CandidateUnreadable for this family
+          only. Phase 57 §8.2: when roles names PLACEMENTS, the job root's
+          .bmb files are listed (one more listing for an article's folder) and
+          decided by decide_placements; a .bmb that can't be listed, stat'ed or
+          read is the placements status, never the family's failure
     """
     folder = _family_folder(snapshot, source_root)
     if isinstance(folder, (ShareUnreachable, EscapesRoot, ArticleFolderAmbiguous)):
         return folder
 
-    candidates_by_role: dict[SourceRole, list[CandidateFile]] = {role: [] for role in UPDATED_ROLES}
+    probed = tuple(role for role in UPDATED_ROLES if role in roles)
+    candidates_by_role: dict[SourceRole, list[CandidateFile]] = {role: [] for role in probed}
+    entries: list[pathlib.Path] | None = None
     if isinstance(folder, pathlib.Path):
         try:
             entries = list(folder.iterdir())
@@ -482,7 +566,7 @@ def probe_family(
         return read_hash(candidate)
 
     statuses: dict[SourceRole, FamilyDocumentStatus] = {}
-    for role in UPDATED_ROLES:
+    for role in probed:
         held = [snapshot.stored.get(member.audit_id, {}).get(role) for member in snapshot.members]
         if any(document is None for document in held):
             statuses[role] = NotStored()
@@ -494,7 +578,7 @@ def probe_family(
             role,
             candidates_by_role[role],
             snapshot.stored[snapshot.reference_member][role],
-            {member.audit_id: snapshot.stored[member.audit_id][role].file_hash for member in snapshot.members},
+            {member.audit_id: snapshot.stored[member.audit_id][role].source_hash for member in snapshot.members},
             folder,
             contained_read,
         )
@@ -504,11 +588,55 @@ def probe_family(
             return CandidateUnreadable(status.path, status.cause)
         statuses[role] = status
 
+    placements: Any = None
+    placement_candidates: tuple[CandidateFile, ...] = ()
+    if SourceRole.PLACEMENTS in roles:
+        placements, placement_candidates = _probe_placements(snapshot, source_root, folder, entries, read_hash)
+
     return FamilyProbe(
         snapshot=snapshot,
         folder=folder if isinstance(folder, pathlib.Path) else None,
         statuses=statuses,
+        placements=placements,
+        placement_candidates=placement_candidates,
     )
+
+
+def _probe_placements(
+    snapshot: FamilySnapshot,
+    source_root: pathlib.Path,
+    folder: pathlib.Path | Missing,
+    entries: list[pathlib.Path] | None,
+    read_hash: HashReader,
+) -> tuple[Any, tuple[CandidateFile, ...]]:
+    """Phase 57 §8.2: the job root's .bmb, decided member by member; a failure stays placements'."""
+    from cockpit.services import placement_updates
+
+    if _is_first_article(snapshot):
+        job_root: pathlib.Path | Missing | ProbeFailure = folder
+        listing = entries
+    else:
+        job_root = _job_root(snapshot, source_root)
+        listing = None
+    if isinstance(job_root, Missing):
+        return placement_updates.NoBmb(), ()
+    if isinstance(job_root, EscapesRoot):
+        return ShareReadFailure(job_root.path, "ESCAPES_ROOT"), ()
+    if not isinstance(job_root, pathlib.Path):
+        return ShareReadFailure(source_root, getattr(job_root, "cause", type(job_root).__name__)), ()
+
+    candidates = _placement_candidates(job_root, listing)
+    if isinstance(candidates, ShareReadFailure):
+        return candidates, ()
+
+    def contained_read(candidate: CandidateFile) -> str | ShareReadFailure:
+        try:
+            assert_within_root(candidate.path, source_root)
+        except JobDirectoryEscapesRoot:
+            return ShareReadFailure(candidate.path, "ESCAPES_ROOT")
+        return read_hash(candidate)
+
+    return placement_updates.decide_placements(candidates, snapshot, contained_read), candidates
 
 
 # ---------- section 4: the preview ----------
@@ -578,6 +706,8 @@ class FamilyPreview:
     ops_per_board_review: bool
     rejected: Mapping[SourceRole, Union[DocumentRejected, IdentityMismatch]]
     awaiting_choice: tuple[SourceRole, ...]
+    # Phase 57 §8.3: why the job's .bmb can't be offered (a read or a pick that failed). Never blocks.
+    placements_unavailable: str | None = None
 
     @property
     def can_apply(self) -> bool:
@@ -771,7 +901,7 @@ def _pick_update(
     snapshot = probe.snapshot
     lagging = tuple(sorted(
         member.audit_id for member in snapshot.members
-        if snapshot.stored[member.audit_id][role].file_hash != candidate_hash
+        if snapshot.stored[member.audit_id][role].source_hash != candidate_hash
     ))
     if not lagging:
         return None
@@ -843,10 +973,13 @@ def build_preview(
     for role in rejected:
         updates.pop(role, None)
 
+    placements_unavailable = _placements_update(probe, choices, source_root, read_hash, updates)
+
+    document_updates = {role: u for role, u in updates.items() if role in UPDATED_ROLES}
     requirement_diff = None
-    if requirements is not None and updates:
+    if requirements is not None and document_updates:
         try:
-            requirement_diff = requirements(probe, {role: u.candidate.path for role, u in updates.items()})
+            requirement_diff = requirements(probe, {role: u.candidate.path for role, u in document_updates.items()})
         except Exception as error:
             logger.warning(
                 "Requirement preview failed for audits %s: %s", list(snapshot.family), _describe(error)
@@ -861,7 +994,43 @@ def build_preview(
         ops_per_board_review=SourceRole.BOM in updates and snapshot.held.ops_per_board_min is not None,
         rejected=rejected,
         awaiting_choice=tuple(awaiting),
+        placements_unavailable=placements_unavailable,
     )
+
+
+def _placements_update(
+    probe: FamilyProbe,
+    choices: Mapping[SourceRole, pathlib.Path],
+    source_root: pathlib.Path,
+    read_hash: HashReader,
+    updates: dict[SourceRole, RoleUpdate],
+) -> str | None:
+    """Phase 57 §8.3: the PLACEMENTS update, with no parse; returns why none is offered, if it failed.
+
+    post: PlacementsChanged becomes a RoleUpdate; a PlacementsNeedChoice with a pick is re-checked
+          inside source_root and hashed, its members decided by decide_placements' rule; neither an
+          unpicked choice nor a failure ever enters rejected or awaiting_choice
+    """
+    from cockpit.services import placement_updates
+
+    status = probe.placements
+    if isinstance(status, placement_updates.PlacementsChanged):
+        updates[SourceRole.PLACEMENTS] = RoleUpdate(
+            SourceRole.PLACEMENTS, status.candidate, status.candidate_hash, status.members_to_update, None,
+        )
+        return None
+    if isinstance(status, ShareReadFailure):
+        return status.cause
+    if isinstance(status, placement_updates.PlacementsNeedChoice):
+        pick = choices.get(SourceRole.PLACEMENTS)
+        if pick is None:
+            return None
+        picked = placement_updates.pick_placements(status, pick, probe.snapshot, source_root, read_hash)
+        if isinstance(picked, RoleUpdate):
+            updates[SourceRole.PLACEMENTS] = picked
+            return None
+        return picked
+    return None
 
 
 # ---------- section 5: prepare ----------
@@ -889,11 +1058,26 @@ class DrawingHighlightsIncomplete:
     designators_without_coordinates: int
 
 
-UpdateWarning = DrawingHighlightsIncomplete
+@dataclass(frozen=True)
+class PlacementsUnavailable:
+    """Phase 57 §8.4: a .bmb that couldn't be used; the family's other roles still apply."""
+
+    reason: str
+    members: tuple[int, ...]
+
+
+UpdateWarning = Union[DrawingHighlightsIncomplete, PlacementsUnavailable]
 
 
 @dataclass(frozen=True)
 class FamilyUpdatePlan:
+    """members_to_update names UPDATED_ROLES only: placements carry their own outcome per member.
+
+    Phase 57 §8.4: placements maps each member with placements work to its MemberPlacements;
+    extracts_moved lists every extract this run moved into place, once; expected_placements holds,
+    per member in placements, the rows prepare read (PlacementsBasis), for the optimistic check.
+    """
+
     key: FamilyKey
     family: tuple[int, ...]
     staged: tuple[StagedDocument, ...]
@@ -905,6 +1089,16 @@ class FamilyUpdatePlan:
     pdf_coordinates: Mapping[int, PdfCoordinateChange]
     expected_stored_hashes: Mapping[int, Mapping[SourceRole, str]]
     warnings: tuple[UpdateWarning, ...]
+    placements: Mapping[int, Any] = field(default_factory=dict)
+    extracts_moved: tuple[Any, ...] = ()
+    expected_placements: Mapping[int, Any] = field(default_factory=dict)
+
+    def copies_moved(self) -> tuple[StagedDocument, ...]:
+        """Every file this run moved into place: staged documents and extracts alike."""
+        return (
+            tuple(doc for doc in self.staged if doc.copied_by_this_run)
+            + tuple(extract.as_staged_document() for extract in self.extracts_moved)
+        )
 
 
 @dataclass(frozen=True)
@@ -989,9 +1183,15 @@ def _coordinate_changes(
     snapshot: FamilySnapshot,
     members: Sequence[int],
     layout_parser: Any,
+    dni_designators: frozenset[str] = frozenset(),
 ) -> tuple[dict[int, PdfCoordinateChange], tuple[UpdateWarning, ...]]:
-    """Section 5.2: each member's drawing is read only when its designators changed."""
+    """Section 5.2: each member's drawing is read only when its designators changed.
+
+    Phase 57 §4: the added designators are split against every revised designator and the revised
+    BOM's DNI designators, so a merged span with an already-held neighbour still splits.
+    """
     revised = frozenset().union(*(item.ref_des_list for item in bom_items))
+    split_targets = set(revised) | set(dni_designators)
     member_by_id = {member.audit_id: member for member in snapshot.members}
 
     work: dict[int, tuple[StoredDocument, frozenset[str], frozenset[str]]] = {}
@@ -1014,7 +1214,7 @@ def _coordinate_changes(
         if not targets:
             continue
         try:
-            layout = layout_parser.parse(drawing_path, set(targets))
+            layout = layout_parser.parse(drawing_path, set(targets), split_targets=split_targets)
         except Exception as error:
             unreadable[drawing_path] = _describe(error)
             continue
@@ -1053,6 +1253,7 @@ def prepare_family_update(
     stop: threading.Event,
     run_id: str,
     copy_file: CopyFile = shutil.copy2,
+    share_call: Any = None,
 ) -> FamilyUpdatePlan | PrepareFailed:
     """Prepares one confirmed family's update. Copies files; writes no rows; never reads the database.
 
@@ -1061,13 +1262,19 @@ def prepare_family_update(
           content-addressed path and hashes to its candidate's hash; the BOM,
           ECO and traveler were re-parsed from the stored copies and passed
           every gate and identity check; pdf_coordinates is filled per section
-          5.2; on PrepareFailed no temporary file of this run remains, and
-          copied_by_this_run lists every file this run moved into place, for
-          the UI thread to discard; stop seen before a copy, before a move into
-          place, or before returning gives Cancelled
+          5.2, except for members whose drawing placements re-read whole;
+          placements, extracts_moved and expected_placements are filled per
+          Phase 57 §8.4, and a placements failure only adds a warning; on
+          PrepareFailed no temporary file of this run remains, and
+          copied_by_this_run lists every file this run moved into place,
+          extracts included, for the UI thread to discard; stop seen before a
+          copy, before a move into place, between placements steps, or before
+          returning gives Cancelled
     raises: ValueError when the preview can't be applied, which the dialog
             prevents
     """
+    from cockpit.services import placement_updates
+
     if not preview.can_apply:
         raise ValueError("prepare_family_update needs a preview that can be applied")
 
@@ -1079,9 +1286,14 @@ def prepare_family_update(
         return PrepareFailed(StorageFailed(_describe(error)), ())
 
     staged: list[StagedDocument] = []
+    extracts_moved: list[Any] = []
 
     def failed(failure: FamilyUpdateFailure) -> PrepareFailed:
-        return PrepareFailed(failure, tuple(doc for doc in staged if doc.copied_by_this_run))
+        return PrepareFailed(
+            failure,
+            tuple(doc for doc in staged if doc.copied_by_this_run)
+            + tuple(extract.as_staged_document() for extract in extracts_moved),
+        )
 
     for role in UPDATED_ROLES:
         update = preview.updates.get(role)
@@ -1096,13 +1308,17 @@ def prepare_family_update(
 
     stored_by_role = {doc.role: doc.stored_path for doc in staged}
     bom_items = None
+    revised_bom: BomResult | None = None
+    bom_dni_designators: frozenset[str] = frozenset()
     traveler_metadata = None
     quantity_on_traveler = None
     if SourceRole.BOM in stored_by_role:
         reading = _read_bom(stored_by_role[SourceRole.BOM], parsers, snapshot.key)
         if isinstance(reading, (DocumentRejected, IdentityMismatch)):
             return failed(reading)
+        revised_bom = reading
         bom_items = tuple(reading.items)
+        bom_dni_designators = frozenset(getattr(reading, "dni_designators", ()))
     if SourceRole.NOTES in stored_by_role:
         reading = _read_eco(stored_by_role[SourceRole.NOTES], parsers, snapshot.key)
         if isinstance(reading, (DocumentRejected, IdentityMismatch)):
@@ -1114,13 +1330,29 @@ def prepare_family_update(
         traveler_metadata = reading.metadata
         quantity_on_traveler = reading.quantity
 
-    members_to_update = {role: update.members_to_update for role, update in preview.updates.items()}
+    members_to_update = {
+        role: update.members_to_update for role, update in preview.updates.items() if role in UPDATED_ROLES
+    }
+
+    if stop.is_set():
+        return failed(Cancelled())
+    family_placements = placement_updates.prepare_family_placements(
+        preview, destination_dir, source_root, parsers, revised_bom, stop, run_id,
+        share_call=share_call,
+    )
+    extracts_moved.extend(family_placements.extracts_moved)
+    if family_placements.cancelled:
+        return failed(Cancelled())
+
     pdf_coordinates: dict[int, PdfCoordinateChange] = {}
     warnings: tuple[UpdateWarning, ...] = ()
     if bom_items is not None:
         pdf_coordinates, warnings = _coordinate_changes(
-            bom_items, snapshot, members_to_update[SourceRole.BOM], parsers.pdf_layout_parser
+            bom_items, snapshot,
+            [m for m in members_to_update[SourceRole.BOM] if m not in family_placements.relabelled],
+            parsers.pdf_layout_parser, bom_dni_designators,
         )
+    warnings = placement_updates.merge_warnings(warnings, family_placements.warnings)
 
     if stop.is_set():
         return failed(Cancelled())
@@ -1142,6 +1374,9 @@ def prepare_family_update(
         pdf_coordinates=pdf_coordinates,
         expected_stored_hashes=expected,
         warnings=warnings,
+        placements=family_placements.outcomes,
+        extracts_moved=tuple(extracts_moved),
+        expected_placements=family_placements.basis,
     )
 
 
@@ -1155,6 +1390,8 @@ class FamilyUpdated:
     reaped_paths: tuple[pathlib.Path, ...]
     warnings: tuple[UpdateWarning, ...]
     quantity_not_applied: tuple[int, int] | None
+    # Phase 57 §8.5: one PlacementsSummary per member that had placements work.
+    placements: Mapping[int, Any] = field(default_factory=dict)
 
 
 RequirementsRefresh = Callable[[Sequence[int]], None]
@@ -1198,6 +1435,17 @@ def _family_changed(plan: FamilyUpdatePlan, repositories: FamilyUpdateRepositori
         row = repositories.source_files.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
         if row is None or row.id != change.pdf_source_file_id:
             return True
+    # Phase 57 §8.6: the Placements, drawing and BOM rows placements work was prepared from, by id
+    # and hash, since SQLite reuses a deleted row's id.
+    for audit_id, basis in plan.expected_placements.items():
+        for category, expected in (
+            (SourceFileCategory.PLACEMENTS, basis.placements_row),
+            (SourceFileCategory.PDF, basis.drawing_row),
+            (SourceFileCategory.BOM, basis.bom_row),
+        ):
+            row = repositories.source_files.find_by_audit_and_category(audit_id, category)
+            if ((row.id, row.file_hash) if row is not None else None) != expected:
+                return True
     return False
 
 
@@ -1280,13 +1528,17 @@ def apply_family_update(
           the BOM changed; drawing coordinates changed per the plan;
           traveler_metadata replaced, with is_class_3 and is_clean_process
           recomputed, when the traveler changed; runtimes recomputed; operator
-          state untouched; after RELEASE, superseded files whose
-          reference_count is 0 are reaped and requirements_refresh, when given,
-          is called once with the family; on a failure the family is exactly as
-          it was and this run's unreferenced copies are discarded
+          state untouched; then, Phase 57 §8.5, each member's placements in a
+          savepoint of its own, a failure rolling back that member alone; after
+          the last, extracts no row references are discarded; superseded files
+          whose reference_count is 0 are reaped and requirements_refresh, when
+          given, is called once with the family; on a failure the family is
+          exactly as it was and this run's unreferenced copies are discarded
     raises: nothing from requirements_refresh, which is best-effort
     """
-    copies = tuple(doc for doc in plan.staged if doc.copied_by_this_run)
+    from cockpit.services import placement_updates
+
+    copies = plan.copies_moved()
     if _family_changed(plan, repositories):
         discard_copies(copies, repositories.source_files)
         return FamilyChangedSincePreview(plan.family)
@@ -1299,6 +1551,10 @@ def apply_family_update(
             if row is not None and row.local_storage_path not in seen_paths:
                 seen_paths.add(row.local_storage_path)
                 superseded.append(row)
+    for row in placement_updates.superseded_extract_rows(plan, repositories):
+        if row.local_storage_path not in seen_paths:
+            seen_paths.add(row.local_storage_path)
+            superseded.append(row)
 
     conn = repositories.conn
     conn.execute("SAVEPOINT update_family")
@@ -1311,6 +1567,9 @@ def apply_family_update(
         logger.warning("Document update rolled back for audits %s: %s", list(plan.family), _describe(error))
         discard_copies(copies, repositories.source_files)
         return WriteFailed(_describe(error))
+
+    placements = placement_updates.apply_family_placements(plan, repositories, runtime_calc)
+    discard_copies(tuple(extract.as_staged_document() for extract in plan.extracts_moved), repositories.source_files)
 
     reaped: tuple[pathlib.Path, ...] = ()
     try:
@@ -1344,6 +1603,7 @@ def apply_family_update(
         reaped_paths=reaped,
         warnings=plan.warnings,
         quantity_not_applied=quantity_not_applied,
+        placements=placements,
     )
 
 
@@ -1370,6 +1630,8 @@ def _stored_document(role: SourceRole, row: SourceFile) -> StoredDocument:
         role=role, source_file_id=row.id, original_filename=row.original_filename,
         stored_path=row.local_storage_path, file_hash=row.file_hash,
         size=size, modified_at_ns=modified_at_ns,
+        source_hash=row.source_hash, source_size=row.source_size,
+        source_modified_ns=row.source_modified_ns,
     )
 
 
@@ -1378,9 +1640,9 @@ def snapshot_family(key: FamilyKey, repositories: FamilyUpdateRepositories) -> F
 
     pre:  UI thread
     post: None when the family no longer exists; otherwise every member's
-          stored documents (the drawing included, for section 5.2), its
-          designators, and the reference member's rows the preview diffs
-          against
+          stored documents (the drawing and the Placements extract included,
+          for section 5.2 and Phase 57 §8), its designators, its recorded .bmb
+          rejections, and the reference member's rows the preview diffs against
     """
     family = repositories.audits.list_family(key.part_number, key.work_order_ref)
     if not family:
@@ -1389,7 +1651,9 @@ def snapshot_family(key: FamilyKey, repositories: FamilyUpdateRepositories) -> F
 
     stored: dict[int, dict[SourceRole, StoredDocument]] = {}
     components_by_member: dict[int, list[AuditBomComponent]] = {}
+    rejections: dict[int, tuple[PlacementRejection, ...]] = {}
     for audit in family:
+        rejections[audit.id] = tuple(repositories.placement_rejections.list_for_audit(audit.id))
         documents: dict[SourceRole, StoredDocument] = {}
         for row in repositories.source_files.list_for_audit(audit.id):
             role = ROLE_OF_CATEGORY.get(SourceFileCategory(row.file_category))
@@ -1421,7 +1685,7 @@ def snapshot_family(key: FamilyKey, repositories: FamilyUpdateRepositories) -> F
     return FamilySnapshot(
         key=key, members=members, reference_member=reference_id,
         article_revision=reference.article_revision or FIRST_ARTICLE,
-        stored=stored, held=held,
+        stored=stored, held=held, rejections=rejections,
     )
 
 

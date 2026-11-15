@@ -9,6 +9,9 @@ from cockpit.layout.renderer import PdfRenderer
 from cockpit.services.views import LayoutContext, ResolvedSelection, ResolutionKind, HighlightCoord, SelectionIntent, SelectionKind, RefDesLocation, PendingPdf
 from dataclasses import dataclass
 
+from cockpit.placements.geometry import PLACEMENT, PartHighlight
+from cockpit.services.placements import PartLocations, PlacementQueryService
+
 
 @dataclass(frozen=True)
 class AuditBomRowView:
@@ -26,11 +29,17 @@ class LayoutQueryService:
         pdf_renderer: PdfRenderer,
         bom_component_repo: AuditBomComponentRepository,
         pdf_coord_repo: PdfComponentCoordRepository,
+        placement_query: PlacementQueryService | None = None,
     ) -> None:
         self.source_file_repo = source_file_repo
         self.pdf_renderer = pdf_renderer
         self.bom_component_repo = bom_component_repo
         self.pdf_coord_repo = pdf_coord_repo
+        if placement_query is None:
+            placement_query = PlacementQueryService.over(
+                source_file_repo.conn, source_file_repo, bom_component_repo, pdf_coord_repo,
+            )
+        self.placement_query = placement_query
 
     def resolve_pdf_ref(self, audit_id: int) -> PendingPdf | None:
         """Resolve the cheap, DB-derived PDF reference for an audit."""
@@ -60,12 +69,9 @@ class LayoutQueryService:
             path=source_file.local_storage_path
         )
 
-    def list_pdf_coords_for_audit(self, audit_id: int) -> tuple[HighlightCoord, ...]:
-        pdf_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
-        if pdf_sf is None:
-            return ()
-        coords = self.pdf_coord_repo.list_for_source_file(pdf_sf.id)
-        return tuple(HighlightCoord(c.ref_des, c.page_index, c.x1, c.y1, c.x2, c.y2) for c in coords)
+    def list_clickable_parts(self, audit_id: int) -> tuple[PartHighlight, ...]:
+        """Phase 57 §10.2: what the canvas offers for clicks, every BOM designator's locations."""
+        return self.placement_query.locate_parts(audit_id).highlights
 
     def locate_refdes(self, audit_id: int, ref_des: str) -> RefDesLocation | None:
         """
@@ -133,15 +139,6 @@ class LayoutQueryService:
         bom_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.BOM)
         pdf_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
 
-        def _get_pdf_coords(ref_des_set):
-            if pdf_sf is None:
-                return ()
-            pdf_coords = self.pdf_coord_repo.list_for_source_file(pdf_sf.id)
-            return tuple(
-                HighlightCoord(c.ref_des, c.page_index, c.x1, c.y1, c.x2, c.y2)
-                for c in pdf_coords if c.ref_des in ref_des_set
-            )
-
         bom_components = self.bom_component_repo.list_for_source_file(bom_sf.id) if bom_sf else []
 
         # SelectionKind.THT_MPN / MPN_CELL / BOM_MPN logic
@@ -177,9 +174,12 @@ class LayoutQueryService:
                 coords=()
             )
 
-        coords = _get_pdf_coords(set(ref_des_list))
+        locations = self.placement_query.locate_parts(audit_id, set(ref_des_list))
+        coords = tuple(highlight_coord(h) for h in locations.highlights)
         n = len(ref_des_list)
-        k = len(coords)
+        # Phase 57 §10.2: k counts located designators, not boxes; a placement can show on several pages.
+        k = len(set(ref_des_list) - locations.not_located)
+        located = _placements_fields(locations)
 
         if intent.kind == SelectionKind.THT_MPN:
             if n == 1 and k >= 1:
@@ -188,7 +188,8 @@ class LayoutQueryService:
                     mpn=mpn,
                     mpn_set=None,
                     ref_des_list=ref_des_list,
-                    coords=coords
+                    coords=coords,
+                    **located,
                 )
             elif n == 1 and k == 0:
                 return ResolvedSelection(
@@ -196,7 +197,8 @@ class LayoutQueryService:
                     mpn=mpn,
                     mpn_set=None,
                     ref_des_list=ref_des_list,
-                    coords=()
+                    coords=(),
+                    **located,
                 )
             elif n > 1:
                 return ResolvedSelection(
@@ -204,7 +206,8 @@ class LayoutQueryService:
                     mpn=mpn,
                     mpn_set=None,
                     ref_des_list=ref_des_list,
-                    coords=()
+                    coords=(),
+                    **located,
                 )
 
         elif intent.kind in (SelectionKind.MPN_CELL, SelectionKind.BOM_MPN):
@@ -214,7 +217,8 @@ class LayoutQueryService:
                     mpn=mpn,
                     mpn_set=None,
                     ref_des_list=ref_des_list,
-                    coords=()
+                    coords=(),
+                    **located,
                 )
             else:
                 return ResolvedSelection(
@@ -222,7 +226,8 @@ class LayoutQueryService:
                     mpn=mpn,
                     mpn_set=None,
                     ref_des_list=ref_des_list,
-                    coords=coords
+                    coords=coords,
+                    **located,
                 )
 
         return ResolvedSelection(
@@ -230,5 +235,26 @@ class LayoutQueryService:
             mpn=mpn,
             mpn_set=None,
             ref_des_list=ref_des_list,
-            coords=()
+            coords=(),
+            **located,
         )
+
+
+def highlight_coord(highlight: PartHighlight) -> HighlightCoord:
+    """A located part as the canvas draws it: an outline for a placement, the label box for a label."""
+    xs = [x for x, _y in highlight.outline]
+    ys = [y for _x, y in highlight.outline]
+    return HighlightCoord(
+        ref_des=highlight.designator, page_index=highlight.page_index,
+        x1=min(xs), y1=min(ys), x2=max(xs), y2=max(ys),
+        outline=highlight.outline if highlight.source == PLACEMENT else None,
+        source=highlight.source, point=highlight.point,
+    )
+
+
+def _placements_fields(locations: PartLocations) -> dict:
+    return {
+        "not_located": locations.not_located,
+        "has_placements": locations.has_placements,
+        "placements_unused_reason": locations.placements_unused_reason,
+    }

@@ -88,30 +88,28 @@ class RuntimeCalcService:
         source_file_repo: SourceFileRepository,
         bom_repo: AuditBomComponentRepository,
         pdf_repo: PdfComponentCoordRepository,
-        constants_provider: Callable[[], RuntimeConstants] = RuntimeConstants.defaults
+        constants_provider: Callable[[], RuntimeConstants] = RuntimeConstants.defaults,
+        placement_query=None,
     ):
         self._audit_repo = audit_repo
         self._source_file_repo = source_file_repo
         self._bom_repo = bom_repo
         self._pdf_repo = pdf_repo
         self._constants_provider = constants_provider
+        if placement_query is None:
+            from cockpit.services.placements import PlacementQueryService
+            placement_query = PlacementQueryService.over(audit_repo.conn, source_file_repo, bom_repo, pdf_repo)
+        self._placement_query = placement_query
 
-    def _pdf_page_count(self, audit_id: int) -> int:
-        pdf_sf = self._source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.PDF)
-        if pdf_sf is None:
-            return 1
-            
+    def _smt_side_count(self, audit_id: int) -> int:
+        """Phase 57 §11: the sides holding an SMT designator, from placements first, then labels; 1 when none."""
         try:
-            coords = self._pdf_repo.list_for_source_file(pdf_sf.id)
-            if not coords:
-                return 1
-            max_page = max(c.page_index for c in coords)
-            return max_page + 1
+            return self._placement_query.smt_side_count(audit_id)
         except Exception as e:
-            logger.warning(f"Failed to determine PDF page count for audit {audit_id}: {e}")
+            logger.warning("Failed to determine the board sides for audit %s: %s", audit_id, type(e).__name__)
             return 1
 
-    def gather_inputs(self, audit_id: int, known_pdf_page_count: Optional[int] = None) -> Optional[RuntimeInputs]:
+    def gather_inputs(self, audit_id: int) -> Optional[RuntimeInputs]:
         audit = self._audit_repo.find_by_id(audit_id)
         if not audit:
             return None
@@ -125,7 +123,7 @@ class RuntimeCalcService:
         smt_comps = [c for c in components if c.mount_type == 'S']
         tht_comps = [c for c in components if c.mount_type == 'T']
         
-        sides = known_pdf_page_count if known_pdf_page_count is not None else self._pdf_page_count(audit_id)
+        sides = self._smt_side_count(audit_id)
         
         return RuntimeInputs(
             smt_placements=len(smt_comps),
@@ -156,8 +154,8 @@ class RuntimeCalcService:
                 logger.error("recompute_all: audit %s failed: %s", audit_id, persist_error)
         return RecomputeSummary(attempted=attempted, failed=failed)
 
-    def persist(self, audit_id: int, known_pdf_page_count: Optional[int] = None) -> None:
-        inputs = self.gather_inputs(audit_id, known_pdf_page_count)
+    def persist(self, audit_id: int) -> None:
+        inputs = self.gather_inputs(audit_id)
         if inputs is None:
             return
             

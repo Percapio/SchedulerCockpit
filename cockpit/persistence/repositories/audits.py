@@ -17,6 +17,7 @@ from ..types import ActiveAudit, ActiveAuditDraft, AuditStatus, SourceFileCatego
 
 from .bom_components import AuditBomComponentRepository
 from .pdf_coords import PdfComponentCoordRepository
+from .placements import BoardPlacementRepository, PageRegistrationRepository, PlacementRejectionRepository
 from ..traveler_flags import (
     is_class_3,
     is_clean_process,
@@ -408,15 +409,17 @@ class AuditRepository:
         # Clone source_files by reference (same local_storage_path and file_hash)
         cur.execute("SELECT * FROM source_files WHERE audit_id = ?", (source_audit_id,))
         source_files = cur.fetchall()
-        
+
         file_id_map = {} # old_id -> new_id
         for sf in source_files:
+            # Phase 57 §7.4: v21's source_hash is NOT NULL, so the copy must carry it.
             cur.execute(
                 """
                 INSERT INTO source_files (
                     audit_id, file_category, original_filename,
-                    local_storage_path, file_hash, ingested_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    local_storage_path, file_hash, ingested_at,
+                    source_hash, source_size, source_modified_ns
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     sibling_id,
@@ -424,17 +427,28 @@ class AuditRepository:
                     sf["original_filename"],
                     str(sf["local_storage_path"]),
                     sf["file_hash"],
-                    now_iso
+                    now_iso,
+                    sf["source_hash"],
+                    sf["source_size"],
+                    sf["source_modified_ns"],
                 )
             )
             file_id_map[sf["id"]] = cur.lastrowid
-            
+
             # Phase 7 side-table clones
             if sf["file_category"] == SourceFileCategory.BOM.value:
                 self.bom_component_repo.clone_for_source_file(sf["id"], file_id_map[sf["id"]])
             elif sf["file_category"] == SourceFileCategory.PDF.value:
                 self.pdf_coord_repo.clone_for_source_file(sf["id"], file_id_map[sf["id"]])
-            
+            elif sf["file_category"] == SourceFileCategory.PLACEMENTS.value:
+                BoardPlacementRepository(self.conn).clone_for_file(sf["id"], file_id_map[sf["id"]])
+
+        # Phase 57 §7.4: a registration is cloned once both of its files have been.
+        registrations = PageRegistrationRepository(self.conn)
+        for drawing_id, placement_id in registrations.pairs_for_files(file_id_map):
+            registrations.clone(drawing_id, placement_id, file_id_map[drawing_id], file_id_map[placement_id])
+        PlacementRejectionRepository(self.conn).clone_for_audit(source_audit_id, sibling_id)
+
         # Clone THT rows
         cur.execute("SELECT * FROM tht_verification_checklist WHERE audit_id = ?", (source_audit_id,))
         tht_rows = cur.fetchall()

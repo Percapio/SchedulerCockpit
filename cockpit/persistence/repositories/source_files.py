@@ -11,9 +11,17 @@ class SourceFileRepository:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
 
+    @staticmethod
+    def _check_hash(name: str, value: str | None) -> None:
+        # The whitelist is the lowercase rule: str.islower() is False for an all-digit string.
+        if not value or len(value) != 64 or not all(c in "0123456789abcdef" for c in value):
+            raise InvalidArgumentError(name, value, "Must be a 64-character lowercase hex SHA-256 string")
+
     def register(self, draft: SourceFileDraft) -> SourceFile:
-        if not draft.file_hash or len(draft.file_hash) != 64 or not draft.file_hash.islower() or not all(c in "0123456789abcdef" for c in draft.file_hash):
-            raise InvalidArgumentError("file_hash", draft.file_hash, "Must be a 64-character lowercase hex SHA-256 string")
+        self._check_hash("file_hash", draft.file_hash)
+        # Phase 57 §7.3: a copy's share hash is its file_hash; only an extract names another.
+        source_hash = draft.source_hash if draft.source_hash is not None else draft.file_hash
+        self._check_hash("source_hash", source_hash)
 
         cur = self.conn.cursor()
         now_iso = utcnow().isoformat()
@@ -22,8 +30,9 @@ class SourceFileRepository:
             cur.execute(
                 """
                 INSERT INTO source_files (
-                    audit_id, file_category, original_filename, local_storage_path, file_hash, ingested_at
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    audit_id, file_category, original_filename, local_storage_path, file_hash, ingested_at,
+                    source_hash, source_size, source_modified_ns
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     draft.audit_id,
@@ -31,7 +40,10 @@ class SourceFileRepository:
                     draft.original_filename,
                     str(draft.local_storage_path),
                     draft.file_hash,
-                    now_iso
+                    now_iso,
+                    source_hash,
+                    draft.source_size,
+                    draft.source_modified_ns,
                 )
             )
         except sqlite3.IntegrityError as e:

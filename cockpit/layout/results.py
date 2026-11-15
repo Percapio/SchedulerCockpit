@@ -11,6 +11,9 @@ class PdfComponentCoordinate:
     y1: float
     x2: float
     y2: float
+    # Phase 57 §4: set for a label the splitter recovered from a merged span. In memory only:
+    # registration never uses one as a control point, and storage doesn't keep the flag.
+    from_split: bool = False
 
     def __post_init__(self) -> None:
         if self.x1 > self.x2:

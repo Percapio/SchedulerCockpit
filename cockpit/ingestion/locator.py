@@ -223,8 +223,13 @@ def locate(
     }
     
     for entry in entries:
-        if entry.is_file() and role_of(entry.name) != SourceRole.PDF:
-            candidates_by_role[role_of(entry.name)].append(entry)
+        role = role_of(entry.name)
+        if entry.is_file() and role != SourceRole.PDF:
+            # Phase 57 §5.1: ingest carries no .bmb, so locate counts it as ignored, as it did
+            # before the role existed.
+            if role not in candidates_by_role:
+                role = SourceRole.UNKNOWN
+            candidates_by_role[role].append(entry)
 
     for entry in pdf_entries:
         if entry.is_file() and role_of(entry.name) == SourceRole.PDF:

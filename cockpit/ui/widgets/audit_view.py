@@ -42,6 +42,8 @@ class AuditView(QWidget):
     # Local
     settings_requested = pyqtSignal()
     drawing_fetch_requested = pyqtSignal(int, bool)  # (audit_id, secondary)
+    drawing_drop_requested = pyqtSignal(object, object)  # (AddDrawingDialog, pathlib.Path)
+    placements_report_requested = pyqtSignal(int)
     xray_toggle_requested = pyqtSignal(int, bool)
 
     def __init__(
@@ -111,6 +113,8 @@ class AuditView(QWidget):
         self._actions_bar.second_ops_requested.connect(self.second_ops_requested.emit)
         self._actions_bar.cleaning_report_requested.connect(self.cleaning_report_requested.emit)
         self._actions_bar.drawing_fetch_requested.connect(self.drawing_fetch_requested.emit)
+        self._actions_bar.drawing_drop_requested.connect(self.drawing_drop_requested.emit)
+        self._actions_bar.placements_report_requested.connect(self.placements_report_requested.emit)
         self._actions_bar.audit_fields_changed.connect(self.refresh_audit_fields)
         header_layout.addWidget(self._actions_bar)
         

@@ -89,6 +89,15 @@ class MainWindow(QMainWindow):
         self._orphaned_workers = []
         self._second_ops_review_dialogs = {}
         self._cleaning_report_dialogs = {}
+        self._placements_report_dialogs = {}
+        # Phase 57 section 9.2: the drawing worker, whichever call site starts it.
+        self._drawing_thread = None
+        self._drawing_worker = None
+        self._drawing_dialog = None
+        self._drawing_watchdog = QTimer(self)
+        self._drawing_watchdog.setSingleShot(True)
+        self._drawing_watchdog.setInterval(FETCH_WATCHDOG_TIMEOUT_MS)
+        self._drawing_watchdog.timeout.connect(self._on_drawing_watchdog_timeout)
         self._next_registration_serial = 0
         
         self.stacked = QStackedWidget()
@@ -140,6 +149,8 @@ class MainWindow(QMainWindow):
         self._audit_view.second_ops_requested.connect(self._on_audit_second_ops_requested)
         self._audit_view.cleaning_report_requested.connect(self._on_audit_cleaning_report_requested)
         self._audit_view.drawing_fetch_requested.connect(self._on_drawing_fetch_requested)
+        self._audit_view.drawing_drop_requested.connect(self._on_drawing_dropped)
+        self._audit_view.placements_report_requested.connect(self._on_placements_report_requested)
         self._audit_view.xray_toggle_requested.connect(self._on_xray_toggle_requested)
         self.stacked.addWidget(self._audit_view)
         
@@ -773,6 +784,198 @@ class MainWindow(QMainWindow):
 
         self._fetch_thread.start()
 
+    # --- Phase 57 section 9.2: Update > Drawing on the drawing worker --------
+
+    def _on_drawing_dropped(self, dialog, pdf_path: pathlib.Path) -> None:
+        self._start_drawing_update(dialog.audit_id, pdf_path, dialog)
+
+    def _report_drawing_problem(self, dialog, text: str) -> None:
+        if dialog is not None and dialog.isVisible():
+            dialog.show_error(text)
+        else:
+            QMessageBox.warning(self, "Drawing not updated", text)
+
+    def _start_drawing_update(self, audit_id: int, pdf_path: pathlib.Path, dialog=None) -> None:
+        """Copies, parses and fits a primary drawing on a worker MainWindow owns (Phase 57 section 9.2).
+
+        pre:  UI thread; dialog, when given, is the busy AddDrawingDialog the drop came from
+        post: the worker runs under the share-call watchdog, with _operation_in_flight set so Phase
+              55's exclusion holds; its result is applied here, on the UI thread, and reported to the
+              dialog or in a message
+        """
+        if self._operation_in_flight or self._drawing_worker is not None:
+            self._report_drawing_problem(dialog, "Another operation is running; try again when it finishes.")
+            return
+        from uuid import uuid4
+        from cockpit.services.drawing_update import read_drawing_update_inputs
+        from cockpit.ui.workers.drawing_update_worker import DrawingUpdateWorker
+
+        try:
+            inputs = read_drawing_update_inputs(audit_id, self._bootstrapped.update_repositories)
+        except PersistenceError as exc:
+            logger.exception("Reading the audit for a drawing update failed")
+            self._report_drawing_problem(dialog, f"Database error: {exc}")
+            return
+        if inputs is None:
+            self._report_drawing_problem(dialog, "The audit no longer exists.")
+            return
+
+        registry = self._bootstrapped.parser_registry
+        thread = QThread()
+        worker = DrawingUpdateWorker(
+            inputs, pathlib.Path(pdf_path), self._bootstrapped.config.file_storage_root,
+            registry.pdf_layout_parser, registry.bom_parser, uuid4().hex,
+        )
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.prepared.connect(self._on_drawing_update_prepared)
+        worker.failed.connect(self._on_drawing_update_failed)
+        worker.beacon.started.connect(self._drawing_watchdog.start)
+        worker.beacon.finished.connect(self._drawing_watchdog.stop)
+        if dialog is not None:
+            dialog.cancel_requested.connect(self._on_drawing_update_cancel)
+
+        self._drawing_thread = thread
+        self._drawing_worker = worker
+        self._drawing_dialog = dialog
+        self._operation_in_flight = True
+        thread.start()
+
+    def _finish_drawing_worker(self) -> None:
+        self._drawing_watchdog.stop()
+        thread, worker = self._drawing_thread, self._drawing_worker
+        self._drawing_thread = None
+        self._drawing_worker = None
+        self._drawing_dialog = None
+        self._operation_in_flight = False
+        if thread is not None:
+            thread.quit()
+            thread.wait()
+            thread.deleteLater()
+        if worker is not None:
+            worker.deleteLater()
+
+    def _on_drawing_update_prepared(self, plan) -> None:
+        from cockpit.services.drawing_update import (
+            DrawingUpdated, apply_drawing_update, failure_text, success_text,
+        )
+        from cockpit.services.document_updates import discard_copies
+
+        dialog = self._drawing_dialog
+        cancelled = self._drawing_worker is not None and self._drawing_worker.stop.is_set()
+        self._finish_drawing_worker()
+        repositories = self._bootstrapped.update_repositories
+        if cancelled:
+            if plan.staged_pdf.copied_by_this_run:
+                discard_copies((plan.staged_pdf,), repositories.source_files)
+            return
+
+        outcome = apply_drawing_update(plan, repositories, self._bootstrapped.runtime_calc_svc)
+        if isinstance(outcome, DrawingUpdated):
+            if dialog is not None and dialog.isVisible():
+                dialog.accept()
+            else:
+                self._audit_view.load(outcome.audit_id)
+            self.toast.show_toast(success_text(outcome), "")
+            return
+        self._report_drawing_problem(dialog, failure_text(outcome))
+
+    def _on_drawing_update_failed(self, failed) -> None:
+        from cockpit.services.document_updates import Cancelled
+        from cockpit.services.drawing_update import discard_drawing_copy, failure_text
+
+        dialog = self._drawing_dialog
+        cancelled = self._drawing_worker is not None and self._drawing_worker.stop.is_set()
+        self._finish_drawing_worker()
+        discard_drawing_copy(failed, self._bootstrapped.update_repositories)
+        if cancelled or isinstance(failed.failure, Cancelled):
+            return
+        self._report_drawing_problem(dialog, failure_text(failed.failure))
+
+    def _on_drawing_update_cancel(self) -> None:
+        """Cancel while the worker runs: the stop flag is set and the dialog closes itself."""
+        if self._drawing_worker is not None:
+            self._drawing_worker.stop.set()
+        self._drawing_dialog = None
+
+    def _abandon_drawing_worker(self) -> None:
+        """Phase 55 section 7's abandonment: stop, disconnect, orphan, and never wait on the share."""
+        thread, worker = self._drawing_thread, self._drawing_worker
+        self._drawing_watchdog.stop()
+        self._drawing_thread = None
+        self._drawing_worker = None
+        self._drawing_dialog = None
+        self._operation_in_flight = False
+        if thread is None or worker is None:
+            return
+        worker.stop.set()
+        for signal, slot in (
+            (worker.prepared, self._on_drawing_update_prepared),
+            (worker.failed, self._on_drawing_update_failed),
+            (worker.beacon.started, self._drawing_watchdog.start),
+            (worker.beacon.finished, self._drawing_watchdog.stop),
+        ):
+            try:
+                signal.disconnect(slot)
+            except (TypeError, RuntimeError):
+                pass
+        entry = (thread, worker)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.finished.connect(lambda e=entry: self._discard_orphan(e))
+        self._orphaned_workers.append(entry)
+        try:
+            thread.quit()
+        except RuntimeError:
+            pass
+
+    def _on_drawing_watchdog_timeout(self) -> None:
+        dialog = self._drawing_dialog
+        self._abandon_drawing_worker()
+        self._report_drawing_problem(
+            dialog,
+            f"No answer from the share within {FETCH_WATCHDOG_TIMEOUT_MS // 1000} s; the drawing wasn't added.",
+        )
+
+    def _hand_orphans_to_cpp(self) -> None:
+        """Phase 55 section 7: Python's teardown must not destroy a thread still blocked on the share."""
+        from PyQt6 import sip
+        for thread, worker in list(self._orphaned_workers):
+            for obj in (worker, thread):
+                try:
+                    sip.transferto(obj, None)
+                except Exception:
+                    logger.exception("An orphaned worker couldn't be handed to C++ ownership")
+
+    # --- Phase 57 section 10.5: Placements report --------------------------
+
+    def _unregister_placements_report_dialog(self, audit_id: int, serial: int) -> None:
+        entry = self._placements_report_dialogs.get(audit_id)
+        if entry is not None and entry[0] == serial:
+            self._placements_report_dialogs.pop(audit_id)
+
+    def _on_placements_report_requested(self, audit_id: int) -> None:
+        entry = self._placements_report_dialogs.get(audit_id)
+        if entry is not None:
+            dialog = entry[1]
+            dialog.raise_()
+            dialog.activateWindow()
+            return
+        from cockpit.ui.widgets.placements_report_dialog import PlacementsReportDialog
+        try:
+            report = self._bootstrapped.placement_query_svc.report(audit_id)
+        except PersistenceError as exc:
+            logger.exception("Reading the placements report failed")
+            self._on_failed(FailurePayload.from_exception(exc, "Could not read the placements report"))
+            return
+        dialog = PlacementsReportDialog(audit_id, report, self)
+        serial = self._next_registration_serial
+        self._next_registration_serial += 1
+        self._placements_report_dialogs[audit_id] = (serial, dialog)
+        dialog.finished.connect(lambda result_code, a=audit_id, s=serial: self._unregister_placements_report_dialog(a, s))
+        dialog.destroyed.connect(lambda obj=None, a=audit_id, s=serial: self._unregister_placements_report_dialog(a, s))
+        dialog.show()
+
     def _on_drawing_fetch_succeeded(self, outcome) -> None:
         self._operation_in_flight = False
         self._fetch_watchdog.stop()
@@ -806,12 +1009,15 @@ class MainWindow(QMainWindow):
         if pdf_path is None:
             return
 
+        if not secondary:
+            # Phase 57 section 9.2: fitting a page can take half a minute, so the primary drawing
+            # is copied, parsed and fitted on the drawing worker.
+            self._start_drawing_update(audit_id, pdf_path)
+            return
+
         try:
             service = self._bootstrapped.ingestion_service
-            if secondary:
-                service.add_secondary_pdf_to_audit(audit_id, pdf_path)
-            else:
-                service.add_pdf_to_audit(audit_id, pdf_path)
+            service.add_secondary_pdf_to_audit(audit_id, pdf_path)
         except Exception as e:
             logger.exception("Drawing fetch failed to attach")
             self._on_failed(FailurePayload.from_exception(e, "Could not attach the drawing"))
@@ -1239,6 +1445,10 @@ class MainWindow(QMainWindow):
         self._requirements_reconciler.resume_if_deferred()
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        # Phase 57 section 9.2: a drawing update is treated as Phase 55's update worker: nothing of it
+        # is written until apply, so the close ends it without asking.
+        if self._drawing_worker is not None:
+            self._abandon_drawing_worker()
         if self._operation_in_flight:
             event.ignore()
             confirmed = QMessageBox.question(
@@ -1256,6 +1466,8 @@ class MainWindow(QMainWindow):
                 dialog.close()
             for serial, dialog in list(self._second_ops_review_dialogs.values()):
                 dialog.close()
+            for serial, dialog in list(self._placements_report_dialogs.values()):
+                dialog.close()
 
             try:
                 self._audit_view.flush_pending_writes()
@@ -1271,6 +1483,7 @@ class MainWindow(QMainWindow):
             from cockpit.persistence.connection import run_idle_maintenance
             run_idle_maintenance(self._bootstrapped.conn)
             self._bootstrapped.conn.close()
+            self._hand_orphans_to_cpp()
             event.accept()
 
     def resizeEvent(self, event) -> None:

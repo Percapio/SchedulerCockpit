@@ -36,6 +36,7 @@ class SourceFileCategory(StrEnum):
     NOTES = "Notes"
     PDF = "PDF"
     SECONDARY_PDF = "SecondaryPDF"
+    PLACEMENTS = "Placements"   # Phase 57: the stored extract of a job's .bmb
 
 
 # ---------- row types (returned by repositories) ----------
@@ -87,8 +88,17 @@ class SourceFile:
     file_category: SourceFileCategory
     original_filename: str
     local_storage_path: pathlib.Path
-    file_hash: str               # 64-char lowercase hex SHA-256
+    file_hash: str               # 64-char lowercase hex SHA-256 of the STORED bytes
     ingested_at: datetime        # UTC, tz-aware
+    # Phase 57 §7.1: the share file's hash, size and modified time. For a copy, source_hash equals
+    # file_hash; for a .bmb extract it is the whole share file's, and size and time are filled.
+    source_hash: str = ""
+    source_size: int | None = None
+    source_modified_ns: int | None = None
+
+    def __post_init__(self) -> None:
+        if not self.source_hash:
+            object.__setattr__(self, "source_hash", self.file_hash)
 
 
 @dataclass(frozen=True)
@@ -118,6 +128,9 @@ class SourceFileDraft:
     original_filename: str
     local_storage_path: pathlib.Path
     file_hash: str                                       # caller pre-computes
+    source_hash: str | None = None                       # None: the same as file_hash (a copy)
+    source_size: int | None = None
+    source_modified_ns: int | None = None
 
 
 @dataclass(frozen=True)
@@ -159,6 +172,22 @@ class PdfComponentCoord:
     y1: float
     x2: float
     y2: float
+
+
+@dataclass(frozen=True)
+class PlacementRejection:
+    """A .bmb that was rejected or refused for an audit (Phase 57 §7.3).
+
+    reason is a BmbRejected or AdmissionRefused variant, or UnrecognisedReason for a kind a newer
+    Cockpit wrote. bom_hash is the BOM a refusal was measured against; None for a file's rejection.
+    """
+    share_file_name: str
+    share_hash: str
+    share_size: int
+    share_modified_ns: int
+    reason: Any
+    bom_hash: str | None
+    seen_at: datetime
 
 
 @dataclass(frozen=True)

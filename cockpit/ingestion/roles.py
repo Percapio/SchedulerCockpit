@@ -9,6 +9,8 @@ class SourceRole(Enum):
     TRAVELER = "TRAVELER"
     NOTES = "NOTES"
     PDF = "PDF"
+    # Phase 57: BOM Builder's project file. Optional, and read only by Phase 55's update path.
+    PLACEMENTS = "PLACEMENTS"
     UNKNOWN = "UNKNOWN"
     # A selection axis, not a file classification: role_of never returns it.
     # It exists so folder ambiguity can reuse PendingSelection and the shipped
@@ -26,6 +28,10 @@ def role_of(file_name: str | pathlib.Path) -> SourceRole:
     base_name = pathlib.Path(file_name).name
     if base_name.startswith("~$"):
         return SourceRole.UNKNOWN
+
+    # Before the substring rules, so "x audit bom.bmb" isn't taken for a BOM (Phase 57 §5.1).
+    if pathlib.Path(base_name).suffix.lower() == ".bmb":
+        return SourceRole.PLACEMENTS
 
     name_lower = base_name.lower()
     

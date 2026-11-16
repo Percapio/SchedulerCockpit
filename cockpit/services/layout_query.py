@@ -41,6 +41,26 @@ class LayoutQueryService:
             )
         self.placement_query = placement_query
 
+    def xray_view(self, audit_id: int):
+        """Phase 58 §6.3: what X-ray mode shows for one audit, from its requirements row and its BOM.
+
+        post: None iff the audit has no audit_requirements row; otherwise the stored reading, with the
+              designators of the audit's BOM components
+        raises: sqlite3.Error or PersistenceError, which the canvas catches
+        """
+        from cockpit.persistence.repositories.requirements import AuditRequirementsRepository
+        from cockpit.services.xray_markers import XrayView
+
+        stored = AuditRequirementsRepository(self.source_file_repo.conn).find_stored_xray(audit_id)
+        if stored is None:
+            return None
+        bom_sf = self.source_file_repo.find_by_audit_and_category(audit_id, SourceFileCategory.BOM)
+        designators = (
+            frozenset(c.ref_des for c in self.bom_component_repo.list_for_source_file(bom_sf.id))
+            if bom_sf is not None else frozenset()
+        )
+        return XrayView(stored=stored, bom_designators=designators)
+
     def resolve_pdf_ref(self, audit_id: int) -> PendingPdf | None:
         """Resolve the cheap, DB-derived PDF reference for an audit."""
         source_file = self.source_file_repo.find_by_audit_and_category(

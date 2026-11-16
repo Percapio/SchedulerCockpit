@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import StrEnum
 import hashlib
@@ -26,7 +26,9 @@ from cockpit.ingestion.parsers.audit_bom import (
     RefDes,
     RefDesSplit,
     TokenRejected,
+    find_number_key,
     is_dni_line_text,
+    mount_type_of,
     read_cleaned_sheet,
     split_ref_des,
     unwrap_enclosing_quotes,
@@ -34,6 +36,7 @@ from cockpit.ingestion.parsers.audit_bom import (
 )
 from cockpit.ingestion.roles import SourceRole
 from cockpit.persistence.clock import utcnow
+from cockpit.utils.sorting import natural_sort_key
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +100,12 @@ FileHash = str
 Fingerprint = str
 
 # 2: Patch 13's DNI predicate decides which lines read_bom_units skips.
-EXTRACTOR_VERSION: int = 2
+# 4: Phase 58's X-ray locations, named and class-wide, join the scan (its Parts 1 and 2 landed together).
+EXTRACTOR_VERSION: int = 4
+# Phase 58 §2: what an audit's stored X-ray locations may hold.
+MAX_UNRESOLVED_INSTRUCTIONS: int = 10
+MAX_CLASS_MATCHES: int = 20
+XRAY_LOCATIONS_FORMAT: int = 2
 MAX_EVIDENCE: int = 20
 MAX_EXCERPT_CHARS: int = 160
 MAX_DOCX_ENTRY_BYTES: int = 16_777_216
@@ -171,6 +179,8 @@ class TextUnit:
     text: str
     designators: tuple[RefDes, ...] = ()
     is_xray_marker: bool = False
+    # Phase 58 §8.3: a note on the BOM's PCB line, where a class-wide X-ray note can sit.
+    is_pcb_line: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.designators, tuple):
@@ -299,6 +309,123 @@ class DocumentUnreadable:
     reason: str
 
 
+# ---- Phase 58: X-ray locations ---------------------------------------------
+
+@dataclass(frozen=True)
+class UnresolvedInstruction:
+    """An X-ray instruction that names no part (Phase 58 §4.1)."""
+
+    source: UnitSource
+    location: str
+    excerpt: str
+
+
+@dataclass(frozen=True)
+class PackageClass:
+    family: str
+    pins: int
+
+
+@dataclass(frozen=True)
+class XrayClassRule:
+    """A class-wide X-ray rule (Phase 58 §8.1): the terms that name it and the Package families it covers."""
+
+    name: str
+    terms: tuple[tuple[NormalisedToken, ...], ...]
+    package_families: frozenset[str]
+    min_pins: int
+
+
+@dataclass(frozen=True)
+class ClassMatch:
+    """One unit's class-wide note resolved to a rule (Phase 58 §8.4)."""
+
+    rule: str
+    source: UnitSource
+    condition: str | None
+    excerpt: str
+    location: str
+    designators: frozenset[RefDes]
+
+
+@dataclass(frozen=True)
+class XrayLocations:
+    """An audit's X-ray locations, stored with its scan (Phase 58 §2)."""
+
+    format: int = XRAY_LOCATIONS_FORMAT
+    eco_table: frozenset[RefDes] = frozenset()
+    bom_notes: frozenset[RefDes] = frozenset()
+    unresolved: tuple[UnresolvedInstruction, ...] = ()
+    class_matches: tuple[ClassMatch, ...] = ()
+    class_notes_error: str | None = None
+
+    @property
+    def named(self) -> frozenset[RefDes]:
+        return self.eco_table | self.bom_notes
+
+    @property
+    def class_designators(self) -> frozenset[RefDes]:
+        found: set[RefDes] = set()
+        for match in self.class_matches:
+            found.update(match.designators)
+        return frozenset(found)
+
+    @property
+    def all_designators(self) -> frozenset[RefDes]:
+        return self.named | self.class_designators
+
+    @property
+    def is_empty(self) -> bool:
+        return not (self.eco_table or self.bom_notes or self.unresolved or self.class_matches)
+
+
+@dataclass(frozen=True)
+class StoredLocations:
+    locations: XrayLocations
+
+
+@dataclass(frozen=True)
+class LocationsNotRead:
+    """The column is NULL: the audit hasn't been scanned since schema v22."""
+
+
+@dataclass(frozen=True)
+class LocationsUnreadable:
+    reason: str
+
+
+XrayLocationsReading = StoredLocations | LocationsNotRead | LocationsUnreadable
+
+
+@dataclass(frozen=True)
+class StoredXray:
+    """What audit_requirements holds for X-ray mode (Phase 58 §4.3)."""
+
+    reading: XrayLocationsReading
+    save_images: RequirementState
+    xray: RequirementState
+    unknown_reasons: dict[RequirementKind, str]
+    fingerprint: Fingerprint
+
+
+@dataclass(frozen=True)
+class BomUnits:
+    """A stored Audit BOM's units, and its designators' Package values (Phase 58 §8.3).
+
+    It iterates over its units, as read_bom_units' result did before Phase 58.
+    """
+
+    units: list[TextUnit]
+    packages: dict[RefDes, str] = field(default_factory=dict)
+    has_package_column: bool = True
+
+    def __iter__(self):
+        return iter(self.units)
+
+    def __len__(self) -> int:
+        return len(self.units)
+
+
 @dataclass(frozen=True)
 class RequirementScan:
     states: dict[RequirementKind, RequirementState]
@@ -306,6 +433,7 @@ class RequirementScan:
     unknown_reasons: dict[RequirementKind, str]
     xray_task: Fingerprint | None
     fingerprint: Fingerprint
+    xray_locations: XrayLocations = field(default_factory=XrayLocations)
 
 
 @dataclass(frozen=True)
@@ -325,6 +453,9 @@ class ScanInputs:
     bom_hash: FileHash
     traveler_wash_text: str | None
     vocabulary: RequirementVocabulary
+    # Phase 58 §8.5: the last scan's stored locations; kept class members come from them when a
+    # document can't be read. Not part of scan_fingerprint.
+    prior_xray_locations: XrayLocations | None = None
 
 
 @dataclass(frozen=True)
@@ -1273,8 +1404,19 @@ def is_dni_line(row: CleanedRow | DesignatorRejected) -> bool:
     )
 
 
-def read_bom_units(bom_path: Path) -> Result[list[TextUnit], DocumentUnreadable]:
-    """Lists a stored Audit BOM's notes and descriptions as units (§3.2)."""
+def _find_number_order(text: str) -> tuple[int, list[int | str]]:
+    """Phase 58 §8.3: Find# compared as ingest coerces it; a blank Find# never wins over a filled one."""
+    key = find_number_key(text)
+    return (1, []) if key == "" else (0, natural_sort_key(key))
+
+
+def read_bom_units(bom_path: Path) -> Result[BomUnits, DocumentUnreadable]:
+    """Lists a stored Audit BOM's notes and descriptions as units (§3.2), and maps its designators to
+    their lines' Package values (Phase 58 §8.3).
+
+    A line gives its designators a Package when it is a cleaned, live row, neither DNI nor the PCB line,
+    with an SMT or THT mount type and a Package; a designator on several lines takes the lowest Find#.
+    """
     try:
         sheet = read_cleaned_sheet(Path(bom_path))
     except Exception as exc:
@@ -1282,7 +1424,8 @@ def read_bom_units(bom_path: Path) -> Result[list[TextUnit], DocumentUnreadable]
         return Failure(DocumentUnreadable(SourceRole.BOM, str(reason)))
 
     units: list[TextUnit] = []
-    for row in sheet.rows:
+    package_claims: dict[RefDes, tuple[tuple[int, list[int | str]], int, str]] = {}
+    for row_index, row in enumerate(sheet.rows):
         if isinstance(row, CleanedRow):
             if row.is_removed_line:
                 continue
@@ -1297,6 +1440,16 @@ def read_bom_units(bom_path: Path) -> Result[list[TextUnit], DocumentUnreadable]
             designators = ()
             find_text = row.find_number_text.strip()
             desc_text = row.cells.get(ColumnName.DESCRIPTION, "").strip()
+        is_pcb_line = row.cells.get(ColumnName.PART_NUMBER, "").strip().upper() == "PCB"
+
+        if isinstance(row, CleanedRow) and not is_pcb_line and designators:
+            package = row.cells.get(ColumnName.PACKAGE, "").strip()
+            if package and mount_type_of(row.cells.get(ColumnName.MOUNT_TYPE, "")) is not None:
+                order = _find_number_order(find_text)
+                for designator in designators:
+                    held = package_claims.get(designator)
+                    if held is None or (order, row_index) < (held[0], held[1]):
+                        package_claims[designator] = (order, row_index, package)
 
         loc = f"BOM row {row.sheet_row}, Find# {find_text}"
         existing_note_texts: set[str] = set()
@@ -1311,6 +1464,7 @@ def read_bom_units(bom_path: Path) -> Result[list[TextUnit], DocumentUnreadable]
                         text=note.text.strip(),
                         designators=designators,
                         is_xray_marker=False,
+                        is_pcb_line=is_pcb_line,
                     )
                 )
         if isinstance(row, DesignatorRejected):
@@ -1324,6 +1478,7 @@ def read_bom_units(bom_path: Path) -> Result[list[TextUnit], DocumentUnreadable]
                             text=extra_note.strip(),
                             designators=designators,
                             is_xray_marker=False,
+                            is_pcb_line=is_pcb_line,
                         )
                     )
         if desc_text:
@@ -1334,10 +1489,13 @@ def read_bom_units(bom_path: Path) -> Result[list[TextUnit], DocumentUnreadable]
                     text=desc_text,
                     designators=designators,
                     is_xray_marker=False,
+                    is_pcb_line=is_pcb_line,
                 )
             )
 
-    return Success(units)
+    packages = {designator: claim[2] for designator, claim in package_claims.items()}
+    has_package_column = ColumnName.PACKAGE in sheet.column_map.display
+    return Success(BomUnits(units=units, packages=packages, has_package_column=has_package_column))
 
 
 # ---- §3.3 Reading the Traveler ---------------------------------------------
@@ -1422,8 +1580,12 @@ def scan_fingerprint(inputs: ScanInputs) -> Fingerprint:
 def xray_task_fingerprint(
     matches: Sequence[RequirementMatch],
     eco_locations: set[RefDes],
+    class_designators: frozenset[RefDes] | set[RefDes] = frozenset(),
 ) -> Fingerprint | None:
-    """Identifies the X-ray work a tick is made against (§6.2)."""
+    """Identifies the X-ray work a tick is made against (§6.2).
+
+    Phase 58 §8.6: class-resolved designators join the locations, so with none the hash is Phase 54's.
+    """
     has_save_images = any(
         m.kind == RequirementKind.XRAY_SAVE_IMAGES and not m.is_negated
         for m in matches
@@ -1432,7 +1594,7 @@ def xray_task_fingerprint(
         return None
 
     instructions: set[str] = set()
-    locations: set[str] = set(eco_locations)
+    locations: set[str] = set(eco_locations) | set(class_designators)
 
     for m in matches:
         if m.is_negated:
@@ -1458,6 +1620,431 @@ def xray_task_fingerprint(
         "locations": sorted(locations),
     }
     return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+
+
+# ---- Phase 58: X-ray locations and class-wide notes ------------------------
+
+XRAY_CLASS_RULES: tuple[XrayClassRule, ...] = (
+    XrayClassRule("BGA", (("bga",), ("bgas",)), frozenset({"BGA"}), 1),
+    XrayClassRule("LGA", (("lga",), ("lgas",)), frozenset({"LGA"}), 2),
+    XrayClassRule(
+        "BTC", (("btc",), ("btcs",), ("bottom", "terminated")), frozenset({"QFN", "LCCT", "LCQ", "LCC"}), 1,
+    ),
+)
+XRAY_QUALIFIERS: frozenset[NormalisedToken] = frozenset(
+    {"with", "having", "that", "which", "where", "except", "only", "if", "when"}
+)
+_XRAY_KINDS: tuple[RequirementKind, ...] = (RequirementKind.XRAY, RequirementKind.XRAY_SAVE_IMAGES)
+_SENTENCE_END_CHARS: frozenset[str] = frozenset(".;!?\n\r")
+_TRAILING_CONDITION_WORDS: frozenset[str] = frozenset({"and", "or"})
+
+
+def package_class(package: str | None) -> PackageClass | None:
+    """Reads a Package value's family and pin count from the shop's FAMILY-PINS-... key (Phase 58 §8.2)."""
+    value = (package or "").strip()
+    if not value or value[0].isdigit():
+        return None
+    if value.upper() in ("UNASSIGNED", "DNI"):
+        return None
+    fields = [part.strip() for part in value.split("-")]
+    if len(fields) < 2:
+        return None
+    family, pins_text = fields[0], fields[1]
+    if not family or not (family.isascii() and family.isalpha()):
+        return None
+    if not (pins_text.isascii() and pins_text.isdigit()):
+        return None
+    pins = int(pins_text)
+    if pins < 1:
+        return None
+    return PackageClass(family=family.upper(), pins=pins)
+
+
+def _ends_sentence(text: str, position: int) -> bool:
+    char = text[position]
+    if char not in _SENTENCE_END_CHARS:
+        return False
+    if char == "." and 0 < position < len(text) - 1 and text[position - 1].isdigit() and text[position + 1].isdigit():
+        return False
+    # A one-letter abbreviation's dot ("i.e.", "e.g.") doesn't end one either.
+    if char == "." and position >= 1 and text[position - 1].isalpha() and (
+        position == 1 or not text[position - 2].isalnum()
+    ):
+        return False
+    return True
+
+
+def _sentence_indices(text: str, tokens: Sequence[Token]) -> list[int]:
+    """Each token's sentence (Phase 58 §8.4): a sentence ends at '.', ';', '!', '?' or a line break, and
+    a '.' between digits doesn't end one."""
+    sentence = 0
+    indices: list[int] = []
+    previous_end = 0
+    for token in tokens:
+        if any(_ends_sentence(text, position) for position in range(previous_end, token.start)):
+            sentence += 1
+        indices.append(sentence)
+        previous_end = token.end
+    return indices
+
+
+def _sentence_end(text: str, from_position: int) -> int:
+    for position in range(from_position, len(text)):
+        if _ends_sentence(text, position):
+            return position
+    return len(text)
+
+
+def _xray_matches_by_unit(matches: Sequence[RequirementMatch]) -> dict[TextUnit, list[RequirementMatch]]:
+    grouped: dict[TextUnit, list[RequirementMatch]] = {}
+    for match in matches:
+        if match.kind in _XRAY_KINDS:
+            grouped.setdefault(match.unit, []).append(match)
+    return grouped
+
+
+def _named_locations(
+    matches: Sequence[RequirementMatch],
+    eco: Result[EcoUnits, DocumentUnreadable],
+) -> tuple[frozenset[RefDes], frozenset[RefDes], list[tuple[TextUnit, list[RequirementMatch]]]]:
+    """The ECO table's and the BOM lines' locations, and the units that name no part, in unit order."""
+    eco_table = frozenset(eco.value.xray_locations) if eco.is_ok else frozenset()
+    bom_notes: set[RefDes] = set()
+    candidates: list[tuple[TextUnit, list[RequirementMatch]]] = []
+    for unit, unit_matches in _xray_matches_by_unit(matches).items():
+        positives = [m for m in unit_matches if not m.is_negated]
+        if not positives or unit.is_xray_marker:
+            continue
+        if (
+            unit.source in (UnitSource.BOM_NOTE, UnitSource.BOM_DESCRIPTION)
+            and unit.designators
+            and not unit.is_pcb_line
+        ):
+            bom_notes.update(unit.designators)
+            continue
+        candidates.append((unit, positives))
+    return eco_table, frozenset(bom_notes), candidates
+
+
+def _unresolved_entry(unit: TextUnit, positives: Sequence[RequirementMatch]) -> UnresolvedInstruction:
+    """One unit, its excerpt cut around its earliest match, the wider winning a tie (Phase 58 §4.2)."""
+    chosen = min(positives, key=lambda m: (m.first_token, -(m.last_token - m.first_token)))
+    tokens = normalise(unit.text)
+    excerpt = _cut_excerpt(unit.text, tokens[chosen.first_token].start, tokens[chosen.last_token].end)
+    return UnresolvedInstruction(source=unit.source, location=unit.location, excerpt=excerpt)
+
+
+def gather_xray_locations(
+    matches: Sequence[RequirementMatch],
+    eco: Result[EcoUnits, DocumentUnreadable],
+) -> XrayLocations:
+    """Gathers an audit's named X-ray locations and its unresolved instructions (Phase 58 §4.2)."""
+    eco_table, bom_notes, candidates = _named_locations(matches, eco)
+    unresolved = tuple(
+        _unresolved_entry(unit, positives) for unit, positives in candidates[:MAX_UNRESOLVED_INSTRUCTIONS]
+    )
+    return XrayLocations(format=1, eco_table=eco_table, bom_notes=bom_notes, unresolved=unresolved)
+
+
+def _governing_candidates(unit_matches: Sequence[RequirementMatch]) -> list[RequirementMatch]:
+    """Phase 58 §8.4: an XRAY match inside an XRAY_SAVE_IMAGES match gives way to the wider one."""
+    wide = [m for m in unit_matches if m.kind == RequirementKind.XRAY_SAVE_IMAGES]
+    return [
+        m for m in unit_matches
+        if not (
+            m.kind == RequirementKind.XRAY
+            and any(w.first_token <= m.first_token and m.last_token <= w.last_token for w in wide)
+        )
+    ]
+
+
+def _governing_match(
+    first: int,
+    last: int,
+    candidates: Sequence[RequirementMatch],
+    sentences: Sequence[int],
+) -> RequirementMatch | None:
+    containing = [m for m in candidates if m.first_token <= first and last <= m.last_token]
+    if containing:
+        return max(containing, key=lambda m: m.last_token - m.first_token)
+    sentence = sentences[first]
+    before_same = [m for m in candidates if m.last_token < first and sentences[m.last_token] == sentence]
+    if before_same:
+        return max(before_same, key=lambda m: m.last_token)
+    after_same = [m for m in candidates if m.first_token > last and sentences[m.first_token] == sentence]
+    if after_same:
+        return min(after_same, key=lambda m: m.first_token)
+    before_any = [m for m in candidates if m.last_token < first]
+    if before_any:
+        return max(before_any, key=lambda m: m.last_token)
+    after_any = [m for m in candidates if m.first_token > last]
+    if after_any:
+        return min(after_any, key=lambda m: m.first_token)
+    return None
+
+
+def _term_occurrences(tokens: Sequence[Token], term: Sequence[NormalisedToken]) -> list[tuple[int, int]]:
+    size = len(term)
+    if size == 0:
+        return []
+    wanted = tuple(term)
+    return [
+        (index, index + size - 1)
+        for index in range(len(tokens) - size + 1)
+        if tuple(token.text for token in tokens[index : index + size]) == wanted
+    ]
+
+
+def _condition_text(
+    text: str,
+    tokens: Sequence[Token],
+    sentences: Sequence[int],
+    first: int,
+    last: int,
+    term_starts: Sequence[int],
+    qualifiers: frozenset[NormalisedToken] | set[NormalisedToken],
+) -> str | None:
+    """From the first qualifier after the term to its sentence's end or the next class term (§8.4)."""
+    later_terms = [start for start in term_starts if start > last]
+    stop = later_terms[0] if later_terms else len(tokens)
+    qualifier: int | None = None
+    for index in range(last + 1, len(tokens)):
+        if index >= stop or sentences[index] != sentences[first]:
+            break
+        if tokens[index].text in qualifiers:
+            qualifier = index
+            break
+    if qualifier is None:
+        return None
+    end = _sentence_end(text, tokens[last].end)
+    if stop < len(tokens):
+        end = min(end, tokens[stop].start)
+    words = " ".join(text[tokens[qualifier].start : end].split()).rstrip(" ,:;").split(" ")
+    while len(words) > 1 and words[-1].lower() in _TRAILING_CONDITION_WORDS:
+        words.pop()
+    condition = " ".join(words).rstrip(" ,:;")
+    if len(condition) > MAX_EXCERPT_CHARS:
+        condition = condition[: MAX_EXCERPT_CHARS - 1].rstrip() + "…"
+    return condition or None
+
+
+def _class_members(rule: XrayClassRule, classes: dict[RefDes, PackageClass | None]) -> frozenset[RefDes]:
+    return frozenset(
+        designator for designator, found in classes.items()
+        if found is not None and found.family in rule.package_families and found.pins >= rule.min_pins
+    )
+
+
+def _resolve_class_notes_by_unit(
+    units: Sequence[TextUnit],
+    matches: Sequence[RequirementMatch],
+    vocabulary: RequirementVocabulary,
+    rules: Sequence[XrayClassRule],
+    qualifiers: frozenset[NormalisedToken] | set[NormalisedToken],
+    packages: dict[RefDes, str] | None,
+) -> list[tuple[TextUnit, ClassMatch]]:
+    by_unit = _xray_matches_by_unit(matches)
+    classes = (
+        {designator: package_class(package) for designator, package in packages.items()}
+        if packages is not None else None
+    )
+    found: list[tuple[TextUnit, ClassMatch]] = []
+    for unit in units:
+        candidates = _governing_candidates(by_unit.get(unit, []))
+        if not candidates:
+            continue
+        tokens = normalise(unit.text)
+        if not tokens:
+            continue
+        sentences = _sentence_indices(unit.text, tokens)
+        occurrences: list[tuple[int, int, str]] = []
+        for rule in rules:
+            for term in rule.terms:
+                for first, last in _term_occurrences(tokens, term):
+                    occurrences.append((first, last, rule.name))
+        if not occurrences:
+            continue
+        occurrences.sort()
+        term_starts = sorted({first for first, _last, _name in occurrences})
+        for rule in rules:
+            governed: list[tuple[int, int]] = []
+            for first, last, name in occurrences:
+                if name != rule.name:
+                    continue
+                governor = _governing_match(first, last, candidates, sentences)
+                if governor is None or governor.is_negated:
+                    continue
+                if is_negated(tokens, first, last, vocabulary):
+                    continue
+                governed.append((first, last))
+            if not governed:
+                continue
+            first, last = governed[0]
+            found.append((unit, ClassMatch(
+                rule=rule.name,
+                source=unit.source,
+                condition=_condition_text(unit.text, tokens, sentences, first, last, term_starts, qualifiers),
+                excerpt=_cut_excerpt(unit.text, tokens[first].start, tokens[last].end),
+                location=unit.location,
+                designators=_class_members(rule, classes) if classes is not None else frozenset(),
+            )))
+            if len(found) >= MAX_CLASS_MATCHES:
+                return found
+    return found
+
+
+def resolve_class_notes(
+    units: Sequence[TextUnit],
+    matches: Sequence[RequirementMatch],
+    vocabulary: RequirementVocabulary,
+    rules: Sequence[XrayClassRule] = XRAY_CLASS_RULES,
+    qualifiers: frozenset[NormalisedToken] | set[NormalisedToken] = XRAY_QUALIFIERS,
+    packages: dict[RefDes, str] | None = None,
+) -> list[ClassMatch]:
+    """Resolves class-wide X-ray instructions to the rules they name, and to designators when packages
+    are known (Phase 58 §8.4)."""
+    return [match for _unit, match in _resolve_class_notes_by_unit(
+        units, matches, vocabulary, rules, qualifiers, packages,
+    )]
+
+
+def _as_bom_units(value: Any) -> BomUnits:
+    """A plain list of units reads as a BOM without packages."""
+    if isinstance(value, BomUnits):
+        return value
+    return BomUnits(units=list(value), packages={}, has_package_column=True)
+
+
+def _prior_rule_designators(
+    prior_matches: Sequence[ClassMatch],
+    source: UnitSource,
+    rule: str,
+) -> frozenset[RefDes]:
+    found: set[RefDes] = set()
+    for match in prior_matches:
+        if match.source == source and match.rule == rule:
+            found.update(match.designators)
+    return frozenset(found)
+
+
+def _xray_locations_of(
+    matches: Sequence[RequirementMatch],
+    eco: Result[EcoUnits, DocumentUnreadable],
+    bom: Result[Any, DocumentUnreadable],
+    inputs: ScanInputs,
+) -> XrayLocations:
+    """Phase 58 §4.2 and §8.5: the named locations, the class matches each source may keep, and the
+    instructions that name no part."""
+    eco_table, bom_notes, candidates = _named_locations(matches, eco)
+    by_unit = _xray_matches_by_unit(matches)
+
+    def positive(unit: TextUnit) -> bool:
+        return any(not m.is_negated for m in by_unit.get(unit, []))
+
+    bom_units = _as_bom_units(bom.value) if bom.is_ok else None
+    eco_units = [u for u in eco.value.units if not u.is_xray_marker and positive(u)] if eco.is_ok else []
+    pcb_units = (
+        [u for u in bom_units.units if u.is_pcb_line and u.source == UnitSource.BOM_NOTE and positive(u)]
+        if bom_units is not None else []
+    )
+    resolved = _resolve_class_notes_by_unit(
+        eco_units + pcb_units, matches, inputs.vocabulary, XRAY_CLASS_RULES, XRAY_QUALIFIERS,
+        dict(bom_units.packages) if bom_units is not None else None,
+    )
+    resolved_units = {unit for unit, _match in resolved}
+    prior_matches = inputs.prior_xray_locations.class_matches if inputs.prior_xray_locations is not None else ()
+    eco_found = [m for _unit, m in resolved if m.source == UnitSource.ECO_TEXT]
+    pcb_found = [m for _unit, m in resolved if m.source == UnitSource.BOM_NOTE]
+
+    if not eco.is_ok:
+        eco_matches = [m for m in prior_matches if m.source == UnitSource.ECO_TEXT]
+    elif bom_units is None:
+        eco_matches = [
+            replace(m, designators=_prior_rule_designators(prior_matches, UnitSource.ECO_TEXT, m.rule))
+            for m in eco_found
+        ]
+    else:
+        eco_matches = eco_found
+    pcb_matches = pcb_found if bom_units is not None else [
+        m for m in prior_matches if m.source == UnitSource.BOM_NOTE
+    ]
+    class_matches = tuple((eco_matches + pcb_matches)[:MAX_CLASS_MATCHES])
+
+    class_notes_error: str | None = None
+    if class_matches:
+        if bom_units is None:
+            class_notes_error = f"BOM unreadable: {bom.error.reason}"
+        elif not bom_units.has_package_column:
+            class_notes_error = "the BOM has no Package column"
+
+    unresolved = tuple(
+        _unresolved_entry(unit, positives) for unit, positives in candidates if unit not in resolved_units
+    )[:MAX_UNRESOLVED_INSTRUCTIONS]
+    return XrayLocations(
+        format=XRAY_LOCATIONS_FORMAT, eco_table=eco_table, bom_notes=bom_notes, unresolved=unresolved,
+        class_matches=class_matches, class_notes_error=class_notes_error,
+    )
+
+
+def xray_locations_to_json(locations: XrayLocations) -> str:
+    """The stored form of an audit's X-ray locations: canonical JSON, designators sorted (§4.3)."""
+    payload = {
+        "format": locations.format,
+        "eco_table": sorted(locations.eco_table),
+        "bom_notes": sorted(locations.bom_notes),
+        "unresolved": [
+            {"source": u.source.value, "location": u.location, "excerpt": u.excerpt}
+            for u in locations.unresolved
+        ],
+        "class_matches": [
+            {
+                "rule": m.rule, "source": m.source.value, "condition": m.condition, "excerpt": m.excerpt,
+                "location": m.location, "designators": sorted(m.designators),
+            }
+            for m in locations.class_matches
+        ],
+        "class_notes_error": locations.class_notes_error,
+    }
+    return canonical_json(payload)
+
+
+def xray_locations_from_json(raw: str | None) -> XrayLocationsReading:
+    """Reads the stored column defensively: NULL is not read yet, and anything unparseable, or from a
+    newer Cockpit, is unreadable (§4.3, §11)."""
+    if raw is None:
+        return LocationsNotRead()
+    try:
+        payload = json.loads(raw)
+        stored_format = int(payload["format"])
+        if not 1 <= stored_format <= XRAY_LOCATIONS_FORMAT:
+            return LocationsUnreadable(f"format {stored_format}")
+        locations = XrayLocations(
+            format=stored_format,
+            eco_table=frozenset(str(d) for d in payload.get("eco_table", [])),
+            bom_notes=frozenset(str(d) for d in payload.get("bom_notes", [])),
+            unresolved=tuple(
+                UnresolvedInstruction(
+                    source=UnitSource(item["source"]), location=str(item["location"]),
+                    excerpt=str(item["excerpt"]),
+                )
+                for item in payload.get("unresolved", [])
+            )[:MAX_UNRESOLVED_INSTRUCTIONS],
+            class_matches=tuple(
+                ClassMatch(
+                    rule=str(item["rule"]), source=UnitSource(item["source"]),
+                    condition=None if item.get("condition") is None else str(item["condition"]),
+                    excerpt=str(item["excerpt"]), location=str(item["location"]),
+                    designators=frozenset(str(d) for d in item.get("designators", [])),
+                )
+                for item in payload.get("class_matches", [])
+            )[:MAX_CLASS_MATCHES],
+            class_notes_error=(
+                None if payload.get("class_notes_error") is None else str(payload["class_notes_error"])
+            ),
+        )
+        return StoredLocations(locations)
+    except (ValueError, KeyError, TypeError, AttributeError) as error:
+        return LocationsUnreadable(type(error).__name__)
 
 
 # ---- §4.6 Deciding ---------------------------------------------------------
@@ -1600,7 +2187,7 @@ def decide_requirements(
             )
 
     if bom.is_ok:
-        for u in bom.value:
+        for u in _as_bom_units(bom.value).units:
             _scan_unit(u)
 
     if traveler is not None:
@@ -1657,9 +2244,10 @@ def decide_requirements(
         else:
             states[kind] = RequirementState.ABSENT
 
+    xray_locations = _xray_locations_of(all_matches, eco, bom, inputs)
     xray_task: Fingerprint | None = None
     if states[RequirementKind.XRAY_SAVE_IMAGES] == RequirementState.DETECTED:
-        xray_task = xray_task_fingerprint(all_matches, eco_locations)
+        xray_task = xray_task_fingerprint(all_matches, eco_locations, xray_locations.class_designators)
 
     return RequirementScan(
         states=states,
@@ -1667,6 +2255,7 @@ def decide_requirements(
         unknown_reasons=unknown_reasons,
         xray_task=xray_task,
         fingerprint=scan_fingerprint(inputs),
+        xray_locations=xray_locations,
     )
 
 

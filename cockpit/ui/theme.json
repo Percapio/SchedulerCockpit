@@ -85,15 +85,24 @@
       },
       "hint_label_border": {
         "rgb": "#000000"
+      },
+      "xray_marker": {
+        "rgb": "#00E676"
+      },
+      "xray_marker_class": {
+        "rgb": "#00E676"
       }
     },
     "pen_width": {
-      "highlight": 2
+      "highlight_pen": 2,
+      "xray_marker": 3,
+      "xray_marker_class": 2
     },
     "z_order": {
       "base_pixmap": 0,
       "dim": 10,
-      "highlight": 20
+      "highlight": 20,
+      "xray_marker": 30
     },
     "zoom": {
       "min_scale": 1.0,

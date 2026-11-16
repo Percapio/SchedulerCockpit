@@ -11,7 +11,12 @@ from cockpit.persistence.clock import utcnow
 from cockpit.services.requirements import (
     AuditNotFoundForTick,
     Failure,
+    LocationsNotRead,
     MAX_EVIDENCE,
+    StoredXray,
+    XrayLocationsReading,
+    xray_locations_from_json,
+    xray_locations_to_json,
     RequirementEvidence,
     RequirementKind,
     RequirementScan,
@@ -120,8 +125,8 @@ class AuditRequirementsRepository:
             """
             INSERT INTO audit_requirements (
                 audit_id, xray_save_images, xray, press_fit, aquanox,
-                xray_task, evidence, unknown_reasons, fingerprint, scanned_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                xray_task, evidence, unknown_reasons, fingerprint, scanned_at, xray_locations
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(audit_id) DO UPDATE SET
                 xray_save_images = excluded.xray_save_images,
                 xray             = excluded.xray,
@@ -131,7 +136,8 @@ class AuditRequirementsRepository:
                 evidence         = excluded.evidence,
                 unknown_reasons  = excluded.unknown_reasons,
                 fingerprint      = excluded.fingerprint,
-                scanned_at       = excluded.scanned_at
+                scanned_at       = excluded.scanned_at,
+                xray_locations   = excluded.xray_locations
             """,
             (
                 audit_id,
@@ -144,6 +150,7 @@ class AuditRequirementsRepository:
                 json.dumps(reasons_payload, ensure_ascii=False),
                 scan.fingerprint,
                 now_iso,
+                xray_locations_to_json(scan.xray_locations),
             ),
         )
 
@@ -178,6 +185,50 @@ class AuditRequirementsRepository:
         for row in cur.fetchall():
             out[int(row["audit_id"])] = _row_to_summary(row)
         return out
+
+    def find_stored_xray(self, audit_id: int) -> StoredXray | None:
+        """Phase 58 §4.3: the requirements row's part of what X-ray mode shows for one audit.
+
+        post: None iff the audit has no audit_requirements row; otherwise reading is LocationsNotRead
+              when the column is NULL, LocationsUnreadable when it doesn't parse or names a newer
+              format, and StoredLocations otherwise
+        """
+        cur = self.conn.cursor()
+        cur.execute(
+            """
+            SELECT xray_save_images, xray, unknown_reasons, fingerprint, xray_locations
+            FROM audit_requirements
+            WHERE audit_id = ?
+            """,
+            (audit_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        raw_reasons = row["unknown_reasons"]
+        reasons_dict = json.loads(raw_reasons) if isinstance(raw_reasons, str) else (raw_reasons or {})
+        unknown_reasons: dict[RequirementKind, str] = {}
+        for kind, reason in reasons_dict.items():
+            try:
+                unknown_reasons[RequirementKind(kind)] = str(reason)
+            except ValueError:
+                continue
+        return StoredXray(
+            reading=xray_locations_from_json(row["xray_locations"]),
+            save_images=_db_to_state(row["xray_save_images"]),
+            xray=_db_to_state(row["xray"]),
+            unknown_reasons=unknown_reasons,
+            fingerprint=row["fingerprint"],
+        )
+
+    def find_xray_reading(self, audit_id: int) -> XrayLocationsReading:
+        """The stored locations alone, for a scan's prior (§8.5): not read when there is no row."""
+        cur = self.conn.cursor()
+        cur.execute("SELECT xray_locations FROM audit_requirements WHERE audit_id = ?", (audit_id,))
+        row = cur.fetchone()
+        if not row:
+            return LocationsNotRead()
+        return xray_locations_from_json(row["xray_locations"])
 
     def find_evidence(self, audit_id: int) -> list[RequirementEvidence]:
         """Reads the stored RequirementEvidence list for one audit on demand (§5.2, §9)."""
@@ -215,11 +266,11 @@ class AuditRequirementsRepository:
                 """
                 INSERT INTO audit_requirements (
                     audit_id, xray_save_images, xray, press_fit, aquanox,
-                    xray_task, evidence, unknown_reasons, fingerprint, scanned_at
+                    xray_task, evidence, unknown_reasons, fingerprint, scanned_at, xray_locations
                 )
                 SELECT
                     ?, xray_save_images, xray, press_fit, aquanox,
-                    xray_task, evidence, unknown_reasons, fingerprint, scanned_at
+                    xray_task, evidence, unknown_reasons, fingerprint, scanned_at, xray_locations
                 FROM audit_requirements
                 WHERE audit_id = ?
                 ON CONFLICT(audit_id) DO UPDATE SET
@@ -231,7 +282,8 @@ class AuditRequirementsRepository:
                     evidence         = excluded.evidence,
                     unknown_reasons  = excluded.unknown_reasons,
                     fingerprint      = excluded.fingerprint,
-                    scanned_at       = excluded.scanned_at
+                    scanned_at       = excluded.scanned_at,
+                    xray_locations   = excluded.xray_locations
                 """,
                 (sibling_audit_id, source_audit_id),
             )

@@ -71,6 +71,9 @@ class SourceSelector(QWidget):
             btn.setChecked(p == page)
 
 class CenterPager(QWidget):
+    # Phase 58 §6.2: your click on the X-ray toggle; setting it in code emits nothing.
+    xray_mode_clicked = pyqtSignal(bool)
+
     def __init__(
         self,
         canvas: LayoutCanvas,
@@ -100,11 +103,21 @@ class CenterPager(QWidget):
         self._selector = SourceSelector()
         self._selector.page_changed.connect(self._on_page_changed)
         footer_layout.addWidget(self._selector, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Phase 58 §6.2: right of the selector, enabled iff the primary page shows and the canvas can draw.
+        self._xray_btn = QPushButton("X-ray")
+        self._xray_btn.setCheckable(True)
+        self._xray_btn.setToolTip("Show only the audit's X-ray locations")
+        self._xray_btn.setEnabled(False)
+        self._xray_btn.clicked.connect(self.xray_mode_clicked.emit)
+        footer_layout.addWidget(self._xray_btn, alignment=Qt.AlignmentFlag.AlignRight)
+        self._current_page = CenterPage.PRIMARY_PDF
         
         self._layout.addWidget(self._footer_row)
         
         # We need to listen to secondary availability changes from canvas
         self._canvas.secondary_availability_changed.connect(self._on_secondary_availability)
+        self._canvas.xray_available_changed.connect(lambda _available: self._update_xray_enabled())
         
         self._session: AuditSession | None = None
         self._library_module = None
@@ -140,8 +153,25 @@ class CenterPager(QWidget):
         self._has_secondary = available
         self._selector.set_segments(self._has_secondary, self._library_module is not None)
         self._selector.show_page(CenterPage.PRIMARY_PDF)
-        
+        self._current_page = CenterPage.PRIMARY_PDF
+        self._update_xray_enabled()
+
+    @property
+    def xray_button(self) -> QPushButton:
+        return self._xray_btn
+
+    def set_xray_checked(self, on: bool) -> None:
+        """Sets the toggle without emitting xray_mode_clicked (Phase 58 §6.2: only a click stores)."""
+        self._xray_btn.setChecked(bool(on))
+
+    def _update_xray_enabled(self) -> None:
+        self._xray_btn.setEnabled(
+            self._current_page == CenterPage.PRIMARY_PDF and self._canvas.xray_available()
+        )
+
     def _on_page_changed(self, page: CenterPage) -> None:
+        self._current_page = page
+        self._update_xray_enabled()
         if page == CenterPage.BUILD_NOTES:
             self._stacked.setCurrentWidget(self._notes_pane)
         elif page == CenterPage.LIBRARY and self._library_segment:
@@ -174,6 +204,7 @@ class CenterPager(QWidget):
         self._has_secondary = False
         self._selector.set_segments(has_secondary=False, has_library=self._library_module is not None)
         self._selector.show_page(CenterPage.PRIMARY_PDF)
+        self._current_page = CenterPage.PRIMARY_PDF
         self._stacked.setCurrentWidget(self._canvas)
         self._canvas.unload()
         self._notes_pane.unload()

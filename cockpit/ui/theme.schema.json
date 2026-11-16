@@ -275,7 +275,9 @@
             "dim_overlay",
             "hint_label_background",
             "hint_label_text",
-            "hint_label_border"
+            "hint_label_border",
+            "xray_marker",
+            "xray_marker_class"
           ],
           "properties": {
             "highlight_pen": {
@@ -291,6 +293,12 @@
               "$ref": "#/$defs/color_with_alpha"
             },
             "hint_label_border": {
+              "$ref": "#/$defs/color_with_alpha"
+            },
+            "xray_marker": {
+              "$ref": "#/$defs/color_with_alpha"
+            },
+            "xray_marker_class": {
               "$ref": "#/$defs/color_with_alpha"
             }
           }
@@ -322,10 +330,20 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "highlight"
+            "highlight_pen",
+            "xray_marker",
+            "xray_marker_class"
           ],
           "properties": {
-            "highlight": {
+            "highlight_pen": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "xray_marker": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "xray_marker_class": {
               "type": "integer",
               "minimum": 1
             }
@@ -337,7 +355,8 @@
           "required": [
             "base_pixmap",
             "dim",
-            "highlight"
+            "highlight",
+            "xray_marker"
           ],
           "properties": {
             "base_pixmap": {
@@ -347,6 +366,9 @@
               "type": "integer"
             },
             "highlight": {
+              "type": "integer"
+            },
+            "xray_marker": {
               "type": "integer"
             }
           }

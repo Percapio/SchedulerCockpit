@@ -138,6 +138,40 @@ _UNIT_SOURCE_SPECS: tuple[tuple[UnitSource, str], ...] = (
 )
 
 
+def format_xray_locations_trial(locations) -> str:
+    """Phase 58 §7.1: what a trial scan would mark, in plain text: counts by source, each class rule
+    with its count and conditions, and the instructions that name no part."""
+    if locations is None or locations.is_empty:
+        return "X-ray locations: none"
+    lines = [
+        f"X-ray locations: {len(locations.all_designators):,} "
+        f"(ECO X-ray table {len(locations.eco_table):,}, BOM notes {len(locations.bom_notes):,})"
+    ]
+    order: list[str] = []
+    members: dict[str, set[str]] = {}
+    conditions: dict[str, list[str]] = {}
+    for match in locations.class_matches:
+        if match.rule not in members:
+            order.append(match.rule)
+            members[match.rule] = set()
+            conditions[match.rule] = []
+        members[match.rule].update(match.designators)
+        if match.condition and match.condition not in conditions[match.rule]:
+            conditions[match.rule].append(match.condition)
+    for rule in order:
+        line = f"  {rule}: {len(members[rule]):,}"
+        if conditions[rule]:
+            line += f", condition not checked: {'; '.join(conditions[rule])}"
+        lines.append(line)
+    if locations.class_notes_error:
+        lines.append(f"  Class notes not resolved: {locations.class_notes_error}")
+    if locations.unresolved:
+        lines.append(f"Not tied to parts ({len(locations.unresolved):,}):")
+        for instruction in locations.unresolved[:3]:
+            lines.append(f"  \u201c{instruction.excerpt}\u201d ({instruction.location})")
+    return "\n".join(lines)
+
+
 def _format_xray_section_reading(section: XraySection | None, error_reason: str | None = None) -> str:
     if error_reason:
         return f"X-ray section: could not read ECO ({error_reason})"
@@ -244,6 +278,12 @@ class TryProcessRequirementsDialog(QDialog):
         self.xray_section_label = QLabel("")
         self.xray_section_label.setWordWrap(True)
         layout.addWidget(self.xray_section_label)
+
+        # Phase 58 §7.1: what X-ray mode would mark with these patterns. Document text shows as typed.
+        self.xray_locations_label = QLabel("")
+        self.xray_locations_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.xray_locations_label.setWordWrap(True)
+        layout.addWidget(self.xray_locations_label)
 
         ev_header = QLabel("Evidence (matched and negated):")
         layout.addWidget(ev_header)
@@ -387,6 +427,7 @@ class TryProcessRequirementsDialog(QDialog):
             self._set_plain_item(self.states_table, row_idx, 2, detail or "")
 
         self.xray_section_label.setText(_format_xray_section_reading(xray_section, eco_err))
+        self.xray_locations_label.setText(format_xray_locations_trial(getattr(scan, "xray_locations", None)))
 
         self.evidence_table.setRowCount(len(scan.evidence))
         for row_idx, ev in enumerate(scan.evidence):

@@ -45,6 +45,7 @@ class AuditView(QWidget):
     drawing_drop_requested = pyqtSignal(object, object)  # (AddDrawingDialog, pathlib.Path)
     placements_report_requested = pyqtSignal(int)
     document_update_check_requested = pyqtSignal(int)  # audit id (Phase 55b §8.2)
+    audit_loaded = pyqtSignal(int)  # Phase 58 §5: MainWindow promotes its scan
     xray_toggle_requested = pyqtSignal(int, bool)
 
     def __init__(
@@ -206,6 +207,9 @@ class AuditView(QWidget):
         self._layout_canvas.error_occurred.connect(self.error_occurred.emit)
         self._layout_canvas.refdes_clicked.connect(self._coordinator.on_renderer_refdes_clicked)
         self._layout_canvas.empty_clicked.connect(self._coordinator.on_empty_clicked)
+        # Phase 58 §6.2: only your click on the toggle stores it.
+        self._xray_mode_store = None
+        self._center_pager.xray_mode_clicked.connect(self._on_xray_mode_clicked)
         
         self._coordinator.selection_changed.connect(self._layout_canvas.set_selection)
         
@@ -280,8 +284,40 @@ class AuditView(QWidget):
         self._coordinator.on_audit_loaded()
         self._session.load(audit_id)
         self._bom_panel.load(audit_id)
-        
+
         self._center_pager.load(audit_id, self._library_bom_lines(audit_id))
+        self.audit_loaded.emit(audit_id)
+
+    # --- Phase 58 §6: X-ray mode ---
+
+    def set_xray_mode_memory(self, load, store) -> None:
+        """Applies the remembered X-ray mode without storing it, and keeps store for your clicks."""
+        self._xray_mode_store = store
+        on = False
+        try:
+            on = bool(load())
+        except Exception:
+            logger.warning("The remembered X-ray mode couldn't be read")
+        self._apply_xray_mode(on)
+
+    def set_xray_stale_checker(self, checker) -> None:
+        self._layout_canvas.set_stale_scan_checker(checker)
+
+    def reload_xray_state(self) -> None:
+        self._layout_canvas.reload_xray_state()
+
+    def _on_xray_mode_clicked(self, on: bool) -> None:
+        if self._xray_mode_store is not None:
+            try:
+                self._xray_mode_store(bool(on))
+            except Exception:
+                logger.warning("The X-ray mode couldn't be remembered")
+        self._apply_xray_mode(on)
+
+    def _apply_xray_mode(self, on: bool) -> None:
+        self._center_pager.set_xray_checked(on)
+        self._coordinator.set_xray_mode(on)
+        self._layout_canvas.set_xray_mode(on)
 
     def _library_bom_lines(self, audit_id: int) -> list:
         """BOM lines for the optional library segment; never fails the audit load.

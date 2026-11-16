@@ -28,16 +28,42 @@ class SelectionCoordinator(QObject):
         self._tht_pane = None
         self._bom_panel = None
         self._active: SelectionIntent | None = None
+        self._xray_mode = False
+
+    def set_xray_mode(self, on: bool) -> None:
+        """Phase 58 §6.7: while on, a marker click selects its SMT part's MPN and never toggles it off."""
+        self._xray_mode = bool(on)
+
+    def select_bom_mpn(self, mpn: str) -> None:
+        """Selects a BOM MPN from a marker, without on_bom_row_clicked's toggle-off rule (Phase 58 §6.7).
+
+        post: the THT pane's selected row and the BOM panel's selection are cleared; the BOM panel then
+              selects mpn; selection_changed is emitted with BOM_MPN unless that is already active
+        """
+        if not mpn:
+            return
+        self._clear_panes()
+        if self._bom_panel:
+            self._bom_panel.select_mpn(mpn)
+        self._emit(SelectionIntent(kind=SelectionKind.BOM_MPN, mpn=mpn))
 
     def on_renderer_refdes_clicked(self, ref_des: str) -> None:
         view = self._view_provider()
         if not view:
             return
-            
+
         location = self._layout_query_service.locate_refdes(view.audit_id, ref_des)
         if not location:
             return
-            
+
+        if self._xray_mode:
+            # A THT marker, or one without a BOM row, leaves the selection as it is.
+            if location.mount_type == 'S' and location.mpn:
+                self.select_bom_mpn(location.mpn)
+                if self._bom_panel:
+                    self._bom_panel.scroll_to_mpn(location.mpn)
+            return
+
         if location.mount_type == 'T':
             row = next((r for r in view.tht_rows if ref_des in r.ref_des_list), None)
             if row:

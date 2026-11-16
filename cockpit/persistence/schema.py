@@ -625,6 +625,7 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     v19_migrated = migrate_to_v19(conn)
     migrate_to_v20(conn)
     v21_migrated = migrate_to_v21(conn)
+    migrate_to_v22(conn)
     return (v7_migrated or v8_migrated or v9_migrated or v11_migrated or v13_migrated
             or v14_migrated or v15_migrated or v16_migrated or v17_migrated or v18_migrated
             or v19_migrated or v21_migrated)
@@ -1446,6 +1447,51 @@ def migrate_to_v20(conn: sqlite3.Connection) -> bool:
     except Exception as e:
         conn.rollback()
         raise SchemaInitializationError(statement="v20 migration failed", cause=e)
+
+
+# ---------- v22: Phase 58, X-ray locations ----------
+
+SCHEMA_V22_DDL_XRAY_LOCATIONS: str = (
+    "ALTER TABLE audit_requirements ADD COLUMN xray_locations TEXT NULL"
+)
+
+
+def migrate_to_v22(conn: sqlite3.Connection) -> bool:
+    """Phase 58 §4.3: adds audit_requirements.xray_locations.
+
+    pre:  schema_version >= 21
+    post: audit_requirements has xray_locations TEXT NULL, NULL on every existing row; schema_version
+          == 22; no document is read. Returns False without writing when already >= 22.
+    raises: SchemaMismatch when version < 21; SchemaInitializationError on DDL failure
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=21)
+
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=21)
+
+    version = row[0] if isinstance(row, tuple) and not hasattr(row, "keys") else row["version"]
+    if version < 21:
+        raise SchemaMismatch(found_version=version, expected_version=21)
+    if version >= 22:
+        return False
+
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        cur.execute(SCHEMA_V22_DDL_XRAY_LOCATIONS)
+        cur.execute(
+            "UPDATE schema_version SET version = 22, applied_at = ? WHERE singleton_guard = 1",
+            (utcnow().isoformat(),),
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception as e:
+        conn.rollback()
+        raise SchemaInitializationError(statement="v22 migration failed", cause=e)
 
 
 # ---------- v21: Phase 57, placements ----------

@@ -88,6 +88,44 @@ class HighlightItem(QGraphicsItem):
         self.rect = self.polygon.boundingRect()
         self.mode = mode
 
+class XrayMarkerItem(QGraphicsItem):
+    """Phase 58 §6.4: one X-ray marker. Markers are their own pool, so HighlightItem keeps its z-value, and
+    a test theme without the X-ray roles never meets them unless X-ray mode draws."""
+
+    def __init__(self, theme: Theme):
+        super().__init__()
+        self._theme = theme
+        self.rect = QRectF()
+        self.polygon: QPolygonF | None = None
+        self.dashed = False
+        self.setZValue(self._theme.canvas_z("xray_marker"))
+        self.setVisible(False)
+
+    def boundingRect(self) -> QRectF:
+        return self.rect.adjusted(-4, -4, 4, 4)
+
+    def paint(self, painter: QPainter, option, widget: QWidget | None = None):
+        pen = self._theme.canvas_pen("xray_marker_class" if self.dashed else "xray_marker")
+        if self.dashed:
+            pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        if self.polygon is not None:
+            painter.drawPolygon(self.polygon)
+        else:
+            painter.drawRect(self.rect)
+
+    def set_shape(self, shape, dashed: bool) -> None:
+        self.prepareGeometryChange()
+        if isinstance(shape, QPolygonF):
+            self.polygon = QPolygonF(shape)
+            self.rect = self.polygon.boundingRect()
+        else:
+            self.polygon = None
+            self.rect = QRectF(shape)
+        self.dashed = dashed
+
+
 from cockpit.persistence.errors import AuditNotFound
 from cockpit.ingestion.errors import MalformedPdfError
 from cockpit.services.layout_query import LayoutQueryService
@@ -99,8 +137,22 @@ from cockpit.ui.workers.render_worker import RenderJob, RenderResult, RenderFail
 from cockpit.persistence.errors import PersistenceError
 from cockpit.ui.canvas.page_switcher import PageSwitcher
 from cockpit.placements.geometry import LABEL, PartHighlight, part_at
+from cockpit.services.requirements import StoredLocations
+from cockpit.services.xray_markers import (
+    MarkerKind,
+    NoScan,
+    ViewFailed,
+    Viewed,
+    cut_legend,
+    layout_markers,
+)
 import logging
+import sqlite3
 logger = logging.getLogger(__name__)
+
+# Phase 58 §6.5: the legend's share of the view's width, and its distance from the view's edges.
+LEGEND_MAX_WIDTH_FRACTION = 0.45
+OVERLAY_MARGIN_PX = 12
 
 @dataclass(frozen=True)
 class RenderBudget:
@@ -232,6 +284,8 @@ class LayoutCanvas(QWidget):
     request_render = pyqtSignal(object)
     generation_bumped = pyqtSignal(int)
     secondary_availability_changed = pyqtSignal(bool)
+    # Phase 58 §6.2: true iff the primary drawing shows a page, so X-ray mode can draw.
+    xray_available_changed = pyqtSignal(bool)
 
     def __init__(
         self,
@@ -299,13 +353,29 @@ class LayoutCanvas(QWidget):
         self._scene.addItem(self._dim_item)
         
         self._highlight_items: list[HighlightItem] = []
-        
+        # Phase 58 §6: X-ray mode's state; the view is read when the mode first needs it.
+        self._marker_items: list[XrayMarkerItem] = []
+        self._marker_shapes: list[PartHighlight] = []
+        self._xray_mode = False
+        self._xray_reading = None
+        self._xray_stale = False
+        self._stale_checker = None
+        self._xray_available = False
+        self._legend_lines: tuple = ()
+
         canvas_layout.addWidget(self._graphics_view, stretch=1)
         
         self._hint_label = QLabel(self)
         self._hint_label.setProperty("class", "hint-label bold")
         self._hint_label.setTextFormat(Qt.TextFormat.PlainText)
         self._hint_label.setVisible(False)
+
+        # Phase 58 §6.5: the X-ray legend, plain text like the hint, at the view's bottom left.
+        self._legend_label = QLabel(self)
+        self._legend_label.setProperty("class", "hint-label")
+        self._legend_label.setTextFormat(Qt.TextFormat.PlainText)
+        self._legend_label.setWordWrap(True)
+        self._legend_label.setVisible(False)
         
         from cockpit.ui.widgets.empty_canvas import EmptyCanvasPlaceholder
         self._empty_placeholder = EmptyCanvasPlaceholder("No assembly drawing attached")
@@ -390,6 +460,8 @@ class LayoutCanvas(QWidget):
 
     def _show_spinner(self) -> None:
         self._stacked.setCurrentWidget(self._spinner_placeholder)
+        self._hide_overlays()
+        self._update_xray_available()
 
     def _hide_spinner(self) -> None:
         if self._stacked.currentWidget() == self._spinner_placeholder:
@@ -423,7 +495,11 @@ class LayoutCanvas(QWidget):
         self.reset_canvas_geometry()
 
         self.release_highlight_pool()
+        self.release_marker_pool()
         self._coord_cache.clear()
+        self._xray_reading = None
+        self._xray_stale = False
+        self._legend_lines = ()
 
         self._current_audit_id = None
         self._current_context = None
@@ -439,8 +515,10 @@ class LayoutCanvas(QWidget):
         self._resize_debouncer.stop()
         self._page_switcher.reset()
         self._hint_label.setVisible(False)
+        self._legend_label.setVisible(False)
         self.secondary_availability_changed.emit(False)
         self._stacked.setCurrentWidget(self._empty_placeholder)
+        self._update_xray_available()
 
     def is_loaded(self) -> bool:
         return self._current_audit_id is not None
@@ -450,6 +528,12 @@ class LayoutCanvas(QWidget):
             self._scene.removeItem(item)
         self._highlight_items.clear()
 
+    def release_marker_pool(self) -> None:
+        for item in self._marker_items:
+            self._scene.removeItem(item)
+        self._marker_items.clear()
+        self._marker_shapes = []
+
     def load(self, audit_id: int) -> None:
         self.unload()
         
@@ -458,6 +542,8 @@ class LayoutCanvas(QWidget):
         self._secondary_pending = getattr(self._layout_query_service, "resolve_secondary_pdf_ref", lambda aid: None)(audit_id)
         self._active_source = "primary"
         self.secondary_availability_changed.emit(self.has_secondary_pdf())
+        if self._xray_mode:
+            self._load_xray_view()
         self._render_source("primary", page_index=0)
 
     def _render_source(self, source: str, page_index: int) -> None:
@@ -469,6 +555,8 @@ class LayoutCanvas(QWidget):
             self._page_switcher.hide()
             self._empty_placeholder.set_text("No assembly drawing attached")
             self._stacked.setCurrentWidget(self._empty_placeholder)
+            self._hide_overlays()
+            self._update_xray_available()
             return
 
         self._coord_cache.clear()
@@ -550,8 +638,9 @@ class LayoutCanvas(QWidget):
         self._graphics_view.fitInView(self._base_pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
         self._current_scale = 1.0
         self._update_pan_cursor()
-        
+
         self._apply_selection()
+        self._update_xray_available()
 
         if rendered_height != self.current_render_height():
             self._resize_debouncer.start()
@@ -570,6 +659,8 @@ class LayoutCanvas(QWidget):
                 self._hide_spinner()
                 self._error_placeholder.set_text(f"Could not load assembly drawing: {failure.payload.summary}")
                 self._stacked.setCurrentWidget(self._error_placeholder)
+                self._hide_overlays()
+                self._update_xray_available()
                 self.error_occurred.emit(failure.payload)
             else:
                 logger.warning("render failed at height %d for pages %s", self.current_render_height(), failure.page_indices)
@@ -595,6 +686,7 @@ class LayoutCanvas(QWidget):
             self._current_scale = 1.0
             self._update_pan_cursor()
             self._apply_selection()
+            self._update_xray_available()
         else:
             self._render_epoch += 1
             gen = self._render_epoch
@@ -617,7 +709,9 @@ class LayoutCanvas(QWidget):
         
         if self._hint_label.isVisible():
             self._position_hint_label()
-            
+        if self._legend_label.isVisible():
+            self._show_legend()
+
         if self._current_context is not None and self._current_page_index is not None:
             if self._stacked.currentWidget() == self._canvas_container:
                 self._resize_debouncer.start()
@@ -706,9 +800,11 @@ class LayoutCanvas(QWidget):
             
             # Phase 57 §10.3: the smallest outline under the point, then the smallest label box
             # within today's 2 pt tolerance; ties in natural order.
-            designator = part_at(
-                self._current_page_index, pdf_x, pdf_y, self._coord_cache.get(self._current_page_index, []),
+            shown = (
+                self._marker_shapes if self._xray_mode
+                else self._coord_cache.get(self._current_page_index, [])
             )
+            designator = part_at(self._current_page_index, pdf_x, pdf_y, shown)
             if designator is not None:
                 self.refdes_clicked.emit(designator)
                 return
@@ -722,9 +818,10 @@ class LayoutCanvas(QWidget):
 
     def set_selection(self, intent: SelectionIntent) -> None:
         if intent.kind == SelectionKind.CLEAR:
+            # Phase 58 §6.4: forgetting the selection repaints; in X-ray mode the markers stay.
             self._last_intent = None
             self._last_resolved = None
-            self._apply_selection(clear=True)
+            self._apply_selection()
             return
 
         if self._current_context is None:
@@ -828,10 +925,25 @@ class LayoutCanvas(QWidget):
         self._hint_label.setVisible(True)
 
     def _apply_selection(self, clear: bool = False) -> None:
-        if self._reference_source_active():
-            clear = True
+        """Repaints the overlays: X-ray markers in X-ray mode, else the kept selection.
+
+        Phase 58 §6.4: clear=True hides every overlay, for a source change, a reload, a placeholder or the
+        spinner; forgetting a selection is set_selection(CLEAR), which repaints.
+        """
+        if (
+            clear
+            or self._reference_source_active()
+            or not self.has_displayed_page()
+            or self._stacked.currentWidget() is not self._canvas_container
+        ):
+            self._hide_overlays()
+            return
+        if self._xray_mode:
+            self._paint_xray()
+            return
+        self._hide_xray_overlays()
         resolved = self._last_resolved
-        if clear or resolved is None or not self.has_displayed_page():
+        if resolved is None:
             self._dim_item.setVisible(False)
             self._hide_all_highlights()
             self._hint_label.setVisible(False)
@@ -915,6 +1027,160 @@ class LayoutCanvas(QWidget):
             self._hide_all_highlights()
             self._hint_label.setVisible(False)
             self._page_switcher.set_other_page_indicator(False)
+
+    # --- Phase 58 §6: X-ray mode ---
+
+    def set_stale_scan_checker(self, checker) -> None:
+        """The identity bar's checker: (audit_id, stored fingerprint) -> stale. The canvas computes none."""
+        self._stale_checker = checker
+
+    @property
+    def xray_mode(self) -> bool:
+        return self._xray_mode
+
+    def set_xray_mode(self, on: bool) -> None:
+        on = bool(on)
+        if on == self._xray_mode:
+            return
+        self._xray_mode = on
+        if not on:
+            self._hide_xray_overlays()
+        elif self._xray_reading is None and self._current_audit_id is not None:
+            self._load_xray_view()
+        self._apply_selection()
+
+    def reload_xray_state(self) -> None:
+        """§6.8: re-reads the view; redraws only in X-ray mode with a primary page displayed."""
+        if self._current_audit_id is None:
+            return
+        if not self._xray_mode:
+            self._xray_reading = None
+            return
+        self._load_xray_view()
+        if self._xray_available:
+            self._apply_selection()
+
+    def xray_available(self) -> bool:
+        return self._xray_available
+
+    def _update_xray_available(self) -> None:
+        available = (
+            self._current_audit_id is not None
+            and self._active_source == "primary"
+            and self.has_displayed_page()
+            and self._stacked.currentWidget() is self._canvas_container
+        )
+        if available != self._xray_available:
+            self._xray_available = available
+            self.xray_available_changed.emit(available)
+
+    def _load_xray_view(self) -> None:
+        """§6.3: reads the view; a database error degrades to ViewFailed and is reported once."""
+        self._xray_reading = None
+        self._xray_stale = False
+        if self._current_audit_id is None:
+            return
+        try:
+            view = self._layout_query_service.xray_view(self._current_audit_id)
+        except (PersistenceError, sqlite3.Error) as exc:
+            logger.warning("X-ray locations not read: %s", type(exc).__name__)
+            self._xray_reading = ViewFailed(type(exc).__name__)
+            self.error_occurred.emit(FailurePayload.from_exception(exc, "X-ray locations couldn't be read"))
+            return
+        if view is None:
+            self._xray_reading = NoScan()
+            return
+        self._xray_reading = Viewed(view)
+        if self._stale_checker is not None and isinstance(view.stored.reading, StoredLocations):
+            try:
+                self._xray_stale = bool(self._stale_checker(self._current_audit_id, view.stored.fingerprint))
+            except Exception:
+                logger.warning("The X-ray scan's staleness couldn't be checked")
+                self._xray_stale = False
+
+    def _hide_xray_overlays(self) -> None:
+        for item in self._marker_items:
+            item.setVisible(False)
+        self._marker_shapes = []
+        self._legend_label.setVisible(False)
+
+    def _hide_overlays(self) -> None:
+        """§6.4: every overlay, for a source change, a reload, a placeholder, the spinner and unload."""
+        self._dim_item.setVisible(False)
+        self._hide_all_highlights()
+        self._hint_label.setVisible(False)
+        self._page_switcher.set_other_page_indicator(False)
+        self._hide_xray_overlays()
+
+    def _ensure_marker_pool(self, target_n: int) -> None:
+        while len(self._marker_items) < target_n:
+            item = XrayMarkerItem(self._theme)
+            self._scene.addItem(item)
+            self._marker_items.append(item)
+
+    def _paint_xray(self) -> None:
+        self._dim_item.setVisible(False)
+        self._hide_all_highlights()
+        if self._xray_reading is None:
+            self._load_xray_view()
+        reading = self._xray_reading if self._xray_reading is not None else NoScan()
+        layout = layout_markers(reading, self._coord_cache, self._current_page_index, self._xray_stale)
+        self._marker_shapes = [marker.shape for marker in layout.markers]
+        self._ensure_marker_pool(len(layout.markers))
+        for item in self._marker_items:
+            item.setVisible(False)
+        for item, marker in zip(self._marker_items, layout.markers):
+            self._paint_marker(item, marker)
+        self._show_hint([layout.hint] if layout.hint else [])
+        self._legend_lines = layout.legend_lines
+        self._show_legend()
+        self._page_switcher.set_other_page_indicator(layout.other_pages)
+
+    def _paint_marker(self, item: XrayMarkerItem, marker) -> None:
+        from cockpit.services.layout_query import highlight_coord
+
+        coord = highlight_coord(marker.shape)
+        scene_rect = self._scene.sceneRect()
+        page_dim = self._current_context.page_dimensions[coord.page_index]
+        scale_x = scene_rect.width() / page_dim[0]
+        scale_y = scene_rect.height() / page_dim[1]
+        if coord.outline:
+            shape = QPolygonF([QPointF(x * scale_x, y * scale_y) for x, y in coord.outline])
+        else:
+            cx = (coord.x1 + coord.x2) / 2.0 * scale_x
+            cy = (coord.y1 + coord.y2) / 2.0 * scale_y
+            scale = self._theme.canvas_scalar("highlight_scale")
+            width = (coord.x2 - coord.x1) * scale_x * scale
+            height = (coord.y2 - coord.y1) * scale_y * scale
+            shape = QRectF(cx - width / 2.0, cy - height / 2.0, width, height)
+        item.set_shape(shape, dashed=marker.kind == MarkerKind.CLASS_ONLY)
+        item.setVisible(True)
+
+    def _show_legend(self) -> None:
+        """§6.5: at the view's bottom left, no higher than just below the hint; cut to fit."""
+        lines = self._legend_lines
+        if not lines or not self._xray_mode:
+            self._legend_label.setVisible(False)
+            return
+        view_rect = self._graphics_view.geometry()
+        width = max(80, int(view_rect.width() * LEGEND_MAX_WIDTH_FRACTION))
+        top_limit = view_rect.top() + OVERLAY_MARGIN_PX
+        if self._hint_label.isVisible():
+            top_limit = self._hint_label.geometry().bottom() + OVERLAY_MARGIN_PX
+        max_height = max(1, view_rect.bottom() - OVERLAY_MARGIN_PX - top_limit)
+
+        def fits(texts) -> bool:
+            self._legend_label.setText("\n".join(texts))
+            return self._legend_label.heightForWidth(width) <= max_height
+
+        texts = cut_legend(lines, fits)
+        self._legend_label.setText("\n".join(texts))
+        height = min(self._legend_label.heightForWidth(width), max_height)
+        self._legend_label.setGeometry(
+            view_rect.x() + OVERLAY_MARGIN_PX, view_rect.bottom() - OVERLAY_MARGIN_PX - height, width, height,
+        )
+        self._legend_label.setVisible(True)
+        self._legend_label.raise_()
 
     def _position_hint_label(self) -> None:
         view_rect = self._graphics_view.geometry()

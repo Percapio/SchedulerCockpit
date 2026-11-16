@@ -245,6 +245,8 @@ class HeldRequirements:
     summary: Any
     ticks: Mapping[int, Any]
     vocabulary: Any
+    # Phase 58 §7.2: the reference member's stored X-ray locations reading; absent with no summary.
+    xray: Any = None
 
 
 @dataclass(frozen=True)
@@ -724,12 +726,44 @@ class TravelerDiff:
 
 
 @dataclass(frozen=True)
+class LocationsCounted:
+    designators: frozenset[str]
+
+
+@dataclass(frozen=True)
+class LocationsSideNotRead:
+    """The stored scan predates schema v22, or its locations couldn't be read."""
+
+
+@dataclass(frozen=True)
+class LocationsSideNotScanned:
+    """The reference member has no stored scan."""
+
+
+@dataclass(frozen=True)
+class LocationsSideUnknown:
+    """The preview couldn't read the ECO or the BOM it compared."""
+
+
+LocationsSide = Union[LocationsCounted, LocationsSideNotRead, LocationsSideNotScanned, LocationsSideUnknown]
+
+
+@dataclass(frozen=True)
+class XrayLocationsChange:
+    """Phase 58 §7.2: the family's X-ray locations before and after an update."""
+
+    before: LocationsSide
+    after: LocationsSide
+
+
+@dataclass(frozen=True)
 class RequirementDiff:
     """Filled only once Phase 54 is present; before and after are its summaries."""
 
     before: Any | None
     after: Any
     tick_will_need_recheck: bool
+    xray_locations: XrayLocationsChange | None = None
 
 
 RequirementPreviewer = Callable[[FamilyProbe, Mapping[SourceRole, pathlib.Path]], Union[RequirementDiff, None]]
@@ -1837,10 +1871,18 @@ def _held_requirements(
     from cockpit.persistence.repositories.requirements import AuditRequirementsRepository
     from cockpit.services.requirements import XrayTick
 
+    requirements_repo = AuditRequirementsRepository(repositories.conn)
     try:
-        summary = AuditRequirementsRepository(repositories.conn).find_summary(reference_id)
+        summary = requirements_repo.find_summary(reference_id)
     except sqlite3.Error:
         summary = None
+    # Phase 58 §7.2: through its own query, since find_summary doesn't select the column.
+    xray = None
+    if summary is not None:
+        try:
+            xray = requirements_repo.find_xray_reading(reference_id)
+        except sqlite3.Error:
+            xray = None
     ticks = {
         audit.id: XrayTick(
             is_done=bool(audit.xray_images_done),
@@ -1849,7 +1891,7 @@ def _held_requirements(
         )
         for audit in family
     }
-    return HeldRequirements(summary=summary, ticks=ticks, vocabulary=vocabulary)
+    return HeldRequirements(summary=summary, ticks=ticks, vocabulary=vocabulary, xray=xray)
 
 
 def requirement_previewer(share_call: ShareCallGuard | None = None, parsers: Any = None) -> RequirementPreviewer:
@@ -1909,10 +1951,13 @@ def requirement_previewer(share_call: ShareCallGuard | None = None, parsers: Any
         else:
             wash_text = req.wash_text_of(snapshot.held.traveler_metadata)
 
+        # Phase 58 §8.5, §8.7: the held locations are the prior, as the reconciler's next scan reads them.
+        prior = held.xray.locations if isinstance(held.xray, req.StoredLocations) else None
         inputs = req.ScanInputs(
             notes_path=eco_path, notes_hash=hash_of(SourceRole.NOTES),
             bom_path=bom_path, bom_hash=hash_of(SourceRole.BOM),
             traveler_wash_text=wash_text, vocabulary=held.vocabulary,
+            prior_xray_locations=prior,
         )
         scan = req.decide_requirements(eco, bom, req.traveler_unit(wash_text), inputs)
         after = req.RequirementSummary(
@@ -1926,7 +1971,20 @@ def requirement_previewer(share_call: ShareCallGuard | None = None, parsers: Any
             and req.xray_cell_state(held.summary, tick) != stale
             for tick in held.ticks.values()
         )
-        return RequirementDiff(before=held.summary, after=after, tick_will_need_recheck=recheck)
+        if held.summary is None:
+            before_side: LocationsSide = LocationsSideNotScanned()
+        elif isinstance(held.xray, req.StoredLocations):
+            before_side = LocationsCounted(held.xray.locations.all_designators)
+        else:
+            before_side = LocationsSideNotRead()
+        after_side: LocationsSide = (
+            LocationsSideUnknown() if (eco.is_err or bom.is_err)
+            else LocationsCounted(scan.xray_locations.all_designators)
+        )
+        return RequirementDiff(
+            before=held.summary, after=after, tick_will_need_recheck=recheck,
+            xray_locations=XrayLocationsChange(before=before_side, after=after_side),
+        )
 
     return preview
 

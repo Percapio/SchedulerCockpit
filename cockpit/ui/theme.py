@@ -392,6 +392,14 @@ class ThemeLoader:
             raise ConfigurationError("/canvas/z_order", "INV-Z1", "base_pixmap must be < dim")
         if not (z["dim"] < z["highlight"]):
             raise ConfigurationError("/canvas/z_order", "INV-Z2", "dim must be < highlight")
+        # Phase 58 §3: X-ray markers draw above the selection's highlights.
+        if not (z["highlight"] < z["xray_marker"]):
+            raise ConfigurationError("/canvas/z_order", "INV-Z3", "highlight must be < xray_marker")
+        # Phase 58 §3: a pen role is one name, a key of both canvas.colour and canvas.pen_width, so a pen
+        # the canvas asks for resolves at startup instead of failing while it paints.
+        for role in cv["pen_width"]:
+            if role not in cv["colour"]:
+                raise ConfigurationError(f"/canvas/pen_width/{role}", "INV-P1", "a pen width needs a colour of the same name")
             
         s = cv["scalar"]["highlight_scale"]
         if not (1.0 <= s <= 4.0):

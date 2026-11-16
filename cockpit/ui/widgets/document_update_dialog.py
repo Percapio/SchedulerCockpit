@@ -222,7 +222,33 @@ def _requirement_lines(diff: Any) -> list[str]:
     lines = ["Requirements  " + "; ".join(parts)]
     if diff.tick_will_need_recheck:
         lines.append("              your X-ray tick will need re-checking")
+    locations_line = xray_locations_line(getattr(diff, "xray_locations", None))
+    if locations_line:
+        lines.append(f"              {locations_line}")
     return lines
+
+
+def xray_locations_line(change: Any) -> str | None:
+    """Phase 58 §7.2: "X-ray locations a → b (+p, −q)", or None when nothing changed."""
+    if change is None:
+        return None
+    before, after = change.before, change.after
+    if isinstance(after, du.LocationsSideUnknown):
+        if isinstance(before, du.LocationsCounted):
+            return f"X-ray locations {len(before.designators):,} → ?"
+        return None
+    if not isinstance(after, du.LocationsCounted):
+        return None
+    if isinstance(before, du.LocationsSideNotScanned):
+        return f"X-ray locations not scanned → {len(after.designators):,}"
+    if isinstance(before, du.LocationsSideNotRead):
+        return f"X-ray locations not read → {len(after.designators):,}"
+    if not isinstance(before, du.LocationsCounted) or before.designators == after.designators:
+        return None
+    added = len(after.designators - before.designators)
+    removed = len(before.designators - after.designators)
+    return (f"X-ray locations {len(before.designators):,} → {len(after.designators):,} "
+            f"(+{added:,}, −{removed:,})")
 
 
 def _kind(value: str) -> Any:

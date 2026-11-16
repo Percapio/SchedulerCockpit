@@ -45,6 +45,8 @@ RENDER_SHUTDOWN_TIMEOUT_MS = 10_000
 # Phase 54 section 9: the list shows new scans at most this often during a
 # reconciler pass, and once more when the pass ends.
 REQUIREMENTS_LIST_REFRESH_MS = 1_000
+# Phase 58 §6.2: X-ray mode, remembered on each PC across audits and restarts.
+XRAY_MODE_SETTINGS_KEY = "audit_view/xray_mode"
 
 
 class _IngestLatch:
@@ -213,6 +215,11 @@ class MainWindow(QMainWindow):
         self._audit_view._identity_bar.set_evidence_loader(req_repo.find_evidence)
         self._audit_view._identity_bar.set_stale_scan_checker(self._is_audit_scan_stale)
         self._audit_view._actions_bar.set_vocabulary_provider(self.current_requirements_vocabulary)
+        # Phase 58 §5, §6.2, §6.3: the open audit's scan first; X-ray mode remembered on this PC, and its
+        # staleness from the identity bar's checker.
+        self._audit_view.audit_loaded.connect(self._requirements_reconciler.promote)
+        self._audit_view.set_xray_stale_checker(self._is_audit_scan_stale)
+        self._audit_view.set_xray_mode_memory(self._load_xray_mode, self._store_xray_mode)
         self._pending_drawing_target = None
         self._pending_plan = None
         self._pending_article_folder = None
@@ -308,9 +315,17 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_requirements_reconciler"):
             self._requirements_reconciler.trigger(notify_toast=True)
 
+    def _load_xray_mode(self) -> bool:
+        return bool(self._settings.value(XRAY_MODE_SETTINGS_KEY, False, type=bool))
+
+    def _store_xray_mode(self, on: bool) -> None:
+        self._settings.setValue(XRAY_MODE_SETTINGS_KEY, bool(on))
+
     def _on_reconciler_audit_updated(self, audit_id: int) -> None:
         if self._audit_view.current_audit_id() == audit_id:
             self._audit_view.refresh_audit_fields(audit_id)
+            # Phase 58 §6.8: the canvas re-reads the scan's X-ray locations.
+            self._audit_view.reload_xray_state()
         if not self._requirements_list_refresh.isActive():
             self._requirements_list_refresh.start()
 

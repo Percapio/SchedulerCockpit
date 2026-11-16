@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
 import sqlite3
-from typing import Callable
+import threading
+from typing import Callable, Iterable
 
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
@@ -23,6 +25,7 @@ from cockpit.services.requirements import (
     RequirementSummary,
     RequirementVocabulary,
     ScanInputs,
+    StoredLocations,
     XrayCellState,
     XrayTick,
     scan_documents,
@@ -97,6 +100,8 @@ def _build_scan_inputs_for_audit(
             bom_hash = h
 
     wash_text = _extract_wash_text(raw_traveler_metadata)
+    # Phase 58 §8.5: the stored locations are the scan's prior; NULL or unreadable gives none.
+    reading = AuditRequirementsRepository(conn).find_xray_reading(audit_id)
     return ScanInputs(
         notes_path=notes_path,
         notes_hash=notes_hash,
@@ -104,16 +109,19 @@ def _build_scan_inputs_for_audit(
         bom_hash=bom_hash,
         traveler_wash_text=wash_text,
         vocabulary=vocabulary,
+        prior_xray_locations=reading.locations if isinstance(reading, StoredLocations) else None,
     )
 
 
 def stale_scan_jobs(
     conn: sqlite3.Connection,
     vocabulary: RequirementVocabulary,
+    first: int | None = None,
 ) -> list[ScanJob]:
     """Lists open audits whose stored requirement scan is missing or stale (§7.2).
 
-    Ordered oldest scan first (missing scans first, then scanned_at ASC, id ASC).
+    Ordered oldest scan first (missing scans first, then scanned_at ASC, id ASC); Phase 58 §5: the
+    audit named first, when stale, leads.
     """
     req_repo = AuditRequirementsRepository(conn)
     summaries = req_repo.find_summaries_for_open_audits()
@@ -148,7 +156,36 @@ def stale_scan_jobs(
                 prior_states=prior_states,
             )
         )
+    if first is not None:
+        jobs.sort(key=lambda job: job.audit_id != first)
     return jobs
+
+
+class PassQueue:
+    """A pass's remaining jobs (Phase 58 §5): the worker takes from the front, and the UI thread may
+    move one forward. The only state the two threads share; its lock is held for one take or promote."""
+
+    def __init__(self, jobs: Iterable[ScanJob]) -> None:
+        self._jobs: deque[ScanJob] = deque(jobs)
+        self._lock = threading.Lock()
+
+    def take(self) -> ScanJob | None:
+        with self._lock:
+            return self._jobs.popleft() if self._jobs else None
+
+    def promote(self, audit_id: int) -> bool:
+        """Moves the audit's waiting job to the front; True iff it was still waiting."""
+        with self._lock:
+            for index, job in enumerate(self._jobs):
+                if job.audit_id == audit_id:
+                    del self._jobs[index]
+                    self._jobs.appendleft(job)
+                    return True
+            return False
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._jobs)
 
 
 def write_scan_if_current(
@@ -292,9 +329,9 @@ class _ReconcilerWorker(QObject):
     job_scanned = pyqtSignal(int, object, object)  # audit_id, RequirementScan, prior_states
     pass_finished = pyqtSignal(bool)  # True when the worker failed and the pass stopped early
 
-    def __init__(self, jobs: list[ScanJob]) -> None:
+    def __init__(self, jobs: PassQueue | list[ScanJob]) -> None:
         super().__init__()
-        self._jobs = list(jobs)
+        self._queue = jobs if isinstance(jobs, PassQueue) else PassQueue(jobs)
         self._stop_requested = False
 
     def request_stop(self) -> None:
@@ -303,7 +340,7 @@ class _ReconcilerWorker(QObject):
     def run(self) -> None:
         failed = False
         try:
-            for job in self._jobs:
+            while (job := self._queue.take()) is not None:
                 if self._stop_requested:
                     break
                 scan = scan_documents(job.inputs)
@@ -355,6 +392,9 @@ class RequirementsReconciler(QObject):
         self._active_vocabulary: RequirementVocabulary = DEFAULT_VOCABULARY
         self._stopped: bool = False
         self._worker_failed: bool = False
+        # Phase 58 §5: the running pass's queue, and the audit the next pass starts with.
+        self._queue: PassQueue | None = None
+        self._first: int | None = None
         self._reset_counters()
 
     def _reset_counters(self) -> None:
@@ -402,6 +442,20 @@ class RequirementsReconciler(QObject):
         if not self._start_pass() and not self._deferred:
             self._finish_pass()
 
+    def promote(self, audit_id: int) -> None:
+        """Puts an audit's scan ahead of the rest (Phase 58 §5).
+
+        pre:  UI thread
+        post: while a pass runs, the audit's waiting job, if any, is next; otherwise the next pass lists
+              the audit first when it is stale; nothing is scanned or written here
+        """
+        if self._stopped:
+            return
+        queue = self._queue
+        if queue is not None and queue.promote(audit_id):
+            return
+        self._first = audit_id
+
     def resume_if_deferred(self) -> None:
         """Runs the pass that a closed can_write gate deferred, or the results it dropped, if any."""
         if self._deferred and not self._stopped:
@@ -423,16 +477,19 @@ class RequirementsReconciler(QObject):
         self._worker_failed = False
         self._active_vocabulary = self._vocabulary_provider()
         try:
-            jobs = stale_scan_jobs(self._conn, self._active_vocabulary)
+            jobs = stale_scan_jobs(self._conn, self._active_vocabulary, first=self._first)
         except sqlite3.Error as exc:
             logger.warning("Requirements pass not started: %s", type(exc).__name__)
             return False
+        self._first = None
         self._pass_jobs += len(jobs)
         if not jobs:
             return False
 
         thread = QThread()
-        worker = _ReconcilerWorker(jobs)
+        queue = PassQueue(jobs)
+        self._queue = queue
+        worker = _ReconcilerWorker(queue)
         worker.moveToThread(thread)
 
         thread.started.connect(worker.run)
@@ -482,6 +539,7 @@ class RequirementsReconciler(QObject):
         worker = self._worker
         self._thread = None
         self._worker = None
+        self._queue = None
         if worker is not None:
             worker.deleteLater()
         if thread is not None:

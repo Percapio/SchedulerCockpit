@@ -436,6 +436,11 @@
               "minimum": 0
             }
           }
+        },
+        "selector_group_gap_px": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 48
         }
       }
     },

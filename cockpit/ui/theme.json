@@ -121,7 +121,8 @@
       "resize_debounce_ms": 200,
       "max_cached_bytes": 402653184,
       "prefetch_page_limit": 1
-    }
+    },
+    "selector_group_gap_px": 12
   },
   "bom_panel": {
     "grouping": {

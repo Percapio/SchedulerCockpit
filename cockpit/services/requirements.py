@@ -12,7 +12,7 @@ import json
 import logging
 from pathlib import Path
 import re
-from typing import Any, Callable, Generic, Sequence, TypeVar
+from typing import Any, Callable, Generic, Mapping, Sequence, TypeVar
 import zipfile
 
 import docx
@@ -83,6 +83,8 @@ class XrayCellState(StrEnum):
 
 class BadgeState(StrEnum):
     DETECTED = "detected"
+    # Phase 59 §4.4: carried by your hand flag alone; the documents don't say DETECTED.
+    FLAGGED = "flagged"
     ABSENT = "absent"
     UNKNOWN = "unknown"
     NOT_SCANNED = "not_scanned"
@@ -483,6 +485,40 @@ class SaveImagesNotRequired:
 
 
 TickRefused = AuditNotFoundForTick | SaveImagesNotRequired
+
+
+# Phase 59 §2: your hand flags, per part number, for the requirements documents sometimes miss.
+FLAGGABLE_KINDS: frozenset[RequirementKind] = frozenset({RequirementKind.AQUANOX, RequirementKind.PRESS_FIT})
+
+
+@dataclass(frozen=True)
+class HandFlag:
+    kind: RequirementKind
+    part_number: str
+    flagged_at: datetime
+
+
+HandFlags = Mapping[RequirementKind, HandFlag]
+
+
+@dataclass(frozen=True)
+class HandFlagChange:
+    part_number: str
+    kind: RequirementKind
+    flag: HandFlag | None
+
+
+@dataclass(frozen=True)
+class NoOpenAudit:
+    part_number: str
+
+
+@dataclass(frozen=True)
+class NotFlaggable:
+    kind: RequirementKind
+
+
+HandFlagRefused = NoOpenAudit | NotFlaggable
 
 
 @dataclass(frozen=True)
@@ -2339,13 +2375,33 @@ def badge_state_of(
     return BadgeState.UNKNOWN
 
 
+def requirement_badge(
+    summary: RequirementSummary | None,
+    kind: RequirementKind,
+    flags: HandFlags | None,
+) -> BadgeState:
+    """What the AQ or PF cell and chip show for one audit (Phase 59 §4.4).
+
+    pre:  kind is in FLAGGABLE_KINDS; flags are the audit's part number's
+    post: DETECTED when summary says DETECTED, flagged or not; otherwise FLAGGED when flags holds
+          kind; otherwise NOT_SCANNED without a summary, and the summary's ABSENT or UNKNOWN with one
+    """
+    documents = badge_state_of(summary, kind)
+    if documents == BadgeState.DETECTED:
+        return BadgeState.DETECTED
+    if flags and kind in flags:
+        return BadgeState.FLAGGED
+    return documents
+
+
 def build_requirement_badges(
     summary: RequirementSummary | None,
     tick: XrayTick,
+    flags: HandFlags | None = None,
 ) -> RequirementBadges:
     return RequirementBadges(
-        aquanox=badge_state_of(summary, RequirementKind.AQUANOX),
-        press_fit=badge_state_of(summary, RequirementKind.PRESS_FIT),
+        aquanox=requirement_badge(summary, RequirementKind.AQUANOX, flags),
+        press_fit=requirement_badge(summary, RequirementKind.PRESS_FIT, flags),
         xray_cell=xray_cell_state(summary, tick),
     )
 
@@ -2777,12 +2833,21 @@ def format_requirement_tooltip(
     evidence: Sequence[RequirementEvidence] = (),
     is_xray_column: bool = False,
     is_stale_scan: bool = False,
+    hand_flag: HandFlag | None = None,
 ) -> str | None:
-    """Formats an HTML-escaped tooltip for AQ, PF, or X-ray in the list or identity bar (§9)."""
-    if summary is None:
-        return "<span>Not scanned yet; Cockpit reads it shortly</span>"
+    """Formats an HTML-escaped tooltip for AQ, PF, or X-ray in the list or identity bar (§9).
 
-    lines: list[str] = []
+    Phase 59 §4.4: with a hand flag, its line comes first.
+    """
+    flag_lines: list[str] = []
+    if hand_flag is not None:
+        flag_lines.append(html.escape(
+            f"Flagged by hand {hand_flag.flagged_at:%Y-%m-%d} for every open {hand_flag.part_number} job"
+        ))
+    if summary is None:
+        return "<span>" + "<br/>".join(flag_lines + ["Not scanned yet; Cockpit reads it shortly"]) + "</span>"
+
+    lines: list[str] = list(flag_lines)
     kind_set = set(kinds)
 
     if is_xray_column:

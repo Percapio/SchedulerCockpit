@@ -87,12 +87,15 @@ class MainWindow(QMainWindow):
         second_ops_settings_controller=None,
         source_root_controller=None,
         mpn_library_controller=None,
+        company_name_controller=None,
     ) -> None:
         super().__init__()
         self._theme = theme
         self._app = app
         self._bootstrapped = bootstrapped_app
         self._settings = settings
+        # Phase 59 §5.2: the company short names; None in tests, which then show traveler names.
+        self._company_name_controller = company_name_controller
         self._style_controller = style_controller
         self._runtime_settings_controller = runtime_settings_controller
         self._second_ops_settings_controller = second_ops_settings_controller
@@ -158,6 +161,11 @@ class MainWindow(QMainWindow):
         self.picker.holidays_requested.connect(self._on_holidays_requested)
         self.picker.second_ops_requested.connect(self._on_overview_second_ops_requested)
         self.picker.xray_toggle_requested.connect(self._on_xray_toggle_requested)
+        self.picker.hand_flag_requested.connect(self._on_hand_flag_requested)
+        # Phase 59 §5.2: saved short names show from the first populate.
+        if company_name_controller is not None:
+            self.picker.model.set_company_names(company_name_controller.names())
+            company_name_controller.changed.connect(self._on_company_names_changed)
         self.stacked.addWidget(self.picker)
         
         self._load_epoch = 0
@@ -186,6 +194,7 @@ class MainWindow(QMainWindow):
         self._audit_view.document_update_check_requested.connect(self._on_check_family_requested)
         self._audit_view.set_entry_reason_provider(self._entry_reason)
         self._audit_view.xray_toggle_requested.connect(self._on_xray_toggle_requested)
+        self._audit_view.hand_flag_requested.connect(self._on_hand_flag_requested)
         self.stacked.addWidget(self._audit_view)
         
         self.toast = Toast(self)
@@ -361,6 +370,45 @@ class MainWindow(QMainWindow):
         if self.stacked.currentWidget() == self.picker:
             self.picker.populate(self._audit_read_svc.list_open())
 
+    def _on_hand_flag_requested(self, part_number: str, kind_value: str, flagged: bool) -> None:
+        """Sets or clears your hand flag for one part number, and refreshes what shows it (Phase 59 §4.5).
+
+        pre:  UI thread
+        post: while an ingest runs nothing is written and a toast says so; on Success the flag row
+              exists iff flagged, the Audit List, when showing, repopulates keeping its place, and the
+              Audit View, when it shows an audit of part_number, re-reads its fields; on
+              Failure(NoOpenAudit) nothing is written and a toast says so; a database error goes to
+              _on_failed as "Flag update failed" and nothing else changes
+        """
+        from cockpit.services.requirements import NoOpenAudit, RequirementKind
+
+        if not reconciler_can_write(self._busy):
+            # A UI-thread write now would join the ingest's savepoint and vanish if it rolled back.
+            self.toast.show_toast("Flag not changed", OPERATION_WORDING[Operation.INGEST])
+            return
+        try:
+            kind = RequirementKind(kind_value)
+            result = self._bootstrapped.audit_repo.requirements_repo.set_hand_flag(part_number, kind, bool(flagged))
+        except (PersistenceError, sqlite3.Error, ValueError) as e:
+            self._on_failed(FailurePayload.from_exception(e, "Flag update failed"))
+            return
+        if result.is_err:
+            if isinstance(result.error, NoOpenAudit):
+                self.toast.show_toast("Flag not changed", f"{part_number} has no open audit")
+            return
+        if self._audit_view.current_part_number() == part_number:
+            self._audit_view.refresh_audit_fields(self._audit_view.current_audit_id())
+        if self.stacked.currentWidget() == self.picker:
+            self.picker.populate(self._audit_read_svc.list_open(), keep_scroll=True)
+
+    def _on_company_names_changed(self) -> None:
+        """Phase 59 §5.2: the list shows a changed short name at once, keeping its place."""
+        if self._company_name_controller is None:
+            return
+        self.picker.model.set_company_names(self._company_name_controller.names())
+        if self.stacked.currentWidget() == self.picker:
+            self.picker.populate(self._audit_read_svc.list_open(), keep_scroll=True)
+
     def _on_runtime_constants_changed(self) -> None:
         self._runtime_constants_dirty = True
 
@@ -415,6 +463,8 @@ class MainWindow(QMainWindow):
                 current_audit_id=self._audit_view.current_audit_id(),
                 initial_vocabulary=self.current_requirements_vocabulary(),
                 document_updates=self._document_update_hooks(),
+                company_name_controller=self._company_name_controller,
+                open_customer_names=self._audit_read_svc.open_customer_names,
             )
             dialog.reset_requested.connect(self._on_reset_requested)
             dialog.requirements_vocabulary_saved.connect(self._on_requirements_vocabulary_saved)
@@ -640,7 +690,8 @@ class MainWindow(QMainWindow):
 
         try:
             self._bootstrapped.completion_svc.complete_and_cleanup(audit_id)
-        except (CleanupFailedError, PersistenceError) as e:
+        except (CleanupFailedError, PersistenceError, sqlite3.Error) as e:
+            # Phase 59 §4.3: the savepoint also covers the hand-flag cleanup, which raises sqlite3.Error.
             self._on_failed(FailurePayload.from_exception(e, "Completion failed"))
         finally:
             self._invalidate_audit_view_if_loaded(audit_id)

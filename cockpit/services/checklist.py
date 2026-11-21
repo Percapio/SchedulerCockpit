@@ -170,7 +170,19 @@ class ChecklistService:
                 task_at_tick=getattr(audit, "xray_images_done_task", None),
                 ticked_at=getattr(audit, "xray_images_done_at", None),
             ),
+            hand_flags=self._load_hand_flags(audit.part_number),
         )
+
+    def _load_hand_flags(self, part_number: str) -> dict:
+        """Phase 59 §4.3: the part number's hand flags; a failure costs only the flags, never the load."""
+        req_repo = getattr(self._audit_repo, "requirements_repo", None)
+        if req_repo is None:
+            return {}
+        try:
+            return dict(req_repo.hand_flags_for(part_number))
+        except sqlite3.Error as exc:
+            logger.warning("Hand flags couldn't be read for the Audit View: %s", type(exc).__name__)
+            return {}
 
     def _load_requirement_summary(self, audit_id: int):
         """The audit's stored scan without evidence; absent when not scanned yet (Phase 54 section 9)."""

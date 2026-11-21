@@ -15,6 +15,7 @@ from cockpit.ui.error_messages import render
 
 from .split_dialog import SplitDialog
 from .audit_session import AuditSession
+from .hand_flag_menu import flag_request_of, populate_hand_flag_menu
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,8 @@ class AuditActionsBar(QWidget):
     # file, BOM row or PDF was touched, so no consumer may rebuild the BOM
     # panel or request a canvas render.
     audit_fields_changed = pyqtSignal(int)
+    # Phase 59 §4.5: (part number, RequirementKind value, flagged); MainWindow writes it.
+    hand_flag_requested = pyqtSignal(str, str, bool)
 
     def __init__(
         self,
@@ -85,6 +88,9 @@ class AuditActionsBar(QWidget):
             for secondary in (False, True):
                 label = "Secondary Drawing" if secondary else "Drawing"
                 self._role_menus[(key, secondary)] = QMenu(label, parent_menu)
+        # Phase 59 §4.5: built once like the menus above, repopulated on aboutToShow, cleared on unload.
+        self._flag_menu = QMenu("Flag for", self.actions_menu)
+        self._flag_menu.triggered.connect(self._on_flag_action_triggered)
         layout.addWidget(self.actions_menu_btn)
         
         self.complete_btn = QPushButton("Complete")
@@ -99,8 +105,9 @@ class AuditActionsBar(QWidget):
         
     def unload(self) -> None:
         self.actions_menu.clear()
-        for menu in (self._add_menu, self._update_menu, self._print_menu):
+        for menu in (self._add_menu, self._update_menu, self._print_menu, self._flag_menu):
             menu.clear()
+        self._flag_menu.setTitle("Flag for")
         for menu in self._role_menus.values():
             menu.clear()
 
@@ -235,6 +242,16 @@ class AuditActionsBar(QWidget):
         
         ops_action = self.actions_menu.addAction("OPS per board…")
         ops_action.triggered.connect(self._on_ops_per_board_clicked)
+
+        self.actions_menu.addSeparator()
+        populate_hand_flag_menu(self._flag_menu, view.part_number, getattr(view, "hand_flags", None) or {},
+                                getattr(view, "requirements", None))
+        self.actions_menu.addMenu(self._flag_menu)
+
+    def _on_flag_action_triggered(self, action) -> None:
+        request = flag_request_of(action)
+        if request is not None:
+            self.hand_flag_requested.emit(*request)
 
     def _on_split_clicked(self) -> None:
         if not self._session:

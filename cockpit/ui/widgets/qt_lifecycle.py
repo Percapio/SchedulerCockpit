@@ -78,8 +78,13 @@ def post_order_including_root(root: QWidget) -> list[QWidget]:
 def disconnect_all_signals_quietly(node: QObject) -> None:
     """
     Intent:  Sever every outbound connection on `node`.
+    Pre:     node is not a widget. Use silence_all_signals for widgets.
     Post:    node has no connected signals. The "node had nothing connected"
              case is logged at DEBUG, not as an exception.
+
+    Never call this on a widget. With no arguments disconnect() cuts destroyed()
+    as well, and Qt's accessibility cache relies on that signal to drop a widget it
+    holds an interface for. See silence_all_signals.
 
     The predecessor called logger.exception here, producing a full traceback for
     an expected condition on every leaf widget of every purge -- on a 900-chip
@@ -91,21 +96,43 @@ def disconnect_all_signals_quietly(node: QObject) -> None:
         logger.debug("no connections to sever on %s", type(node).__name__)
 
 
+def silence_all_signals(node: QObject) -> None:
+    """
+    Intent:  From now on, no signal of `node` reaches any receiver. No connection
+             is removed.
+    Post:    node.signalsBlocked() is true. Every connection is still in place,
+             Qt's own included. destroyed() still fires when node is deleted,
+             because ~QObject unblocks signals before emitting it.
+
+    Why this does not disconnect (found 2026-11-20, Phase 59): Qt's
+    accessibility cache maps object addresses to interfaces and forgets a widget
+    only through its destroyed() signal. Qt turns accessibility on as soon as
+    any UI Automation client on the PC queries a window. With destroyed() cut,
+    a widget allocated later at the same address was handed the dead widget's
+    interface, and Qt faulted on it: an access violation in
+    QWidget::accessibleName with a null `this`, inside
+    DocumentUpdateDialog.show(). PyQt's slot proxies also free themselves on
+    destroyed().
+    """
+    node.blockSignals(True)
+
+
 def purge_widget_subtree(root: QWidget) -> None:
     """
-    Intent:  Sever every signal connection in the subtree rooted at root,
-             including root's own, then destroy the widget.
+    Intent:  Silence every signal in the subtree rooted at root, including
+             root's own, then destroy the widget.
     Pre:     root is not already destroyed.
-    Post:    No signal on root or any descendant remains connected. root is
-             hidden, detached from its parent, and queued for destruction.
-    Raises:  Nothing. A node that cannot be disconnected is logged at DEBUG and
-             skipped; traversal continues.
+    Post:    No signal of root or any descendant reaches a receiver from now on,
+             except destroyed() at deletion, which Qt needs for its own cleanup
+             (see silence_all_signals). root is hidden, detached from its
+             parent, and queued for destruction.
+    Raises:  Nothing.
     """
     if is_destroyed(root):
         return
 
     for node in post_order_including_root(root):
-        disconnect_all_signals_quietly(node)
+        silence_all_signals(node)
 
     root.hide()
     root.setParent(None)

@@ -33,13 +33,20 @@ class CompletionService:
         self._source_file_repo = source_file_repo
         self._storage_reaper = storage_reaper
 
+    def _delete_orphan_hand_flags(self) -> None:
+        """Phase 59 §4.3: a part number's hand flags end with its last open audit."""
+        requirements_repo = getattr(self._audit_repo, "requirements_repo", None)
+        if requirements_repo is not None:
+            requirements_repo.delete_orphan_hand_flags()
+
     def complete_and_cleanup(self, audit_id: int) -> CompletionOutcome:
         captured = self._source_file_repo.list_for_audit(audit_id)
-        
+
         cur = self._conn.cursor()
         cur.execute("SAVEPOINT completion")
         try:
             self._audit_repo.hard_delete(audit_id)
+            self._delete_orphan_hand_flags()
             cur.execute("RELEASE SAVEPOINT completion")
         except Exception:
             logger.exception('Exception caught in completion')
@@ -56,9 +63,10 @@ class CompletionService:
 
     def cleanup_already_completed(self, audit_id: int) -> CompletionOutcome:
         captured = self._source_file_repo.list_for_audit(audit_id)
-        
+
         self._audit_repo.hard_delete(audit_id)
-        
+        self._delete_orphan_hand_flags()
+
         report = self._storage_reaper.reap(captured)
         
         if report.failed_paths:

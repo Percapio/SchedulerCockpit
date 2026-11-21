@@ -9,9 +9,15 @@ from typing import Callable
 
 from cockpit.persistence.clock import utcnow
 from cockpit.services.requirements import (
+    FLAGGABLE_KINDS,
     AuditNotFoundForTick,
     Failure,
+    HandFlag,
+    HandFlagChange,
+    HandFlagRefused,
     LocationsNotRead,
+    NoOpenAudit,
+    NotFlaggable,
     MAX_EVIDENCE,
     StoredXray,
     XrayLocationsReading,
@@ -299,6 +305,141 @@ class AuditRequirementsRepository:
     ) -> Result[XrayTick, TickRefused]:
         """Records or clears the X-ray & save images tick (§8)."""
         return set_xray_images_done(self.conn, audit_id, done, clock=clock)
+
+    # ---- Phase 59 §4.3: hand flags, per part number -------------------------
+
+    def set_hand_flag(
+        self,
+        part_number: str,
+        kind: RequirementKind,
+        flagged: bool,
+        clock: Callable[[], datetime] = utcnow,
+    ) -> Result[HandFlagChange, HandFlagRefused]:
+        """Sets or clears one hand flag for every open audit of a part number (Phase 59 §4.3).
+
+        pre:  UI thread; outside any ingest savepoint
+        post: flagged: Success iff some open audit has part_number; the row then exists, keeping its
+              first flagged_at when it was already there and taking clock() otherwise;
+              Failure(NoOpenAudit) when none has it, with nothing written. Not flagged: Success, and
+              no row remains. Failure(NotFlaggable) for a kind outside FLAGGABLE_KINDS. The open-audit
+              check and the insert are one statement, so a completion can't land between them.
+        raises: sqlite3.Error
+        """
+        if kind not in FLAGGABLE_KINDS:
+            return Failure(NotFlaggable(kind))
+        cur = self.conn.cursor()
+        if not flagged:
+            cur.execute(
+                "DELETE FROM part_requirement_flags WHERE part_number = ? AND kind = ?",
+                (part_number, kind.value),
+            )
+            return Success(HandFlagChange(part_number, kind, None))
+
+        now_dt = clock()
+        if now_dt.tzinfo is None:
+            now_dt = now_dt.replace(tzinfo=timezone.utc)
+        cur.execute(
+            """
+            INSERT INTO part_requirement_flags (part_number, kind, flagged_at)
+            SELECT ?, ?, ?
+            WHERE EXISTS (SELECT 1 FROM active_audits WHERE part_number = ?)
+            ON CONFLICT (part_number, kind) DO NOTHING
+            """,
+            (part_number, kind.value, now_dt.isoformat(), part_number),
+        )
+        if cur.rowcount == 1:
+            return Success(HandFlagChange(part_number, kind, HandFlag(kind, part_number, now_dt)))
+        cur.execute(
+            """
+            SELECT flagged_at AS flagged_raw FROM part_requirement_flags
+            WHERE part_number = ? AND kind = ?
+              AND EXISTS (SELECT 1 FROM active_audits WHERE part_number = ?)
+            """,
+            (part_number, kind.value, part_number),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return Failure(NoOpenAudit(part_number))
+        try:
+            flagged_at = _parse_dt(row["flagged_raw"]) or now_dt
+        except ValueError:
+            flagged_at = now_dt
+        return Success(HandFlagChange(part_number, kind, HandFlag(kind, part_number, flagged_at)))
+
+    def hand_flags_by_part_number(self) -> dict[str, dict[RequirementKind, HandFlag]]:
+        """Every hand flag, by part number, for the Audit List's one load (Phase 59 §4.3).
+
+        post: an entry per part number with at least one flag; a row of a kind this build doesn't
+              know is skipped; a database without the table reads as none
+        raises: sqlite3.Error
+        """
+        rows = self._flag_rows("SELECT part_number, kind, flagged_at AS flagged_raw FROM part_requirement_flags", ())
+        flags: dict[str, dict[RequirementKind, HandFlag]] = {}
+        for part_number, flag in rows:
+            flags.setdefault(part_number, {})[flag.kind] = flag
+        return flags
+
+    def hand_flags_for(self, part_number: str) -> dict[RequirementKind, HandFlag]:
+        """One part number's hand flags, for the Audit View and the update preview (Phase 59 §4.3).
+
+        raises: sqlite3.Error
+        """
+        rows = self._flag_rows(
+            "SELECT part_number, kind, flagged_at AS flagged_raw FROM part_requirement_flags WHERE part_number = ?",
+            (part_number,),
+        )
+        return {flag.kind: flag for _part_number, flag in rows}
+
+    def delete_orphan_hand_flags(self) -> int:
+        """Deletes the flags whose part number no open audit has (Phase 59 §4.3).
+
+        pre:  inside the caller's savepoint when called from completion or Reset
+        post: every remaining row's part_number is some active_audits row's; returns how many went
+        raises: sqlite3.Error
+        """
+        cur = self.conn.cursor()
+        try:
+            cur.execute(
+                """
+                DELETE FROM part_requirement_flags
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM active_audits a WHERE a.part_number = part_requirement_flags.part_number
+                )
+                """
+            )
+        except sqlite3.OperationalError as exc:
+            if "no such table: part_requirement_flags" not in str(exc):
+                raise
+            return 0
+        return max(cur.rowcount, 0)
+
+    def _flag_rows(self, sql: str, params: tuple) -> list[tuple[str, HandFlag]]:
+        """Rows as (part number, flag). flagged_at is read under an alias, flagged_raw, so the
+        connection's row factory, which parses every *_at column, can't fail the whole read on one bad
+        row; a row whose time or kind doesn't parse is skipped alone."""
+        cur = self.conn.cursor()
+        try:
+            cur.execute(sql, params)
+        except sqlite3.OperationalError as exc:
+            if "no such table: part_requirement_flags" not in str(exc):
+                raise
+            return []
+        out: list[tuple[str, HandFlag]] = []
+        for row in cur.fetchall():
+            try:
+                kind = RequirementKind(row["kind"])
+            except ValueError:
+                continue
+            if kind not in FLAGGABLE_KINDS:
+                continue
+            try:
+                flagged_at = _parse_dt(row["flagged_raw"])
+            except ValueError:
+                continue
+            if flagged_at is None:
+                continue
+            out.append((row["part_number"], HandFlag(kind, row["part_number"], flagged_at)))
+        return out
 
 
 _SAVE_IMAGES_DETECTED = (

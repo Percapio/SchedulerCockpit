@@ -97,6 +97,10 @@ def reset_application_data(
             return ResetAborted(ResetAbortCause.COUNT_MISMATCH, observed_count=current_count)
 
         cursor.execute("DELETE FROM active_audits")
+        # Phase 59 §4.3: every hand flag goes with the audits, in the same savepoint.
+        requirements_repo = getattr(audit_repo, "requirements_repo", None)
+        if requirements_repo is not None:
+            requirements_repo.delete_orphan_hand_flags()
         cursor.execute("RELEASE SAVEPOINT reset_app_data")
     except sqlite3.Error as exc:
         cursor.execute("ROLLBACK TO SAVEPOINT reset_app_data")

@@ -626,6 +626,7 @@ def migrate(conn: sqlite3.Connection, parser_registry: ParserRegistry) -> bool:
     migrate_to_v20(conn)
     v21_migrated = migrate_to_v21(conn)
     migrate_to_v22(conn)
+    migrate_to_v23(conn)
     return (v7_migrated or v8_migrated or v9_migrated or v11_migrated or v13_migrated
             or v14_migrated or v15_migrated or v16_migrated or v17_migrated or v18_migrated
             or v19_migrated or v21_migrated)
@@ -1492,6 +1493,56 @@ def migrate_to_v22(conn: sqlite3.Connection) -> bool:
     except Exception as e:
         conn.rollback()
         raise SchemaInitializationError(statement="v22 migration failed", cause=e)
+
+
+# ---------- v23: Phase 59, hand flags ----------
+
+SCHEMA_V23_DDL_PART_REQUIREMENT_FLAGS: str = """
+CREATE TABLE part_requirement_flags (
+    part_number  TEXT NOT NULL,
+    kind         TEXT NOT NULL CHECK (kind IN ('aquanox', 'press_fit')),
+    flagged_at   TEXT NOT NULL,
+    PRIMARY KEY (part_number, kind)
+)
+"""
+
+
+def migrate_to_v23(conn: sqlite3.Connection) -> bool:
+    """Phase 59 §4.2: adds the hand-flag table.
+
+    pre:  schema_version >= 22
+    post: part_requirement_flags exists and is empty; schema_version is 23; no other table changes and
+          no document is read. Returns False without writing when already >= 23.
+    raises: SchemaMismatch when version < 22; SchemaInitializationError on DDL failure
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT version FROM schema_version WHERE singleton_guard = 1")
+    except sqlite3.OperationalError:
+        raise SchemaMismatch(found_version=0, expected_version=22)
+
+    row = cur.fetchone()
+    if not row:
+        raise SchemaMismatch(found_version=0, expected_version=22)
+
+    version = row[0] if isinstance(row, tuple) and not hasattr(row, "keys") else row["version"]
+    if version < 22:
+        raise SchemaMismatch(found_version=version, expected_version=22)
+    if version >= 23:
+        return False
+
+    cur.execute("BEGIN IMMEDIATE")
+    try:
+        cur.execute(SCHEMA_V23_DDL_PART_REQUIREMENT_FLAGS)
+        cur.execute(
+            "UPDATE schema_version SET version = 23, applied_at = ? WHERE singleton_guard = 1",
+            (utcnow().isoformat(),),
+        )
+        cur.execute("COMMIT")
+        return True
+    except Exception as e:
+        conn.rollback()
+        raise SchemaInitializationError(statement="v23 migration failed", cause=e)
 
 
 # ---------- v21: Phase 57, placements ----------

@@ -2,6 +2,7 @@
 
 import os
 import pathlib
+import sqlite3
 from typing import Callable
 
 from cockpit.persistence.errors import PersistenceError
@@ -90,6 +91,17 @@ class StartupReconciler:
                 except OSError:
                     logger.exception('Exception caught in startup_reconciler')
                     pass
+
+        # 3. Phase 59 §4.3: hand flags whose part number no open audit has
+        requirements_repo = getattr(self._audit_repo, "requirements_repo", None)
+        if requirements_repo is not None:
+            try:
+                removed = requirements_repo.delete_orphan_hand_flags()
+                if removed:
+                    notes.append(f"Deleted {removed} hand flag(s) of part numbers with no open audit.")
+            except sqlite3.Error as exc:
+                logger.warning("Hand-flag cleanup failed: %s", type(exc).__name__)
+                notes.append(f"Hand-flag cleanup failed: {type(exc).__name__}")
 
         return ReconciliationReport(
             cleaned=cleaned,

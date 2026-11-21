@@ -475,9 +475,19 @@ class SettingsDialog(QDialog):
         current_audit_id: int | None = None,
         initial_vocabulary: RequirementVocabulary | None = None,
         document_updates: DocumentUpdateHooks | None = None,
+        company_name_controller=None,
+        open_customer_names: Callable[[], list[str]] | None = None,
     ) -> None:
         super().__init__(parent)
         self._document_updates = document_updates
+        # Phase 59 §5.3: Company Names; absent in tests that build the dialog alone.
+        self._company_controller = company_name_controller
+        self._open_customer_names_provider = open_customer_names
+        self._open_customer_names: list[str] | None = None
+        self._open_customer_names_failed = False
+        self.company_table: QTableWidget | None = None
+        self.company_status_lbl: QLabel | None = None
+        self.company_remove_unused_btn: QPushButton | None = None
         self._check_updates_btn: QPushButton | None = None
         self._check_updates_reason: QLabel | None = None
         self._last_run_label: QLabel | None = None
@@ -596,6 +606,10 @@ class SettingsDialog(QDialog):
         layout.addWidget(process_req_group)
         layout.addSpacing(12)
 
+        if company_name_controller is not None:
+            layout.addWidget(self._build_company_names_settings())
+            layout.addSpacing(12)
+
         if source_root_controller is not None:
             source_root_group = self._build_source_root_settings(source_root_controller)
             layout.addWidget(source_root_group)
@@ -612,7 +626,10 @@ class SettingsDialog(QDialog):
 
         reset_group = QGroupBox("Application Data")
         reset_layout = QVBoxLayout(reset_group)
-        reset_label = QLabel("Clear all audit data. Holidays, schema version, and logs are retained.")
+        reset_label = QLabel(
+            "Clear all audit data, hand flags included. Holidays, company names, saved views, "
+            "schema version, and logs are retained."
+        )
         reset_label.setWordWrap(True)
         reset_layout.addWidget(reset_label)
         reset_btn = QPushButton("Reset application data...")
@@ -1231,6 +1248,112 @@ class SettingsDialog(QDialog):
 
         validate_btn.clicked.connect(on_validate)
         return group
+
+    # --- Company Names (Phase 59 §5.3) -------------------------------------
+
+    def _build_company_names_settings(self) -> QGroupBox:
+        """Traveler names mapped to short names for the Audit List; each committed cell applies at once."""
+        group = QGroupBox("Company Names")
+        layout = QVBoxLayout(group)
+        info = QLabel(
+            "Short names for the Audit List's Company column. A blank short name shows the traveler's name."
+        )
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        self.company_table = QTableWidget(0, 2)
+        self.company_table.setHorizontalHeaderLabels(["Traveler name", "Short name"])
+        header = self.company_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.company_table.verticalHeader().setVisible(False)
+        self.company_table.setMinimumHeight(140)
+        layout.addWidget(self.company_table)
+
+        self.company_status_lbl = QLabel("")
+        self.company_status_lbl.setTextFormat(Qt.TextFormat.PlainText)
+        self.company_status_lbl.setWordWrap(True)
+        layout.addWidget(self.company_status_lbl)
+
+        self.company_remove_unused_btn = QPushButton("Remove names no open job uses")
+        self.company_remove_unused_btn.clicked.connect(self._on_remove_unused_company_names)
+        layout.addWidget(self.company_remove_unused_btn)
+
+        self._read_open_customer_names()
+        self._populate_company_table()
+        self.company_table.itemChanged.connect(self._on_company_item_changed)
+        return group
+
+    def _read_open_customer_names(self) -> None:
+        """No provider leaves the stored names alone; a raising one also says so (§5.3)."""
+        self._open_customer_names = None
+        self._open_customer_names_failed = False
+        if self._open_customer_names_provider is None:
+            return
+        try:
+            self._open_customer_names = list(self._open_customer_names_provider())
+        except Exception as exc:
+            logger.warning("The open jobs' customer names couldn't be read: %s", type(exc).__name__)
+            self._open_customer_names_failed = True
+
+    def _populate_company_table(self) -> None:
+        from cockpit.services.company_names import MAX_TRAVELER_NAME_CHARS, company_key
+
+        rows: dict[str, tuple[str, str]] = {
+            key: (entry.traveler_name, entry.short_name) for key, entry in self._company_controller.names().items()
+        }
+        for name in self._open_customer_names or []:
+            rows.setdefault(company_key(name), (name, ""))
+        table = self.company_table
+        was_blocked = table.blockSignals(True)
+        try:
+            table.setRowCount(0)
+            for key in sorted(rows):
+                traveler, short = rows[key]
+                row = table.rowCount()
+                table.insertRow(row)
+                traveler_item = QTableWidgetItem(traveler)
+                traveler_item.setFlags(traveler_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                short_item = QTableWidgetItem(short)
+                if len(traveler) > MAX_TRAVELER_NAME_CHARS:
+                    short_item.setFlags(short_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    short_item.setToolTip(
+                        f"Names over {MAX_TRAVELER_NAME_CHARS} characters can't be given a short name"
+                    )
+                table.setItem(row, 0, traveler_item)
+                table.setItem(row, 1, short_item)
+        finally:
+            table.blockSignals(was_blocked)
+        self.company_remove_unused_btn.setEnabled(self._open_customer_names is not None)
+        if self._open_customer_names_failed:
+            self.company_status_lbl.setText("The open jobs' names couldn't be read")
+
+    def _on_company_item_changed(self, item: QTableWidgetItem) -> None:
+        from cockpit.services.company_names import company_key, refusal_text
+
+        if item.column() != 1:
+            return
+        traveler = self.company_table.item(item.row(), 0).text()
+        result = self._company_controller.set_short_name(traveler, item.text())
+        stored = self._company_controller.names().get(company_key(traveler))
+        shown = stored.short_name if stored is not None else ""
+        if result.is_err:
+            self.company_status_lbl.setText(refusal_text(result.error))
+        else:
+            self.company_status_lbl.setText("")
+        if item.text() != shown:
+            was_blocked = self.company_table.blockSignals(True)
+            try:
+                item.setText(shown)
+            finally:
+                self.company_table.blockSignals(was_blocked)
+
+    def _on_remove_unused_company_names(self) -> None:
+        if self._open_customer_names is None:
+            return
+        removed = self._company_controller.remove_unused(self._open_customer_names)
+        self._populate_company_table()
+        self.company_status_lbl.setText(f"Removed {removed} name(s) no open job uses")
 
     def _build_document_updates_settings(self) -> QGroupBox:
         """Phase 55b §8.1: Check for updates…, the last-run line, and why the check is blocked."""

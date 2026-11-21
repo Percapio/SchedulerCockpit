@@ -47,6 +47,7 @@ class AuditView(QWidget):
     document_update_check_requested = pyqtSignal(int)  # audit id (Phase 55b §8.2)
     audit_loaded = pyqtSignal(int)  # Phase 58 §5: MainWindow promotes its scan
     xray_toggle_requested = pyqtSignal(int, bool)
+    hand_flag_requested = pyqtSignal(str, str, bool)  # Phase 59 §4.5: (part number, kind, flagged)
 
     def __init__(
         self,
@@ -119,6 +120,7 @@ class AuditView(QWidget):
         self._actions_bar.placements_report_requested.connect(self.placements_report_requested.emit)
         self._actions_bar.document_update_check_requested.connect(self.document_update_check_requested.emit)
         self._actions_bar.audit_fields_changed.connect(self.refresh_audit_fields)
+        self._actions_bar.hand_flag_requested.connect(self.hand_flag_requested.emit)
         header_layout.addWidget(self._actions_bar)
         
         layout.addLayout(header_layout)
@@ -217,7 +219,9 @@ class AuditView(QWidget):
 
     def _on_rows_replaced(self, view) -> None:
         self.checklist_tht.populate_section(view.tht_rows, f"T/H - MPN Count: {len(view.tht_rows)} | Total Placements: {view.tht_placement_count}")
-        self._identity_bar.set_requirements_context(view.audit_id, view.requirements, view.xray_tick)
+        self._identity_bar.set_requirements_context(
+            view.audit_id, view.requirements, view.xray_tick, getattr(view, "hand_flags", None),
+        )
         
 
 
@@ -269,6 +273,11 @@ class AuditView(QWidget):
 
     def current_audit_id(self) -> int | None:
         return self._session.current_audit_id()
+
+    def current_part_number(self) -> str | None:
+        """Phase 59 §4.5: the shown audit's part number, for refreshing after a hand flag."""
+        view = self._session.current_view()
+        return view.part_number if view is not None else None
 
     def set_render_worker_alive(self, alive: bool) -> None:
         self._layout_canvas.set_render_worker_alive(alive)

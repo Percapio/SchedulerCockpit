@@ -291,5 +291,11 @@ QLabel[class~="itar-badge"]      {{ color: {p.attention};  font-weight: bold; }}
 PageSwitcher QPushButton                     {{ border: 2px solid {p.border}; }}
 PageSwitcher QPushButton[indicator="true"]   {{ border: 2px solid {p.attention}; }}
 PageSwitcher QPushButton:checked             {{ border: 2px solid {SELECTION_BORDER}; }}
+
+/* Phase 59 §3.4: the page strip and the X-ray toggle share the switcher's look. A property
+   selector, not a Python class name: "SourceSelector QPushButton" made the stylesheet walk every
+   button's ancestors by class name, and with it a later dialog's show() crashed in the test suite. */
+QPushButton[class~="view-segment"]           {{ border: 2px solid {p.border}; }}
+QPushButton[class~="view-segment"]:checked   {{ border: 2px solid {SELECTION_BORDER}; }}
 """)
     return "\n".join(lines)

@@ -40,7 +40,9 @@ ROLE_WORDS: dict[SourceRole, str] = {
     SourceRole.PLACEMENTS: "placements",
 }
 DOCUMENT_ROLES = (SourceRole.BOM, SourceRole.NOTES, SourceRole.TRAVELER)
-KEPT_UNCHANGED = "Kept unchanged: status, ship date, notes, Label, Photos, X-ray tick, OPS/board, quantity"
+KEPT_UNCHANGED = (
+    "Kept unchanged: status, ship date, notes, Label, Photos, X-ray tick, AQ/PF hand flags, OPS/board, quantity"
+)
 REQUIREMENT_LABELS = (
     ("aquanox", "AQ"), ("press_fit", "PF"), ("xray", "XR"), ("xray_save_images", "save images"),
 )
@@ -210,6 +212,8 @@ def outcome_text(record: ur.FamilyRecord) -> str:
 def _requirement_lines(diff: Any) -> list[str]:
     before = getattr(diff.before, "states", None)
     after = diff.after.states
+    # Phase 59 §4.6: an update can't clear a hand flag, so the part it keeps says so.
+    flagged = {getattr(kind, "value", kind) for kind in (getattr(diff, "hand_flags", None) or {})}
     parts = []
     for kind, label in REQUIREMENT_LABELS:
         after_word = STATE_WORDS.get(str(getattr(after.get(_kind(kind)), "value", after.get(_kind(kind)))), "?")
@@ -218,7 +222,10 @@ def _requirement_lines(diff: Any) -> list[str]:
         else:
             state = before.get(_kind(kind))
             before_word = STATE_WORDS.get(str(getattr(state, "value", state)), "?")
-        parts.append(f"{label} {before_word} -> {after_word}")
+        part = f"{label} {before_word} -> {after_word}"
+        if kind in flagged:
+            part += ", flagged by hand"
+        parts.append(part)
     lines = ["Requirements  " + "; ".join(parts)]
     if diff.tick_will_need_recheck:
         lines.append("              your X-ray tick will need re-checking")

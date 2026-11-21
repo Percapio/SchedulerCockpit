@@ -48,14 +48,16 @@ class PageSwitcher(QWidget):
 
     def teardown_children(self) -> None:
         """
-        Post: Every child widget is DISCONNECTED and then destroyed; the three
+        Post: Every child widget is SILENCED and then destroyed; the three
               pager references and the segment list are cleared.
 
-        The disconnect is the point (Optimize06 section 5, F4 site 4): the
-        predecessor deleteLater()'d the buttons without severing them, so the
-        per-button connection outlived the C++ object. Routing through
-        purge_widget_subtree rather than an enumerated disconnect list keeps
-        that true for any control added to this widget later.
+        Silencing is the point (Optimize06 section 5, F4 site 4): the
+        predecessor deleteLater()'d the buttons without severing them, so a
+        button could still signal the switcher before its C++ object was
+        gone. Routing through purge_widget_subtree rather than an enumerated
+        disconnect list keeps that true for any control added to this widget
+        later. Since Phase 59 the purge blocks signals rather than
+        disconnecting them; see qt_lifecycle.silence_all_signals.
         """
         # Deferred: cockpit.ui.widgets.__init__ imports AuditView, which imports
         # this module. Same reason LayoutCanvas defers EmptyCanvasPlaceholder.

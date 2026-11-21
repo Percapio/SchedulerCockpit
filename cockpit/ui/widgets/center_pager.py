@@ -3,6 +3,7 @@ from PyQt6.QtCore import pyqtSignal, Qt
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QVBoxLayout, QPushButton, QStackedWidget
 
 from cockpit.ui.canvas.layout_canvas import LayoutCanvas, PdfSource
+from cockpit.ui.canvas.page_switcher import PageSwitcher
 from cockpit.ui.widgets.checklist_view import ChecklistView
 from cockpit.ui.widgets.build_notes_pane import BuildNotesPane
 from cockpit.ui.widgets.audit_session import AuditSession
@@ -45,6 +46,8 @@ class SourceSelector(QWidget):
             btn = QPushButton(label)
             btn.setCheckable(True)
             btn.setProperty("page_id", page.value)
+            # Phase 59 §3.4: styled by property, like the X-ray toggle beside it.
+            btn.setProperty("class", "view-segment")
             btn.clicked.connect(self._on_btn_clicked)
             self.layout.addWidget(btn)
             self._buttons[page] = btn
@@ -70,6 +73,52 @@ class SourceSelector(QWidget):
         for p, btn in self._buttons.items():
             btn.setChecked(p == page)
 
+class SelectorBar(QWidget):
+    """The row of view selectors at the top of the centre pane (Phase 59 §3.1).
+
+    The side switcher is right-aligned in a left slot and the X-ray toggle left-aligned in a right
+    slot; the two slots share the spare width equally, so the page strip stays on the bar's centre
+    (INV-S1) whatever the switcher shows.
+    """
+
+    def __init__(
+        self,
+        switcher: PageSwitcher,
+        strip: "SourceSelector",
+        xray_toggle: QPushButton,
+        gap_px: int,
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.switcher = switcher
+        self.strip = strip
+        self.xray_toggle = xray_toggle
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(0)
+
+        self.left_slot = QWidget()
+        left = QHBoxLayout(self.left_slot)
+        left.setContentsMargins(0, 0, 0, 0)
+        left.setSpacing(0)
+        left.addStretch(1)
+        left.addWidget(switcher)
+        left.addSpacing(gap_px)
+
+        self.right_slot = QWidget()
+        right = QHBoxLayout(self.right_slot)
+        right.setContentsMargins(0, 0, 0, 0)
+        right.setSpacing(0)
+        right.addSpacing(gap_px)
+        right.addWidget(xray_toggle)
+        right.addStretch(1)
+
+        layout.addWidget(self.left_slot, stretch=1)
+        layout.addWidget(strip, stretch=0)
+        layout.addWidget(self.right_slot, stretch=1)
+
+
 class CenterPager(QWidget):
     # Phase 58 §6.2: your click on the X-ray toggle; setting it in code emits nothing.
     xray_mode_clicked = pyqtSignal(bool)
@@ -83,38 +132,39 @@ class CenterPager(QWidget):
         super().__init__(parent)
         self._canvas = canvas
         self._theme = theme
-        
+
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(0)
-        
+
         self._stacked = QStackedWidget()
         self._stacked.addWidget(self._canvas)
-        
+
         self._notes_pane = BuildNotesPane(self._theme)
         self._notes_pane.empty_space_clicked.connect(self._canvas.empty_clicked.emit)
         self._stacked.addWidget(self._notes_pane)
-        self._layout.addWidget(self._stacked, stretch=1)
-        
-        self._footer_row = QWidget()
-        footer_layout = QHBoxLayout(self._footer_row)
-        footer_layout.setContentsMargins(4, 4, 4, 4)
-        
+
         self._selector = SourceSelector()
         self._selector.page_changed.connect(self._on_page_changed)
-        footer_layout.addWidget(self._selector, alignment=Qt.AlignmentFlag.AlignCenter)
 
-        # Phase 58 §6.2: right of the selector, enabled iff the primary page shows and the canvas can draw.
+        # Phase 58 §6.2: enabled iff the primary page shows and the canvas can draw.
         self._xray_btn = QPushButton("X-ray")
+        self._xray_btn.setObjectName("xray_toggle")
+        self._xray_btn.setProperty("class", "view-segment")
         self._xray_btn.setCheckable(True)
         self._xray_btn.setToolTip("Show only the audit's X-ray locations")
         self._xray_btn.setEnabled(False)
         self._xray_btn.clicked.connect(self.xray_mode_clicked.emit)
-        footer_layout.addWidget(self._xray_btn, alignment=Qt.AlignmentFlag.AlignRight)
         self._current_page = CenterPage.PRIMARY_PDF
-        
-        self._layout.addWidget(self._footer_row)
-        
+
+        # Phase 59 §3: the Top/Bottom switcher, the page strip and X-ray in one bar over the pages.
+        self._selector_bar = SelectorBar(
+            self._canvas.release_page_switcher(), self._selector, self._xray_btn,
+            self._theme.selector_group_gap_px(),
+        )
+        self._layout.addWidget(self._selector_bar)
+        self._layout.addWidget(self._stacked, stretch=1)
+
         # We need to listen to secondary availability changes from canvas
         self._canvas.secondary_availability_changed.connect(self._on_secondary_availability)
         self._canvas.xray_available_changed.connect(lambda _available: self._update_xray_enabled())
@@ -160,14 +210,26 @@ class CenterPager(QWidget):
     def xray_button(self) -> QPushButton:
         return self._xray_btn
 
+    @property
+    def selector_bar(self) -> SelectorBar:
+        return self._selector_bar
+
     def set_xray_checked(self, on: bool) -> None:
         """Sets the toggle without emitting xray_mode_clicked (Phase 58 §6.2: only a click stores)."""
         self._xray_btn.setChecked(bool(on))
 
+    def apply_selector_enablement(self, page: CenterPage) -> None:
+        """Sets which selector controls take clicks for the page now showing (Phase 59 §3.2).
+
+        post: the side switcher is enabled iff page is PRIMARY_PDF or SECONDARY_PDF; the X-ray toggle
+              is enabled iff page is PRIMARY_PDF and the canvas can draw; no control's visibility or
+              checked state changes
+        """
+        self._selector_bar.switcher.setEnabled(page in (CenterPage.PRIMARY_PDF, CenterPage.SECONDARY_PDF))
+        self._xray_btn.setEnabled(page == CenterPage.PRIMARY_PDF and self._canvas.xray_available())
+
     def _update_xray_enabled(self) -> None:
-        self._xray_btn.setEnabled(
-            self._current_page == CenterPage.PRIMARY_PDF and self._canvas.xray_available()
-        )
+        self.apply_selector_enablement(self._current_page)
 
     def _on_page_changed(self, page: CenterPage) -> None:
         self._current_page = page
@@ -210,6 +272,7 @@ class CenterPager(QWidget):
         self._notes_pane.unload()
         if self._library_segment:
             self._library_segment.unload()
+        self._update_xray_enabled()
 
     @property
     def notes_pane(self) -> BuildNotesPane:

@@ -10,6 +10,7 @@ from cockpit.persistence.types import AuditStatus
 from cockpit.services.repeat import RepeatMarker, derive_repeat_marker
 from cockpit.services.date_urgency import DateUrgency
 from cockpit.services.requirements import (
+    HandFlags,
     RequirementBadges,
     RequirementSummary,
     XrayTick,
@@ -191,6 +192,8 @@ class ActiveAuditView:
     has_bom: bool = True
     requirements: RequirementSummary | None = None
     xray_tick: XrayTick = field(default_factory=XrayTick)
+    # Phase 59 §4: your hand flags for this audit's part number.
+    hand_flags: HandFlags = field(default_factory=dict)
 
 
 
@@ -245,7 +248,7 @@ def build_identity_banner(view: ActiveAuditView) -> AuditIdentityBanner:
         repeat_marker=repeat_marker,
         status=view.status.value,
         is_itar=is_itar(meta),
-        requirements=build_requirement_badges(view.requirements, view.xray_tick),
+        requirements=build_requirement_badges(view.requirements, view.xray_tick, view.hand_flags),
     )
 
 
@@ -293,6 +296,10 @@ class OpenAuditDigest:
     ship_urgency: DateUrgency = DateUrgency.COMFORTABLE
     requirements: RequirementSummary | None = None
     xray_tick: XrayTick = field(default_factory=XrayTick)
+    # Phase 59 §5.1: the traveler's CUSTOMER cell, trimmed; "" without one.
+    customer: str = ""
+    # Phase 59 §4: your hand flags for this audit's part number.
+    hand_flags: HandFlags = field(default_factory=dict)
 
 
 import pathlib

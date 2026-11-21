@@ -326,6 +326,8 @@ class LayoutCanvas(QWidget):
         self._page_switcher = PageSwitcher(self._theme)
         self._page_switcher.page_changed.connect(self._on_page_changed)
         self._page_switcher.hide()
+        # Phase 59 §3.2: a host (CenterPager's selector bar) may take the switcher into its own layout.
+        self._page_switcher_released = False
         
         self._stacked = QStackedWidget()
         
@@ -1059,6 +1061,23 @@ class LayoutCanvas(QWidget):
         self._load_xray_view()
         if self._xray_available:
             self._apply_selection()
+
+    def release_page_switcher(self) -> PageSwitcher:
+        """Hands the page switcher to a host that lays it out; the canvas keeps driving it (Phase 59 §3.2).
+
+        post: the switcher is out of the canvas's layout and stays the canvas's child until the host's
+              layout takes it, so it is never a parentless widget that show() would open as a window;
+              every later reset, hide, show, set_page_count and set_other_page_indicator reaches the
+              same switcher; a second call returns it and changes nothing
+        """
+        if not self._page_switcher_released:
+            self.layout().removeWidget(self._page_switcher)
+            self._page_switcher_released = True
+        return self._page_switcher
+
+    @property
+    def page_switcher(self) -> PageSwitcher:
+        return self._page_switcher
 
     def xray_available(self) -> bool:
         return self._xray_available

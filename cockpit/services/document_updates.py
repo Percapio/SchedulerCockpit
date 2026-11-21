@@ -247,6 +247,8 @@ class HeldRequirements:
     vocabulary: Any
     # Phase 58 §7.2: the reference member's stored X-ray locations reading; absent with no summary.
     xray: Any = None
+    # Phase 59 §4.6: the family's part number's hand flags, by RequirementKind.
+    hand_flags: Mapping[Any, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -764,6 +766,8 @@ class RequirementDiff:
     after: Any
     tick_will_need_recheck: bool
     xray_locations: XrayLocationsChange | None = None
+    # Phase 59 §4.6: an update can't clear these, so the preview says which AQ/PF a flag keeps.
+    hand_flags: Mapping[Any, Any] = field(default_factory=dict)
 
 
 RequirementPreviewer = Callable[[FamilyProbe, Mapping[SourceRole, pathlib.Path]], Union[RequirementDiff, None]]
@@ -1853,7 +1857,7 @@ def snapshot_family(
     )
     requirements = None
     if vocabulary is not None:
-        requirements = _held_requirements(reference_id, family, repositories, vocabulary)
+        requirements = _held_requirements(reference_id, family, repositories, vocabulary, key.part_number)
     return FamilySnapshot(
         key=key, members=members, reference_member=reference_id,
         article_revision=reference.article_revision or FIRST_ARTICLE,
@@ -1866,8 +1870,10 @@ def _held_requirements(
     family: Sequence[ActiveAudit],
     repositories: FamilyUpdateRepositories,
     vocabulary: Any,
+    part_number: str = "",
 ) -> HeldRequirements:
-    """The reference member's stored scan, and every member's tick (Phase 55b §6)."""
+    """The reference member's stored scan, every member's tick (Phase 55b §6), and the part number's
+    hand flags (Phase 59 §4.6), which degrade to none when they can't be read."""
     from cockpit.persistence.repositories.requirements import AuditRequirementsRepository
     from cockpit.services.requirements import XrayTick
 
@@ -1891,7 +1897,15 @@ def _held_requirements(
         )
         for audit in family
     }
-    return HeldRequirements(summary=summary, ticks=ticks, vocabulary=vocabulary, xray=xray)
+    hand_flags: dict = {}
+    if part_number:
+        try:
+            hand_flags = dict(requirements_repo.hand_flags_for(part_number))
+        except sqlite3.Error as exc:
+            logger.warning("Hand flags couldn't be read for the update preview: %s", type(exc).__name__)
+    return HeldRequirements(
+        summary=summary, ticks=ticks, vocabulary=vocabulary, xray=xray, hand_flags=hand_flags,
+    )
 
 
 def requirement_previewer(share_call: ShareCallGuard | None = None, parsers: Any = None) -> RequirementPreviewer:
@@ -1984,6 +1998,7 @@ def requirement_previewer(share_call: ShareCallGuard | None = None, parsers: Any
         return RequirementDiff(
             before=held.summary, after=after, tick_will_need_recheck=recheck,
             xray_locations=XrayLocationsChange(before=before_side, after=after_side),
+            hand_flags=dict(getattr(held, "hand_flags", {}) or {}),
         )
 
     return preview

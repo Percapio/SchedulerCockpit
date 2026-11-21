@@ -195,6 +195,10 @@ class Theme:
     def page_switcher_segmented_max(self) -> int:
         return int(self._canvas.get('page_switcher_segmented_max', 4))
 
+    def selector_group_gap_px(self) -> int:
+        """Phase 59 §3.4: the gap between the selector bar's three controls."""
+        return int(self._canvas.get('selector_group_gap_px', 12))
+
     def bom_chip_flow_spacing(self) -> int:
         return int(self._bom_panel['chip']['flow_spacing_px'])
 

@@ -136,6 +136,10 @@ def main() -> None:
     from cockpit.settings.mpn_library import MpnLibrarySettingsController
     mpn_library_controller = MpnLibrarySettingsController(settings)
 
+    # Phase 59 §5.2: the Audit List's company short names.
+    from cockpit.ui.company_names import CompanyNameController
+    company_name_controller = CompanyNameController(settings)
+
     window = MainWindow(
         theme=theme,
         app=app,
@@ -145,6 +149,7 @@ def main() -> None:
         second_ops_settings_controller=second_ops_settings_controller,
         source_root_controller=source_root_controller,
         mpn_library_controller=mpn_library_controller,
+        company_name_controller=company_name_controller,
         bootstrapped_app=bootstrapped,
         audit_read_svc=bootstrapped.audit_read_svc,
         checklist_svc=bootstrapped.checklist_svc,

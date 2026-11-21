@@ -1,5 +1,5 @@
 import html
-from typing import Callable, Optional
+from typing import Callable, Mapping, Optional
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QPushButton, QWidget
@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QPushButton, QWidget
 from cockpit.services.requirements import (
     BadgeState,
     EvidenceCache,
+    HandFlag,
     RequirementBadges,
     RequirementEvidence,
     RequirementKind,
@@ -187,28 +188,24 @@ class AuditIdentityBar(QWidget):
             self.rowc_lbl.setText("")
         self.status_lbl.setText(f"\xb7 Status: {data.status}" if data.status else "")
 
+    @staticmethod
+    def _apply_chip(label: QLabel, state: BadgeState, code: str) -> None:
+        """Phase 59 §4.4: FLAGGED shows as code*, carried by your hand flag alone."""
+        texts = {
+            BadgeState.DETECTED: code,
+            BadgeState.FLAGGED: f"{code}*",
+            BadgeState.UNKNOWN: f"{code} ?",
+            BadgeState.NOT_SCANNED: f"{code} ?",
+        }
+        text = texts.get(state, "")
+        label.setText(text)
+        label.setVisible(bool(text))
+
     def _apply_requirement_badges(self, badges: RequirementBadges) -> None:
         from cockpit.ui import facelift
 
-        if badges.aquanox == BadgeState.DETECTED:
-            self.aq_lbl.setText("AQ")
-            self.aq_lbl.show()
-        elif badges.aquanox in (BadgeState.UNKNOWN, BadgeState.NOT_SCANNED):
-            self.aq_lbl.setText("AQ ?")
-            self.aq_lbl.show()
-        else:
-            self.aq_lbl.setText("")
-            self.aq_lbl.hide()
-
-        if badges.press_fit == BadgeState.DETECTED:
-            self.pf_lbl.setText("PF")
-            self.pf_lbl.show()
-        elif badges.press_fit in (BadgeState.UNKNOWN, BadgeState.NOT_SCANNED):
-            self.pf_lbl.setText("PF ?")
-            self.pf_lbl.show()
-        else:
-            self.pf_lbl.setText("")
-            self.pf_lbl.hide()
+        self._apply_chip(self.aq_lbl, badges.aquanox, "AQ")
+        self._apply_chip(self.pf_lbl, badges.press_fit, "PF")
 
         x_cell = badges.xray_cell
         if x_cell in (XrayCellState.PENDING, XrayCellState.DONE, XrayCellState.DONE_STALE):
@@ -248,8 +245,10 @@ class AuditIdentityBar(QWidget):
         audit_id: int | None,
         summary: RequirementSummary | None,
         tick: XrayTick = XrayTick(),
+        hand_flags: Optional[Mapping[RequirementKind, HandFlag]] = None,
     ) -> None:
         self._audit_id = audit_id
+        flags = hand_flags or {}
         if audit_id is None:
             self.aq_lbl.setToolTip("")
             self.pf_lbl.setToolTip("")
@@ -259,8 +258,12 @@ class AuditIdentityBar(QWidget):
 
         if summary is None:
             scanning_tip = format_requirement_tooltip(kinds=(), summary=None) or ""
-            self.aq_lbl.setToolTip(scanning_tip)
-            self.pf_lbl.setToolTip(scanning_tip)
+            self.aq_lbl.setToolTip(format_requirement_tooltip(
+                kinds=(), summary=None, hand_flag=flags.get(RequirementKind.AQUANOX),
+            ) or "")
+            self.pf_lbl.setToolTip(format_requirement_tooltip(
+                kinds=(), summary=None, hand_flag=flags.get(RequirementKind.PRESS_FIT),
+            ) or "")
             self.xray_chk.setToolTip(scanning_tip)
             self.xray_lbl.setToolTip(scanning_tip)
             return
@@ -275,12 +278,14 @@ class AuditIdentityBar(QWidget):
             summary=summary,
             evidence=ev_list,
             is_stale_scan=is_stale,
+            hand_flag=flags.get(RequirementKind.AQUANOX),
         ) or ""
         pf_tip = format_requirement_tooltip(
             kinds=(RequirementKind.PRESS_FIT,),
             summary=summary,
             evidence=ev_list,
             is_stale_scan=is_stale,
+            hand_flag=flags.get(RequirementKind.PRESS_FIT),
         ) or ""
         xray_tip = format_requirement_tooltip(
             kinds=(RequirementKind.XRAY_SAVE_IMAGES, RequirementKind.XRAY),

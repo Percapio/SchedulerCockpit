@@ -147,3 +147,35 @@ class DuplicatePdfCoordError(PersistenceError):
         self.source_file_id = source_file_id
         self.ref_des = ref_des
         self.page_index = page_index
+
+
+# ---------- Patch 14 §8: the write gate ----------
+
+class WriteRefused(PersistenceError, sqlite3.OperationalError):
+    """A write refused before it reached SQLite: another thread holds the connection's worker scope.
+
+    Also an sqlite3.OperationalError, so handlers that catch only sqlite3.Error treat a refusal as the
+    database failure it is.
+    """
+
+    def __init__(self, verb: str, holder: str):
+        super().__init__("Not saved: an ingest is writing to the database. Try again when it finishes.")
+        self.verb = verb
+        self.holder = holder
+
+
+class UnexpectedConnectionThread(PersistenceError):
+    """STRICT mode only: a statement from a thread that neither owns the connection nor holds its scope."""
+
+    def __init__(self, thread_name: str, verb: str):
+        super().__init__(f"{verb} on the shared connection from thread {thread_name!r}, which doesn't own it")
+        self.thread_name = thread_name
+        self.verb = verb
+
+
+class ScopeConflict(PersistenceError):
+    """A second thread tried to open a worker scope while another thread holds one."""
+
+    def __init__(self, holder: str):
+        super().__init__(f"The connection's worker scope is already held by {holder!r}")
+        self.holder = holder

@@ -99,6 +99,9 @@ def summary_lines(report: PlacementsReport) -> list[str]:
 class PlacementsReportDialog(QDialog):
     def __init__(self, audit_id: int, report: PlacementsReport, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        # Patch 14 §7.3: modeless and parented, so without this every closed report (and its data) lived
+        # until the window did. Qt 6.3+ deletes on every way the dialog closes, Escape and reject() included.
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._audit_id = audit_id
         self.setWindowTitle("Placements Report")
         self.setModal(False)

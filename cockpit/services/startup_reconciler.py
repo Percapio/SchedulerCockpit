@@ -10,9 +10,17 @@ from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.services.completion import CompletionService, CleanupFailedError
 from cockpit.services.views import ReconciliationReport
+import errno
 import logging
 logger = logging.getLogger(__name__)
 
+# Windows' ERROR_DIR_NOT_EMPTY.
+_WINERROR_DIR_NOT_EMPTY = 145
+
+
+def is_directory_not_empty(error: OSError) -> bool:
+    """True when rmdir failed only because the folder still holds something."""
+    return getattr(error, "winerror", None) == _WINERROR_DIR_NOT_EMPTY or error.errno == errno.ENOTEMPTY
 
 
 class StartupReconciler:
@@ -82,15 +90,26 @@ class StartupReconciler:
             # Prune empty directories (post order)
             # sort in reverse to do deepest first
             sorted_dirs = sorted(directories_to_check, key=lambda p: len(p.parts), reverse=True)
+            kept = failed = 0
             for d in sorted_dirs:
                 if d == self._file_storage_root:
                     continue # don't delete root
                 try:
                     d.rmdir()
                     pruned.append(d)
-                except OSError:
-                    logger.exception('Exception caught in startup_reconciler')
-                    pass
+                except OSError as exc:
+                    # Patch 14 §10.5: a folder that still holds files is the expected case, not a failure;
+                    # it was 126 ERROR tracebacks a launch in production.
+                    if is_directory_not_empty(exc):
+                        kept += 1
+                        logger.debug("Kept non-empty storage folder %s", d)
+                    else:
+                        failed += 1
+                        logger.exception('Exception caught in startup_reconciler')
+            logger.info(
+                "Storage prune: pruned %d empty directories; kept %d not empty; failed %d",
+                len(pruned), kept, failed,
+            )
 
         # 3. Phase 59 §4.3: hand flags whose part number no open audit has
         requirements_repo = getattr(self._audit_repo, "requirements_repo", None)

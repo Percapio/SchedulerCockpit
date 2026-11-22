@@ -71,6 +71,16 @@ class AppConfig:
     # frozen install the second copy lands inside the installation directory.
     # Defaults off; the primary log at log_path is unaffected either way.
     log_duplicate_to_install_dir: bool = False
+    # Patch 14 §6: the collector runs only on the GUI thread, driven by this tick. The budgets are alert
+    # thresholds (a collection can't be interrupted): they decide what is logged and counted.
+    gc_tick_ms: int = 100
+    gc_young_threshold: int = 2_000
+    gc_middle_threshold: int = 10
+    gc_full_interval_ms: int = 1_800_000
+    gc_young_budget_ms: int = 50
+    gc_full_budget_ms: int = 150
+    # Patch 14 §10.2: one health line this often; COCKPIT_HEALTH_INTERVAL_MS overrides it.
+    health_interval_ms: int = 900_000
 
 
 @dataclass(frozen=True)
@@ -251,5 +261,22 @@ def resolve_config(root: pathlib.Path | None = None, probe_history: tuple[ProbeA
         coord_map_path=coord_map_path,
         log_path=log_dir / "cockpit.log",
         log_level=log_level,
-        probe_history=probe_history
+        probe_history=probe_history,
+        health_interval_ms=health_interval_from_environment(AppConfig.health_interval_ms),
     )
+
+
+def health_interval_from_environment(default_ms: int) -> int:
+    """COCKPIT_HEALTH_INTERVAL_MS, when it names a positive whole number of milliseconds (Patch 14 §10.2)."""
+    raw = os.environ.get("COCKPIT_HEALTH_INTERVAL_MS", "").strip()
+    if not raw:
+        return default_ms
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("COCKPIT_HEALTH_INTERVAL_MS=%r isn't a whole number; using %d ms", raw, default_ms)
+        return default_ms
+    if value <= 0:
+        logger.warning("COCKPIT_HEALTH_INTERVAL_MS=%d isn't positive; using %d ms", value, default_ms)
+        return default_ms
+    return value

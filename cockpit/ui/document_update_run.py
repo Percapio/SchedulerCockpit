@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import QMessageBox, QProgressDialog, QWidget
 
 from cockpit.services import document_updates as du
 from cockpit.services import update_run as ur
+from cockpit.thread_retention import ThreadLabel, thread_retention
 from cockpit.ui.widgets.qt_lifecycle import FETCH_WATCHDOG_TIMEOUT_MS
 from cockpit.ui.workers.update_worker import UpdateWorker
 
@@ -140,6 +141,11 @@ class DocumentUpdateRun(QObject):
     # --- starting ---
 
     def start(self) -> None:
+        # Patch 14 §10.7: M1 counts update runs from these lines.
+        logger.info(
+            "Update run started: %s, %d families, run %s",
+            self.request.confirm.name, len(self.keys), getattr(self.request, "run_id", "?"),
+        )
         self.thread = QThread()
         self.worker = UpdateWorker(self.request, self.services.source_root, self.services.storage_root,
                                    self.services.parsers)
@@ -380,9 +386,21 @@ class DocumentUpdateRun(QObject):
         self._watchdog.stop()
         if not abandoned and self.thread is not None:
             self.thread.quit()
-            self.thread.wait(5000)
-            self.worker.deleteLater()
-            self.thread.deleteLater()
+            if self.thread.wait(5000):
+                self.worker.deleteLater()
+                self.thread.deleteLater()
+            else:
+                # Patch 14 §5.2: deleting a QThread that still runs aborts the process, so a thread that
+                # won't finish is parked like an abandoned one, and the run reports itself abandoned.
+                logger.warning("The update worker didn't finish within 5 s of the run's end; it is parked")
+                thread, worker = self.thread, self.worker
+                if self.services.orphan is not None:
+                    self.services.orphan(thread, worker)
+                else:
+                    thread.finished.connect(worker.deleteLater)
+                    thread.finished.connect(thread.deleteLater)
+                    thread_retention().retain(thread, worker, ThreadLabel.UPDATE_CHECK)
+                abandoned = True
             self.thread = None
             self.worker = None
         try:
@@ -406,6 +424,10 @@ class DocumentUpdateRun(QObject):
             self.dialog.run_finished(text)
         elif message and self.preview_mode:
             QMessageBox.warning(self._dialog_host(), "Check for document updates", message)
+        logger.info(
+            "Update run ended: %s, abandoned=%s, %d audits applied",
+            type(reason).__name__ if reason is not None else "done", abandoned, len(self.applied_audits),
+        )
         self.finished.emit(RunResult(
             request=self.request, summary=summary, stop=reason, records=self.records,
             applied_audits=frozenset(self.applied_audits), abandoned=abandoned,

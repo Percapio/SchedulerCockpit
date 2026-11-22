@@ -60,8 +60,12 @@ class BusyState:
         return replace(self, parked_check=parked)
 
 
-def reconciler_can_write(busy: BusyState) -> bool:
-    """Phase 54's write gate: false iff an ingest's savepoint may be open on its worker thread."""
+def ui_may_write(busy: BusyState) -> bool:
+    """Whether UI-thread work may write to the shared connection now (Patch 14 §8.4; Phase 54's gate).
+
+    post: false iff busy.operation is INGEST. The connection's own gate (persistence.connection) refuses any
+          write that slips past; this lets timer-driven work skip quietly instead.
+    """
     return busy.operation != Operation.INGEST
 
 

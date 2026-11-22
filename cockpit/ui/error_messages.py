@@ -507,3 +507,30 @@ def render(exc: Exception) -> FailurePayload:
         detail=[("error", str(exc))],
         reason_code=None
     )
+
+
+def startup_cleanup_payload(report) -> FailurePayload:
+    """The dialog payload for a startup cleanup that reported problems (Patch 14 §3).
+
+    pre:  report.errors or report.orphan_delete_failed is non-empty
+    post: exception_class is the class name of the first reported error, as text; detail holds one row
+          per audit error and one per file that couldn't be deleted, in report order; title, summary and
+          reason_code are the ones app.main has always shown
+    """
+    detail: list[tuple[str, str]] = []
+    first_error: Exception | None = None
+    for audit_id, exc in report.errors:
+        detail.append((f"Audit {audit_id}", str(exc)))
+        if first_error is None:
+            first_error = exc
+    for path, exc in report.orphan_delete_failed:
+        detail.append((str(path), str(exc)))
+        if first_error is None:
+            first_error = exc
+    return FailurePayload(
+        exception_class=type(first_error).__name__ if first_error is not None else "Exception",
+        title="Startup Cleanup Issues",
+        summary="Some background cleanup tasks encountered errors. They will be retried on the next launch.",
+        detail=detail,
+        reason_code="RECONCILIATION_PARTIAL_FAILURE",
+    )

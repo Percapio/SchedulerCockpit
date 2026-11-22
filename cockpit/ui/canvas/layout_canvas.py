@@ -334,7 +334,8 @@ class LayoutCanvas(QWidget):
         self._canvas_container = QWidget()
         canvas_layout = QVBoxLayout(self._canvas_container)
         canvas_layout.setContentsMargins(0, 0, 0, 0)
-        self._scene = QGraphicsScene()
+        # Patch 14 §7.3 (INV-O1): the canvas owns its scene.
+        self._scene = QGraphicsScene(self)
         self._graphics_view = _InnerGraphicsView(self, self._scene)
         self._graphics_view.setFrameShape(QGraphicsView.Shape.NoFrame)
         # Avoid scrollbars if possible when fitting to view

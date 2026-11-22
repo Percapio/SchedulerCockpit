@@ -6,6 +6,8 @@ from typing import Callable
 from PyQt6.QtWidgets import QWidget, QLayout
 from PyQt6.QtCore import QObject, Qt, QThread, QTimer, pyqtSignal
 from PyQt6 import sip
+
+from cockpit.thread_retention import ThreadLabel, thread_retention
 import logging
 logger = logging.getLogger(__name__)
 
@@ -20,9 +22,9 @@ FETCH_WATCHDOG_TIMEOUT_MS = 20_000
 
 # Probes outlive the widget that started them. A widget closed mid-probe severs
 # its handler and returns without waiting, so the thread reference has to live
-# somewhere that is not a widget: Python collecting a running QThread aborts the
-# process. Entries are discarded on finished.
-_IN_FLIGHT_PROBES: set = set()
+# somewhere that is not a widget. The process's ThreadRetention holds it until
+# finished (Patch 14 §5), which is also when it is deleted: deleting a running
+# QThread aborts the process.
 
 # Admissions, so a second launch for one owner can supersede the first. Separate
 # from the thread registry because superseding severs a handler and must never
@@ -73,27 +75,6 @@ def post_order_including_root(root: QWidget) -> list[QWidget]:
             ordered.extend(post_order_including_root(child))
     ordered.append(root)
     return ordered
-
-
-def disconnect_all_signals_quietly(node: QObject) -> None:
-    """
-    Intent:  Sever every outbound connection on `node`.
-    Pre:     node is not a widget. Use silence_all_signals for widgets.
-    Post:    node has no connected signals. The "node had nothing connected"
-             case is logged at DEBUG, not as an exception.
-
-    Never call this on a widget. With no arguments disconnect() cuts destroyed()
-    as well, and Qt's accessibility cache relies on that signal to drop a widget it
-    holds an interface for. See silence_all_signals.
-
-    The predecessor called logger.exception here, producing a full traceback for
-    an expected condition on every leaf widget of every purge -- on a 900-chip
-    audit, 900 tracebacks per teardown.
-    """
-    try:
-        node.disconnect()
-    except (TypeError, RuntimeError):
-        logger.debug("no connections to sever on %s", type(node).__name__)
 
 
 def silence_all_signals(node: QObject) -> None:
@@ -300,9 +281,9 @@ def start_bounded_probe(
     post: exactly one of on_outcome, on_timeout or on_error runs, on the UI
           thread, unless the admission was abandoned or superseded first, in
           which case none runs. Launching supersedes any unsettled admission
-          previously issued to the same owner. The thread is retained by a
-          module-level registry from launch until it emits finished, never by
-          an attribute on owner, so a second launch cannot drop the first.
+          previously issued to the same owner. The thread is retained by the
+          process's ThreadRetention from launch until it emits finished, never
+          by an attribute on owner, so a second launch cannot drop the first.
     raises: nothing
     """
     _supersede_previous(owner)
@@ -312,8 +293,7 @@ def start_bounded_probe(
     worker.moveToThread(thread)
     thread.started.connect(worker.run)
 
-    entry = (thread, worker)
-    _IN_FLIGHT_PROBES.add(entry)
+    thread_retention().retain(thread, worker, ThreadLabel.PROBE)
 
     watchdog = QTimer(owner)
     watchdog.setSingleShot(True)
@@ -327,7 +307,6 @@ def start_bounded_probe(
     worker.raised.connect(thread.quit)
     worker.succeeded.connect(worker.deleteLater)
     worker.raised.connect(worker.deleteLater)
-    thread.finished.connect(lambda: _IN_FLIGHT_PROBES.discard(entry))
     thread.finished.connect(lambda: _ADMISSIONS.discard(admission))
     thread.finished.connect(thread.deleteLater)
 

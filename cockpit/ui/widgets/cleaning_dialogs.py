@@ -41,7 +41,7 @@ from cockpit.ingestion.parsers.audit_bom import (
 )
 from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.services.second_ops import ReadFailureCause, resolve_bom_workbook
-from cockpit.ui.widgets.qt_lifecycle import disconnect_all_signals_quietly
+from cockpit.thread_retention import ThreadLabel, thread_retention
 
 
 def _row_list(rows: Sequence[int]) -> str:
@@ -236,8 +236,6 @@ class CleaningReportWorker(QObject):
         self.report_ready.emit(report)
 
 
-# Anchors in-flight report threads past the dialog's own lifetime.
-_REPORT_READS_IN_FLIGHT: set[tuple[QThread, CleaningReportWorker]] = set()
 
 
 class CleaningReportDialog(QDialog):
@@ -252,6 +250,9 @@ class CleaningReportDialog(QDialog):
         auto_start: bool = True,
     ) -> None:
         super().__init__(parent)
+        # Patch 14 §7.3: modeless and parented, so without this every closed report lived until the window
+        # did. Qt 6.3+ deletes on every way the dialog closes, Escape and reject() included.
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._audit_id = audit_id
         self._source_file_repo = source_file_repo
         self._thread: QThread | None = None
@@ -325,9 +326,8 @@ class CleaningReportDialog(QDialog):
 
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        pair = (thread, worker)
-        _REPORT_READS_IN_FLIGHT.add(pair)
-        thread.finished.connect(lambda p=pair: _REPORT_READS_IN_FLIGHT.discard(p))
+        # Anchors the read past the dialog's own lifetime (Patch 14 §5.2).
+        thread_retention().retain(thread, worker, ThreadLabel.CLEANING_REPORT_READ)
 
         self._thread = thread
         self._worker = worker
@@ -339,7 +339,16 @@ class CleaningReportDialog(QDialog):
         self._thread = None
 
         if worker is not None:
-            disconnect_all_signals_quietly(worker)
+            # Patch 14 §7.3 (D5): only this dialog's own slots. A wildcard disconnect() also cut the
+            # worker's destroyed(), which PyQt's slot proxies need to free themselves.
+            for signal, slot in (
+                (worker.report_ready, self._on_report_ready),
+                (worker.read_failed, self._on_read_failed),
+            ):
+                try:
+                    signal.disconnect(slot)
+                except (TypeError, RuntimeError):
+                    pass
         if thread is not None:
             try:
                 thread.quit()

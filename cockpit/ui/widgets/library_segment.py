@@ -7,6 +7,7 @@ from .library_grid import LibraryGridWidget
 import logging
 
 from cockpit.services.mpn_library.enrichment_plan import plan_enrichment
+from cockpit.thread_retention import ThreadLabel, thread_retention
 from cockpit.services.mpn_library.enrichment_worker import EnrichmentWorker
 from cockpit.services.mpn_library.digikey_types import RequestBudget
 from cockpit.services.library_errors import CredentialsNotConfigured
@@ -201,12 +202,16 @@ class LibrarySegment(QWidget):
         self._worker.part_enriched.connect(self.grid.update_part)
         self._worker.finished_report.connect(self._on_enrich_finished)
         self._worker.failed.connect(self._on_enrich_failed)
+        # Patch 14 §5.4: finished_report and failed are emitted inside run(), before the thread ends. The
+        # slots used to deleteLater() the thread there, and deleting a running QThread aborts the process.
+        # The thread is deleted on QThread.finished instead, and the registry holds it until then.
+        self._worker.finished.connect(self._worker.deleteLater)
+        thread_retention().retain(self._worker, None, ThreadLabel.ENRICHMENT)
         self._worker.start()
 
     def _on_enrich_finished(self, report):
         self.set_operation_in_flight(False)
         self.summary_label.setText(f"Enrichment finished. {len(report.resolved)} resolved, {len(report.ambiguous)} ambiguous, {len(report.not_found)} not found.")
-        self._worker.deleteLater()
         self._worker = None
         self._observe_and_render() # refresh
 
@@ -214,5 +219,4 @@ class LibrarySegment(QWidget):
         self.set_operation_in_flight(False)
         self.summary_label.setText("Enrichment failed.")
         QMessageBox.critical(self, "Enrichment Failed", str(exception))
-        self._worker.deleteLater()
         self._worker = None

@@ -6,6 +6,7 @@ from typing import Iterable
 import fitz  # PyMuPDF
 
 from cockpit.ingestion.errors import MalformedPdfError
+from cockpit.layout.pdf_access import PdfStep, pdf_section
 from .results import PdfComponentCoordinate, PdfLayoutResult
 from .splitter import looks_merged, split_merged_label, target_lengths
 
@@ -30,10 +31,19 @@ class PdfLayoutParser:
         split |= keep
         lengths = target_lengths(split)
 
-        try:
-            doc = fitz.open(str(path))
-        except Exception as e:
-            raise MalformedPdfError(path, "UNREADABLE_PDF", {"error": str(e)})
+        # Patch 14 §9 (INV-P1): every fitz touch is inside a pdf_section, and every fitz reference is
+        # released inside the section that made it; the Python work on what a step returned runs outside.
+        with pdf_section(PdfStep.OPEN):
+            try:
+                doc = fitz.open(str(path))
+            except Exception as e:
+                raise MalformedPdfError(path, "UNREADABLE_PDF", {"error": str(e)})
+            try:
+                page_count = len(doc)
+            except BaseException:
+                doc.close()
+                doc = None
+                raise
 
         coordinates: list[PdfComponentCoordinate] = []
         found_ref_des: set[str] = set()
@@ -41,9 +51,13 @@ class PdfLayoutParser:
         flagged_pages: list[int] = []
 
         try:
-            for page_index in range(len(doc)):
-                page = doc[page_index]
-                text_dict = page.get_text("dict")
+            for page_index in range(page_count):
+                with pdf_section(PdfStep.PAGE_TEXT):
+                    page = doc[page_index]
+                    try:
+                        text_dict = page.get_text("dict")
+                    finally:
+                        page = None
                 page_flagged = False
 
                 blocks = text_dict.get("blocks", [])
@@ -83,25 +97,35 @@ class PdfLayoutParser:
                 if page_flagged:
                     flagged_pages.append(page_index)
 
-            if total_spans == 0 and len(doc) > 0:
+            if total_spans == 0 and page_count > 0:
                 # No text spans found across the entire document
                 raise MalformedPdfError(path, "RASTER_PDF", {})
 
             for page_index in flagged_pages:
-                self._split_merged_spans(doc[page_index], page_index, keep, split, lengths,
+                with pdf_section(PdfStep.PAGE_RAWTEXT):
+                    page = doc[page_index]
+                    try:
+                        raw = page.get_text("rawdict")
+                    finally:
+                        page = None
+                self._split_merged_spans(raw, page_index, keep, split, lengths,
                                          coordinates, found_ref_des)
 
             return PdfLayoutResult(
                 coordinates=coordinates,
                 found_ref_des=found_ref_des,
-                page_count=len(doc)
+                page_count=page_count
             )
         finally:
-            doc.close()
+            with pdf_section(PdfStep.CLOSE):
+                try:
+                    doc.close()
+                finally:
+                    doc = None
 
     @staticmethod
     def _split_merged_spans(
-        page,
+        raw: dict,
         page_index: int,
         keep: set[str],
         split: set[str],
@@ -109,7 +133,7 @@ class PdfLayoutParser:
         coordinates: list[PdfComponentCoordinate],
         found_ref_des: set[str],
     ) -> None:
-        raw = page.get_text("rawdict")
+        """Splits merged spans in one page's rawdict, outside the PyMuPDF lock (Patch 14 §9.2)."""
         for block in raw.get("blocks", []):
             if block.get("type") != 0:
                 continue

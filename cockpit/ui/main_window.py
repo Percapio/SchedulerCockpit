@@ -28,8 +28,9 @@ from cockpit.layout.renderer import PdfRenderer
 from cockpit.ui.theme import Theme
 from cockpit.ui.font_scale_controller import FontScaleController
 from cockpit.ui.widgets.qt_lifecycle import FETCH_WATCHDOG_TIMEOUT_MS
+from cockpit.thread_retention import ThreadLabel, thread_retention
 from cockpit.ui.busy_state import (
-    OPERATION_WORDING, PARKED_WORDING, BusyState, Entry, Operation, reconciler_can_write, unavailable_reason,
+    OPERATION_WORDING, PARKED_WORDING, BusyState, Entry, Operation, ui_may_write, unavailable_reason,
 )
 import logging
 logger = logging.getLogger(__name__)
@@ -88,6 +89,7 @@ class MainWindow(QMainWindow):
         source_root_controller=None,
         mpn_library_controller=None,
         company_name_controller=None,
+        collector=None,
     ) -> None:
         super().__init__()
         self._theme = theme
@@ -96,6 +98,8 @@ class MainWindow(QMainWindow):
         self._settings = settings
         # Phase 59 §5.2: the company short names; None in tests, which then show traveler names.
         self._company_name_controller = company_name_controller
+        # Patch 14 §6: the GUI-thread collector; None in tests, which leave collection to their conftest.
+        self._collector = collector
         self._style_controller = style_controller
         self._runtime_settings_controller = runtime_settings_controller
         self._second_ops_settings_controller = second_ops_settings_controller
@@ -121,7 +125,10 @@ class MainWindow(QMainWindow):
         self._close_requested = False
         self._worker = None
         self._thread = None
-        self._orphaned_workers = []
+        # Patch 14 §5: threads that outlive their owner are held by the process's ThreadRetention, and
+        # "a check is parked" is derived from it (§5.3, D7).
+        self._retention = thread_retention()
+        self._retention.released.connect(self._on_thread_released)
         self._second_ops_review_dialogs = {}
         self._cleaning_report_dialogs = {}
         self._placements_report_dialogs = {}
@@ -133,6 +140,10 @@ class MainWindow(QMainWindow):
         self._drawing_watchdog.setSingleShot(True)
         self._drawing_watchdog.setInterval(FETCH_WATCHDOG_TIMEOUT_MS)
         self._drawing_watchdog.timeout.connect(self._on_drawing_watchdog_timeout)
+        # Patch 14 §7.3: one fetch watchdog for the window's life; a new QTimer(self) per fetch was never freed.
+        self._fetch_watchdog = QTimer(self)
+        self._fetch_watchdog.setSingleShot(True)
+        self._fetch_watchdog.timeout.connect(self._on_fetch_watchdog_timeout)
         self._next_registration_serial = 0
         
         self.stacked = QStackedWidget()
@@ -208,7 +219,7 @@ class MainWindow(QMainWindow):
         # connection; a UI-thread write meanwhile would join it.
         self._requirements_reconciler = RequirementsReconciler(
             self._bootstrapped.conn, self.current_requirements_vocabulary, self,
-            can_write=lambda: reconciler_can_write(self._busy),
+            can_write=lambda: ui_may_write(self._busy),
         )
         self._requirements_reconciler.audit_updated.connect(self._on_reconciler_audit_updated)
         self._requirements_reconciler.pass_completed.connect(self._on_reconciler_pass_completed)
@@ -283,6 +294,8 @@ class MainWindow(QMainWindow):
         self._midnight_timer.setSingleShot(True)
         self._midnight_timer.timeout.connect(self._on_midnight_timer)
         self._schedule_midnight_timer()
+        if collector is not None:
+            collector.set_busy_provider(self.health_busy)
         
     def current_requirements_vocabulary(self):
         from cockpit.services.requirements import DEFAULT_VOCABULARY
@@ -382,7 +395,7 @@ class MainWindow(QMainWindow):
         """
         from cockpit.services.requirements import NoOpenAudit, RequirementKind
 
-        if not reconciler_can_write(self._busy):
+        if not ui_may_write(self._busy):
             # A UI-thread write now would join the ingest's savepoint and vanish if it rolled back.
             self.toast.show_toast("Flag not changed", OPERATION_WORDING[Operation.INGEST])
             return
@@ -561,8 +574,15 @@ class MainWindow(QMainWindow):
 
     def _run_idle_maintenance(self) -> None:
         from cockpit.persistence.connection import run_idle_maintenance
+        # Patch 14 §6.4: idle is idle, during an ingest too.
+        if self._collector is not None:
+            self._collector.request_full()
+        # Patch 14 §8.4: the checkpoint and optimize would run inside the ingest's savepoint, against
+        # run_idle_maintenance's own precondition; the next idle period runs them.
+        if not ui_may_write(self._busy):
+            return
         run_idle_maintenance(self._bootstrapped.conn)
-        if reconciler_can_write(self._busy) and hasattr(self, "_requirements_reconciler"):
+        if hasattr(self, "_requirements_reconciler"):
             self._requirements_reconciler.trigger()
 
     def _schedule_midnight_timer(self) -> None:
@@ -572,7 +592,10 @@ class MainWindow(QMainWindow):
         self._midnight_timer.start(ms)
 
     def _on_midnight_timer(self) -> None:
-        self._reload_list()
+        # Patch 14 §8.4: during an ingest the reload would switch away from its progress view and list rows it
+        # hasn't committed; every later return to the Audit List repopulates it anyway.
+        if ui_may_write(self._busy):
+            self._reload_list()
         self._schedule_midnight_timer()
 
     def eventFilter(self, obj, event) -> bool:
@@ -793,10 +816,7 @@ class MainWindow(QMainWindow):
         
         self._fetch_worker.succeeded_signal.connect(self._on_fetch_succeeded)
         self._fetch_worker.failed_signal.connect(self._on_fetch_failed)
-        
-        self._fetch_watchdog = QTimer(self)
-        self._fetch_watchdog.setSingleShot(True)
-        self._fetch_watchdog.timeout.connect(self._on_fetch_watchdog_timeout)
+
         self._fetch_watchdog.start(FETCH_WATCHDOG_TIMEOUT_MS)
         
         self._fetch_thread.start()
@@ -807,21 +827,18 @@ class MainWindow(QMainWindow):
 
     def _abandon_fetch_worker(self) -> None:
         # Phase 46 abandonment, corrected by Patch 11 section 6.
+        label = (ThreadLabel.DRAWING_FETCH if self._busy.operation == Operation.DRAWING_FETCH
+                 else ThreadLabel.JOB_FETCH)
         self._end_operation()
-        if hasattr(self, "_fetch_watchdog"):
-            self._fetch_watchdog.stop()
-            
+        self._fetch_watchdog.stop()
+
         if hasattr(self, "_fetch_thread") and self._fetch_thread is not None:
             thread, worker = self._fetch_thread, self._fetch_worker
-            entry = (thread, worker)
 
             thread.finished.connect(worker.deleteLater)
             thread.finished.connect(thread.deleteLater)
-            # Retention without a discard is a leak. _IN_FLIGHT_PROBES gets this
-            # right and this list did not: entries were appended and never
-            # removed.
-            thread.finished.connect(lambda e=entry: self._discard_orphan(e))
-            self._orphaned_workers.append(entry)
+            # Held until finished, then released (Patch 14 §5.2).
+            self._retention.retain(thread, worker, label)
 
             # Disconnect signals so they don't do anything if they ever wake up
             try:
@@ -845,12 +862,6 @@ class MainWindow(QMainWindow):
 
             self._fetch_thread = None
             self._fetch_worker = None
-
-    def _discard_orphan(self, entry) -> None:
-        try:
-            self._orphaned_workers.remove(entry)
-        except ValueError:
-            pass
 
     # --- Phase 50 section 4.4: drawing fetch -----------------------------
 
@@ -891,9 +902,6 @@ class MainWindow(QMainWindow):
         self._fetch_worker.succeeded_signal.connect(self._on_drawing_fetch_succeeded)
         self._fetch_worker.failed_signal.connect(self._on_fetch_failed)
 
-        self._fetch_watchdog = QTimer(self)
-        self._fetch_watchdog.setSingleShot(True)
-        self._fetch_watchdog.timeout.connect(self._on_fetch_watchdog_timeout)
         self._fetch_watchdog.start(FETCH_WATCHDOG_TIMEOUT_MS)
 
         self._fetch_thread.start()
@@ -1033,11 +1041,9 @@ class MainWindow(QMainWindow):
                 signal.disconnect(slot)
             except (TypeError, RuntimeError):
                 pass
-        entry = (thread, worker)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(lambda e=entry: self._discard_orphan(e))
-        self._orphaned_workers.append(entry)
+        self._retention.retain(thread, worker, ThreadLabel.DRAWING_UPDATE)
         try:
             thread.quit()
         except RuntimeError:
@@ -1050,16 +1056,6 @@ class MainWindow(QMainWindow):
             dialog,
             f"No answer from the share within {FETCH_WATCHDOG_TIMEOUT_MS // 1000} s; the drawing wasn't added.",
         )
-
-    def _hand_orphans_to_cpp(self) -> None:
-        """Phase 55 section 7: Python's teardown must not destroy a thread still blocked on the share."""
-        from PyQt6 import sip
-        for thread, worker in list(self._orphaned_workers):
-            for obj in (worker, thread):
-                try:
-                    sip.transferto(obj, None)
-                except Exception:
-                    logger.exception("An orphaned worker couldn't be handed to C++ ownership")
 
     # --- Phase 57 section 10.5: Placements report --------------------------
 
@@ -1101,6 +1097,23 @@ class MainWindow(QMainWindow):
         except (AttributeError, RuntimeError):
             pass
         self.busy_changed.emit(busy)
+
+    def health_page(self) -> str:
+        """Patch 14 §10.1: the page showing, for the health line."""
+        current = self.stacked.currentWidget()
+        if current is self.picker:
+            return "list"
+        if current is self._audit_view:
+            return "audit"
+        if current is self.progress_view:
+            return "progress"
+        if current is self.drop_area:
+            return "drop"
+        return "other"
+
+    def health_busy(self) -> str:
+        """Patch 14 §10.1: the running operation, or "none", for the health line and the collector."""
+        return self._busy.operation.value if self._busy.operation is not None else "none"
 
     def _begin(self, operation: Operation) -> None:
         self._set_busy(self._busy.begin(operation))
@@ -1194,10 +1207,9 @@ class MainWindow(QMainWindow):
         from cockpit.services.update_run import ConfirmMode, placements_check_message
         run = self._update_run
         self._update_run = None
-        busy = self._busy.end()
-        if result.abandoned:
-            busy = busy.parked(True)
-        self._set_busy(busy)
+        # Patch 14 §5.3 (D7): parked iff the registry still holds an abandoned check's thread, whatever
+        # order the run's end and the thread's finish arrive in.
+        self._set_busy(self._busy.end().parked(self._check_parked()))
         if self._closing:
             return
         if result.request.confirm == ConfirmMode.PREVIEW and getattr(self, "_last_run_from_entry", False):
@@ -1231,16 +1243,17 @@ class MainWindow(QMainWindow):
 
     def _orphan_check_worker(self, thread, worker) -> None:
         """Phase 55 §7's parking: kept until it finishes; the checks wait, New audit doesn't (§5.6)."""
-        entry = (thread, worker)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        thread.finished.connect(lambda e=entry: self._on_check_worker_unparked(e))
-        self._orphaned_workers.append(entry)
+        self._retention.retain(thread, worker, ThreadLabel.UPDATE_CHECK)
 
-    def _on_check_worker_unparked(self, entry) -> None:
-        self._discard_orphan(entry)
-        if not self._closing:
-            self._set_busy(self._busy.parked(False))
+    def _check_parked(self) -> bool:
+        """Patch 14 §5.3: an abandoned update check's thread is still running (Phase 55b §5.6's "parked")."""
+        return bool(self._retention.outstanding(ThreadLabel.UPDATE_CHECK))
+
+    def _on_thread_released(self, label: str) -> None:
+        if label == ThreadLabel.UPDATE_CHECK.value and not self._closing:
+            self._set_busy(self._busy.parked(self._check_parked()))
 
     # --- Phase 55b section 9: the check after ingest -------------------------
 
@@ -1762,10 +1775,36 @@ class MainWindow(QMainWindow):
             event.accept()
             return
         # Phase 55b §3.3: only an ingest asks. A fetch, a drawing update or a check is ended without
-        # asking, since none of them writes before its apply on the UI thread. _closing is set first,
-        # so the handlers those endings run skip their refreshes and the last-run line.
-        if self._busy.operation != Operation.INGEST:
-            self._closing = True
+        # asking (by _teardown), since none of them writes before its apply on the UI thread.
+        if self._busy.operation == Operation.INGEST:
+            event.ignore()
+            confirmed = QMessageBox.question(
+                self,
+                "Cancel ingest?",
+                "An ingest is currently in flight. Are you sure you want to cancel and exit?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if confirmed == QMessageBox.StandardButton.Yes:
+                self._close_requested = True
+                if self._worker:
+                    self._worker.request_cancel()
+            return
+        self._teardown()
+        event.accept()
+
+    def _teardown(self, close_connection: bool = True) -> None:
+        """The body of an accepted close, shared by closeEvent and shutdown_for_exit (Patch 14 §4.2).
+
+        pre:  GUI thread; no ingest is running, or shutdown_for_exit has given up waiting for one
+        post: a running fetch, drawing update or update run is abandoned to ThreadRetention; Settings and
+              every report and 2nd OPS dialog are closed (each saves its own settings); pending writes are
+              flushed and the audit view unloaded; the render thread and the reconciler are stopped within
+              their bounds (retained on a timeout); when close_connection, idle maintenance runs and the
+              connection closes; the window is marked closed
+        """
+        # _closing is set first, so the handlers the endings below run skip their refreshes and the
+        # last-run line.
+        self._closing = True
         if self._busy.operation in (Operation.JOB_FETCH, Operation.DRAWING_FETCH):
             self._abandon_fetch_worker()
             fetch_dialog = getattr(self, "_fetch_dialog", None)
@@ -1778,49 +1817,67 @@ class MainWindow(QMainWindow):
             self._abandon_drawing_worker()
         if self._update_run is not None and self._update_run.active:
             self._update_run.shutdown_for_close()
-        if self._busy.operation == Operation.INGEST:
-            event.ignore()
-            confirmed = QMessageBox.question(
-                self, 
-                "Cancel ingest?", 
-                "An ingest is currently in flight. Are you sure you want to cancel and exit?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            if confirmed == QMessageBox.StandardButton.Yes:
-                self._close_requested = True
-                if self._worker:
-                    self._worker.request_cancel()
-        else:
-            self._closing = True
-            if self._settings_dialog is not None:
-                try:
-                    self._settings_dialog.reject()
-                except RuntimeError:
-                    pass
-            for serial, dialog in list(self._cleaning_report_dialogs.values()):
-                dialog.close()
-            for serial, dialog in list(self._second_ops_review_dialogs.values()):
-                dialog.close()
-            for serial, dialog in list(self._placements_report_dialogs.values()):
-                dialog.close()
-
+        if self._settings_dialog is not None:
             try:
-                self._audit_view.flush_pending_writes()
-            except Exception:
-                logger.exception('Exception caught in main_window')
+                self._settings_dialog.reject()
+            except RuntimeError:
                 pass
+        for serial, dialog in list(self._cleaning_report_dialogs.values()):
+            dialog.close()
+        for serial, dialog in list(self._second_ops_review_dialogs.values()):
+            dialog.close()
+        for serial, dialog in list(self._placements_report_dialogs.values()):
+            dialog.close()
 
-            self._audit_view.unload()
-            # Stops the requirements reconciler too, before the connection
-            # closes (Phase 54 section 7.2).
-            self.shutdown_render_thread()
+        try:
+            self._audit_view.flush_pending_writes()
+        except Exception:
+            logger.exception('Exception caught in main_window')
 
+        self._audit_view.unload()
+        # Stops the requirements reconciler too, before the connection
+        # closes (Phase 54 section 7.2).
+        self.shutdown_render_thread()
+
+        if close_connection:
             from cockpit.persistence.connection import run_idle_maintenance
             run_idle_maintenance(self._bootstrapped.conn)
             self._bootstrapped.conn.close()
-            self._closed = True
-            self._hand_orphans_to_cpp()
-            event.accept()
+        self._closed = True
+
+    def shutdown_for_exit(self) -> None:
+        """Tears the window down for exit when the event loop ended without an accepted close (Patch 14 §4.2).
+
+        pre:  GUI thread; the event loop has returned (Windows session end, quit())
+        post: nothing when the window is already closed. Otherwise a running ingest is asked to cancel and
+              its thread told to quit directly, then waited for up to RENDER_SHUTDOWN_TIMEOUT_MS; if it
+              finished, or none ran, _teardown() runs; if it didn't, the ingest thread is retained (INGEST)
+              and _teardown() runs without closing the connection, which the ingest still uses (SQLite
+              drops its uncommitted savepoint at the next open)
+        raises: nothing
+        """
+        if self._closed:
+            return
+        self._closing = True
+        ingest_finished = True
+        thread = self._thread
+        if self._busy.operation == Operation.INGEST and thread is not None:
+            if self._worker is not None:
+                self._worker.request_cancel()
+            try:
+                # The worker's queued quit can't arrive: no GUI event loop runs any more. quit() latches
+                # until the thread's own event loop starts, so calling it directly is enough.
+                thread.quit()
+                ingest_finished = thread.wait(RENDER_SHUTDOWN_TIMEOUT_MS)
+            except RuntimeError:
+                ingest_finished = True
+            if not ingest_finished:
+                logger.warning(
+                    "The ingest didn't finish within %d ms of the exit; the process exit ends it",
+                    RENDER_SHUTDOWN_TIMEOUT_MS,
+                )
+                self._retention.retain(thread, self._worker, ThreadLabel.INGEST)
+        self._teardown(close_connection=ingest_finished)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
@@ -1855,4 +1912,5 @@ class MainWindow(QMainWindow):
             # leave the allocator inconsistent, and the second wait() that
             # follows terminate() is unbounded -- F9 reintroduced.
             logger.warning("render thread did not exit within %d ms; exiting anyway", timeout_ms)
+            self._retention.retain(self._render_thread, self._render_worker, ThreadLabel.RENDER)
         return exited

@@ -46,7 +46,8 @@ class DrawingUpdateWorker(QObject):
         self.bom_parser = bom_parser
         self.run_id = run_id
         self.stop = threading.Event()
-        self.beacon = ShareCallBeacon()
+        # Patch 14 §7.3: the worker's child, so moveToThread carries it and it dies with its worker.
+        self.beacon = ShareCallBeacon(self)
 
     @pyqtSlot()
     def run(self) -> None:

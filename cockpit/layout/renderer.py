@@ -6,6 +6,7 @@ import fitz  # PyMuPDF
 
 from cockpit.ingestion.errors import MalformedPdfError
 from cockpit.persistence.errors import InvalidArgumentError
+from cockpit.layout.pdf_access import PdfStep, pdf_section
 
 
 @dataclass(frozen=True)
@@ -30,13 +31,8 @@ class PdfRenderer:
         allow_multipage: bool = False,
     ) -> tuple[tuple[float, float], ...]:
         """Return per-page dimensions in PDF points (1 pt = 1/72 inch)."""
+        doc, page_count = _open(path, "PDF_OPEN_FAILED")
         try:
-            doc = fitz.open(str(path))
-        except Exception as e:
-            raise MalformedPdfError(path, "PDF_OPEN_FAILED", {"cause": str(e)}) from e
-
-        try:
-            page_count = len(doc)
             if allow_multipage:
                 if page_count < 1:
                     raise MalformedPdfError(path, "UNSUPPORTED_PAGE_COUNT", {"observed": page_count})
@@ -46,13 +42,17 @@ class PdfRenderer:
                     raise MalformedPdfError(path, "UNSUPPORTED_PAGE_COUNT", {"observed": page_count})
 
             dimensions = []
-            for i in range(page_count):
-                page = doc[i]
-                dimensions.append((float(page.rect.width), float(page.rect.height)))
+            with pdf_section(PdfStep.PAGE_SIZES):
+                for i in range(page_count):
+                    page = doc[i]
+                    try:
+                        dimensions.append((float(page.rect.width), float(page.rect.height)))
+                    finally:
+                        page = None
 
             return tuple(dimensions)
         finally:
-            doc.close()
+            _close(doc)
 
     def render_page_png(
         self,
@@ -63,40 +63,7 @@ class PdfRenderer:
         """Rasterize ONE page to PNG bytes at a target pixel height."""
         if target_pixel_height <= 0:
             raise InvalidArgumentError("target_pixel_height", target_pixel_height, "Must be positive")
-
-        try:
-            doc = fitz.open(str(path))
-        except Exception as e:
-            raise MalformedPdfError(path, "PDF_OPEN_FAILED", {"cause": str(e)}) from e
-
-        try:
-            page_count = len(doc)
-            if page_index < 0 or page_index >= page_count:
-                raise InvalidArgumentError("page_index", page_index, f"Must be between 0 and {page_count - 1}")
-
-            page = doc[page_index]
-            
-            # target_pixel_height / page.rect.height is the scaling factor
-            # PyMuPDF dpi argument or matrix can be used.
-            # Using matrix:
-            scale = target_pixel_height / page.rect.height
-            mat = fitz.Matrix(scale, scale)
-            
-            pix = page.get_pixmap(matrix=mat, alpha=False)
-            png_bytes = pix.tobytes("png")
-            
-            return RenderedPage(
-                page_index=page_index,
-                png_bytes=png_bytes,
-                pixel_width=pix.width,
-                pixel_height=pix.height
-            )
-        except InvalidArgumentError:
-            raise
-        except Exception as e:
-            raise MalformedPdfError(path, "PDF_RENDER_FAILED", {"cause": str(e)}) from e
-        finally:
-            doc.close()
+        return self.render_pages_png(path, [page_index], target_pixel_height)[0]
 
     def render_pages_png(
         self,
@@ -108,35 +75,63 @@ class PdfRenderer:
         if target_pixel_height <= 0:
             raise InvalidArgumentError("target_pixel_height", target_pixel_height, "Must be positive")
 
+        doc, page_count = _open(path, "PDF_OPEN_FAILED")
         try:
-            doc = fitz.open(str(path))
-        except Exception as e:
-            raise MalformedPdfError(path, "PDF_OPEN_FAILED", {"cause": str(e)}) from e
-
-        try:
-            page_count = len(doc)
             results = []
             for page_index in page_indices:
                 if page_index < 0 or page_index >= page_count:
                     raise InvalidArgumentError("page_index", page_index, f"Must be between 0 and {page_count - 1}")
-                    
-                page = doc[page_index]
-                scale = target_pixel_height / page.rect.height
-                mat = fitz.Matrix(scale, scale)
-                
-                pix = page.get_pixmap(matrix=mat, alpha=False)
-                png_bytes = pix.tobytes("png")
-                
-                results.append(RenderedPage(
-                    page_index=page_index,
-                    png_bytes=png_bytes,
-                    pixel_width=pix.width,
-                    pixel_height=pix.height
-                ))
+                results.append(_raster(doc, page_index, target_pixel_height))
             return results
         except InvalidArgumentError:
             raise
         except Exception as e:
             raise MalformedPdfError(path, "PDF_RENDER_FAILED", {"cause": str(e)}) from e
         finally:
+            _close(doc)
+
+
+# Patch 14 §9 (INV-P1): every fitz touch below is inside a pdf_section, and every fitz reference is released
+# inside the section that made it, so no MuPDF destructor runs outside the lock.
+
+def _open(path: pathlib.Path, reason: str):
+    """The open document and its page count, read in one OPEN section."""
+    with pdf_section(PdfStep.OPEN):
+        try:
+            doc = fitz.open(str(path))
+        except Exception as e:
+            raise MalformedPdfError(path, reason, {"cause": str(e)}) from e
+        try:
+            return doc, len(doc)
+        except BaseException:
             doc.close()
+            doc = None
+            raise
+
+
+def _close(doc) -> None:
+    """Closes inside a CLOSE section. close() drops the native document (Document.this) there, and a
+    closed Document's wrapper holds nothing of MuPDF's, so it may be freed later, anywhere."""
+    with pdf_section(PdfStep.CLOSE):
+        doc.close()
+
+
+def _raster(doc, page_index: int, target_pixel_height: int) -> RenderedPage:
+    """One page as PNG bytes, in one PAGE_RASTER section; the page and its pixmap die inside it."""
+    with pdf_section(PdfStep.PAGE_RASTER):
+        page = doc[page_index]
+        pix = None
+        try:
+            # target_pixel_height / page.rect.height is the scaling factor
+            scale = target_pixel_height / page.rect.height
+            mat = fitz.Matrix(scale, scale)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            return RenderedPage(
+                page_index=page_index,
+                png_bytes=pix.tobytes("png"),
+                pixel_width=pix.width,
+                pixel_height=pix.height,
+            )
+        finally:
+            pix = None
+            page = None

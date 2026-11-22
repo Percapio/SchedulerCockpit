@@ -73,7 +73,8 @@ class AuditActionsBar(QWidget):
         self.actions_menu_btn.setText("⋯")
         self.actions_menu_btn.setStyleSheet("QToolButton::menu-indicator { image: none; } QToolButton { font-weight: bold; font-size: 16px; padding: 2px 8px; }")
         self.actions_menu_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self.actions_menu = QMenu()
+        # Patch 14 §7.3 (INV-O1): parented, so Python never owns a widget; it is still a popup.
+        self.actions_menu = QMenu(self)
         self.actions_menu_btn.setMenu(self.actions_menu)
         self.actions_menu.aboutToShow.connect(self._rebuild_actions_menu)
 

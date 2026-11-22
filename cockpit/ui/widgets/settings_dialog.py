@@ -59,9 +59,9 @@ from cockpit.services.requirements import (
 )
 from cockpit.services.requirements_reconciler import _build_scan_inputs_for_audit
 
+from cockpit.thread_retention import ThreadLabel, thread_retention
 from cockpit.ui.widgets.qt_lifecycle import (
     FETCH_WATCHDOG_TIMEOUT_MS,
-    _IN_FLIGHT_PROBES,
     start_bounded_probe,
 )
 
@@ -78,13 +78,6 @@ _PRESET_LABELS = {facelift.DARK: "Dark", facelift.LIGHT: "Light"}
 # kind of wait.
 PROBE_WATCHDOG_TIMEOUT_MS = 25_000
 
-# _IN_FLIGHT_PROBES is re-exported from qt_lifecycle, where the seam that owns
-# it lives. Bound here because this is the path callers and tests know it by.
-__all_probe_registry__ = _IN_FLIGHT_PROBES
-
-# Anchors background trial-scan threads past the TryProcessRequirementsDialog's
-# lifetime (mirrors _READS_IN_FLIGHT in second_ops_dialog.py, Phase 54 §10.2).
-_TRY_READS_IN_FLIGHT: set[tuple[QThread, QObject]] = set()
 
 
 @dataclass(frozen=True)
@@ -366,9 +359,8 @@ class TryProcessRequirementsDialog(QDialog):
 
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        pair = (thread, worker)
-        _TRY_READS_IN_FLIGHT.add(pair)
-        thread.finished.connect(lambda p=pair: _TRY_READS_IN_FLIGHT.discard(p))
+        # Anchors the scan past the dialog's own lifetime (Patch 14 §5.2).
+        thread_retention().retain(thread, worker, ThreadLabel.TRIAL_SCAN)
 
         self._thread = thread
         self._worker = worker

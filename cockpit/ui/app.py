@@ -58,6 +58,9 @@ def _show_failure_dialog(e: AppConfigError) -> None:
 
 
 def main() -> None:
+    from cockpit.thread_retention import monotonic_ms
+
+    started_at_ms = monotonic_ms()
     build_info = get_build_info()
     
     try:
@@ -66,7 +69,12 @@ def main() -> None:
         _show_failure_dialog(e)
         sys.exit(2)
         
-    fault_file = open(probe_outcome.chosen_root / "faulthandler.log", "a", buffering=1, encoding="utf-8")
+    from cockpit.ui.fault_log import rotate_faulthandler_log
+
+    fault_path = probe_outcome.chosen_root / "faulthandler.log"
+    fault_rotation_error = rotate_faulthandler_log(fault_path)
+    fault_file = open(fault_path, "a", buffering=1, encoding="utf-8")
+    # Kept for paths where main raises before finish_process; a clean exit closes the file itself.
     atexit.register(fault_file.close)
     faulthandler.enable(file=fault_file, all_threads=True)
     
@@ -94,8 +102,18 @@ def main() -> None:
     runtime_settings_controller = RuntimeCalcSettingsController(settings)
 
     bootstrapped = bootstrap(config, constants_provider=runtime_settings_controller.constants)
+    if fault_rotation_error is not None:
+        logging.getLogger(__name__).warning(
+            "faulthandler.log couldn't be rotated (%s); it keeps growing", fault_rotation_error,
+        )
 
     app = QApplication(sys.argv)
+
+    # Patch 14 §6 (INV-T1): from here on the cyclic collector runs only on the GUI thread, before
+    # MainWindow starts any worker.
+    from cockpit.ui.collector import CollectorSettings, take_collection_onto_gui_thread
+
+    collector = take_collection_onto_gui_thread(CollectorSettings.from_config(config))
 
     # Load new theme infrastructure
     try:
@@ -157,7 +175,8 @@ def main() -> None:
         completion_svc=bootstrapped.completion_svc,
         layout_query_svc=bootstrapped.layout_query_svc,
         pdf_renderer=bootstrapped.pdf_renderer,
-        holiday_svc=bootstrapped.holiday_svc
+        holiday_svc=bootstrapped.holiday_svc,
+        collector=collector,
     )
     window.show()
 
@@ -170,25 +189,44 @@ def main() -> None:
     report = bootstrapped.reconciliation_report
     if report.errors or report.orphan_delete_failed:
         from cockpit.ui.widgets import ErrorDialog
-        from cockpit.ui.error_messages import FailurePayload
-        
-        detail = []
-        for audit_id, exc in report.errors:
-            detail.append((f"Audit {audit_id}", str(exc)))
-        for path, exc in report.orphan_delete_failed:
-            detail.append((str(path), str(exc)))
-            
-        payload = FailurePayload(
-            exception_class=Exception,
-            title="Startup Cleanup Issues",
-            summary="Some background cleanup tasks encountered errors. They will be retried on the next launch.",
-            detail=detail,
-            reason_code="RECONCILIATION_PARTIAL_FAILURE"
-        )
-        dialog = ErrorDialog(payload, window)
+        from cockpit.ui.error_messages import startup_cleanup_payload
+
+        # Patch 14 §3: the payload used to carry the class Exception where the field is text, so building
+        # this dialog raised TypeError and Cockpit couldn't start while the cleanup reported anything.
+        dialog = ErrorDialog(startup_cleanup_payload(report), window)
         dialog.exec()
-    
-    sys.exit(app.exec())
+
+    # Patch 14 §10: one health line at startup, every interval, and at exit.
+    from cockpit.layout.pdf_access import pdf_reading
+    from cockpit.thread_retention import thread_retention
+    from cockpit.ui.health import HealthLogger, HealthProviders, HealthReason
+
+    health = HealthLogger(
+        HealthProviders(
+            started_at_ms=started_at_ms,
+            clock=monotonic_ms,
+            page=window.health_page,
+            busy=window.health_busy,
+            collector=collector,
+            retention=thread_retention(),
+            connection=bootstrapped.conn,
+            pdf=pdf_reading,
+        ),
+        config.health_interval_ms,
+    )
+
+    def begin_session() -> None:
+        collector.freeze_startup_heap()
+        health.log_now(HealthReason.STARTUP)
+        health.start()
+
+    # Scheduled after the startup cleanup dialog has closed, so its nested loop can't run it early.
+    QTimer.singleShot(0, begin_session)
+
+    # Patch 14 §4 (INV-X1): the process ends without interpreter finalization, after explicit flushes.
+    from cockpit.ui.process_exit import ExitFlushables, finish_process
+
+    finish_process(app.exec(), window, ExitFlushables(settings, fault_file), health, thread_retention())
 
 
 if __name__ == "__main__":

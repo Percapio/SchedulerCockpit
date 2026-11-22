@@ -385,7 +385,6 @@ class RequirementsReconciler(QObject):
         self._can_write = can_write or (lambda: True)
         self._thread: QThread | None = None
         self._worker: _ReconcilerWorker | None = None
-        self._lingering_threads: list[tuple[QThread, _ReconcilerWorker]] = []
         self._rerun_pending: bool = False
         self._deferred: bool = False
         self._notify_on_complete: bool = False
@@ -584,8 +583,9 @@ class RequirementsReconciler(QObject):
         """Stops the reconciler thread before closing SQLite (§7.3).
 
         Mirrors MainWindow.shutdown_render_thread: sets stop flag, disconnects
-        signals, quits, waits up to timeout_ms, logs warning and keeps refs
-        alive on timeout, and never calls terminate().
+        signals, quits, waits up to timeout_ms, logs warning and hands the
+        thread to the process's ThreadRetention on timeout (Patch 14 §5.2),
+        and never calls terminate().
         """
         self._stopped = True
         self._rerun_pending = False
@@ -618,8 +618,8 @@ class RequirementsReconciler(QObject):
                 "retaining references without calling terminate()",
                 timeout_ms,
             )
-            if worker is not None:
-                self._lingering_threads.append((thread, worker))
+            from cockpit.thread_retention import ThreadLabel, thread_retention
+            thread_retention().retain(thread, worker, ThreadLabel.RECONCILER)
             return False
 
         self._thread = None

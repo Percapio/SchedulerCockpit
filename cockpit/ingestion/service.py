@@ -9,6 +9,7 @@ import dataclasses
 from dataclasses import dataclass
 from typing import Sequence, Callable, Any
 
+from cockpit.persistence.connection import worker_scope
 from cockpit.persistence.repositories.audits import AuditRepository
 from cockpit.persistence.repositories.source_files import SourceFileRepository
 from cockpit.persistence.repositories.tht_checklist import ThtChecklistRepository
@@ -229,6 +230,24 @@ class IngestionService:
                 logger.debug("Could not remove %s during rollback", path, exc_info=True)
 
     def ingest(
+        self,
+        paths: Sequence[pathlib.Path],
+        progress: Callable[[ProgressEvent], None] | None = None,
+        *,
+        plan: IngestionPlan | None = None,
+        requirements_vocabulary: RequirementVocabulary | None = None,
+    ) -> ActiveAudit:
+        """Ingest a dropped trio, atomically persist, and return the new audit.
+
+        Patch 14 §8.3: the whole ingest holds the connection's worker scope, the reads before its
+        savepoint included, so no other thread's write can join its transaction.
+        """
+        with worker_scope(self.conn, "ingest"):
+            return self._ingest_in_scope(
+                paths, progress, plan=plan, requirements_vocabulary=requirements_vocabulary,
+            )
+
+    def _ingest_in_scope(
         self,
         paths: Sequence[pathlib.Path],
         progress: Callable[[ProgressEvent], None] | None = None,

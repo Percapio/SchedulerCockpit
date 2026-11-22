@@ -2,6 +2,8 @@ from typing import Any
 import pathlib
 
 from PyQt6.QtCore import Qt, QThread, QModelIndex, QAbstractTableModel, QObject, QSettings
+
+from cockpit.thread_retention import ThreadLabel, thread_retention
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QTreeWidget, QTreeWidgetItem, QMenu, QTableView,
     QLabel, QPushButton, QHBoxLayout, QWidget, QAbstractItemView,
@@ -42,12 +44,11 @@ class WrappingDelegate(QStyledItemDelegate):
         return QSize(width, int(doc.size().height()) + 8)
 
 
-# A QThread with no Qt parent is owned by its Python wrapper. Once the dialog
-# that started a read is destroyed, nothing else holds the thread, and a
-# garbage-collected QThread that is still running aborts the process. Reads
-# outlive the dialog by design (openpyxl is not interruptible), so the thread
-# and the unparented worker are anchored here for the duration and released on `finished`.
-_READS_IN_FLIGHT: set[tuple[QThread, SecondOpsReadWorker]] = set()
+# A QThread with no Qt parent is owned by its Python wrapper. Reads outlive the
+# dialog by design (openpyxl is not interruptible), so the thread and the
+# unparented worker are retained by the process's ThreadRetention (Patch 14 §5)
+# for the duration and released on `finished`, which also deletes them; nothing
+# deletes a thread while it runs.
 
 
 def _is_checked(value: Any) -> bool:
@@ -507,10 +508,8 @@ class SecondOpsAuditDialog(QDialog):
 
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        # Anchors the thread and worker past the dialog's own lifetime; see _READS_IN_FLIGHT.
-        pair = (thread, worker)
-        _READS_IN_FLIGHT.add(pair)
-        thread.finished.connect(lambda p=pair: _READS_IN_FLIGHT.discard(p))
+        # Anchors the thread and worker past the dialog's own lifetime (Patch 14 §5.2).
+        thread_retention().retain(thread, worker, ThreadLabel.SECOND_OPS_READ)
 
         self._thread = thread
         self._worker = worker

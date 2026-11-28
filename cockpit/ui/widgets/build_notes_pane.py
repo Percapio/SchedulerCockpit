@@ -61,6 +61,11 @@ class BuildNotesPane(QWidget):
         layout.addWidget(self._stack)
 
         self._editor = _NotesTextEdit(self)
+        # Patch 15 §3.3 (F31): one placeholder for the pane's life. QTextEdit.setDocument deletes the previous
+        # document only when it is a child of the editor's internal text control, so a new QTextDocument(editor)
+        # per discard was never deleted (2 per load/unload, about 16 KB each).
+        self._placeholder = QTextDocument(self._editor)
+        self._editor.setDocument(self._placeholder)
         self._editor.setReadOnly(True)
         self._editor.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self._editor.customContextMenuRequested.connect(self._on_context_menu)
@@ -119,12 +124,18 @@ class BuildNotesPane(QWidget):
         self._show_message(NOT_ATTACHED_MESSAGE)
 
     def _discard_document(self) -> None:
-        """Releases the document's C++ heap without waiting for the collector."""
+        """Releases the document's C++ heap without waiting for the collector (Patch 15 §3.3, F31).
+
+        post: the editor shows the pane's one placeholder, cleared; the rendered document that was showing
+              (parentless, so Python-owned) is cleared and its last reference dropped, so it is deleted at once.
+              The editor has exactly one QTextDocument child however many loads and unloads have run
+        """
         self._state = "Empty"
         self._editor.setExtraSelections([])
         stale = self._document
         self._document = None
-        self._editor.setDocument(QTextDocument(self._editor))
+        self._placeholder.clear()
+        self._editor.setDocument(self._placeholder)
         if stale is not None:
             stale.clear()
 

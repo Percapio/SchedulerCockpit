@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import sys
-import threading
 from collections import OrderedDict
 from dataclasses import dataclass
 from enum import StrEnum
@@ -18,7 +17,7 @@ from typing import Any, Callable, Optional
 from PyQt6.QtCore import QObject, QTimer
 from PyQt6.QtWidgets import QApplication, QDialog
 
-from cockpit.ui.process_counters import ProcessCounters, read_process_counters
+from cockpit.ui.process_counters import ProcessCounters, count_process_threads, read_process_counters
 
 logger = logging.getLogger("cockpit.health")
 
@@ -30,18 +29,37 @@ KEYS: tuple[str, ...] = (
     "ws_mb", "priv_mb", "handles", "gdi", "user",
     "py_blocks",
     "widgets", "top", "hidden_dialogs",
-    "threads_py",
+    # Patch 15 §5 (F22): the OS's count; threading.active_count() counted _DummyThread entries.
+    "threads_os",
     "retained", "retained_oldest_s",
     "gc_n0", "gc_n1", "gc_n2", "gc_max0_ms", "gc_max1_ms", "gc_max2_ms", "gc_over", "gc_off", "gc_frozen",
     "db_refused", "db_off_owner",
     "pdf_sections", "pdf_max_hold_ms", "pdf_max_wait_ms",
+    # Patch 15 §5: the raster cache, the operation counters the census fits growth against, and log faults.
+    "raster_mb", "n_ingest", "n_open", "n_update_run", "log_errors",
 )
+
+
+@dataclass(frozen=True)
+class OperationCounts:
+    """Operations since the process started (Patch 15 §5): the census fits growth against these.
+
+    ingests: IngestionWorker threads started. opens: audits opened from the Audit List that reached a loaded
+    view. update_runs: update runs the operator started (UPDATE_CHECK), not the automatic post-ingest
+    placements check, which belongs to its ingest.
+    """
+
+    ingests: int = 0
+    opens: int = 0
+    update_runs: int = 0
 
 
 class HealthReason(StrEnum):
     STARTUP = "startup"
     INTERVAL = "interval"
     EXIT = "exit"
+    # Patch 15 §4: logged from aboutToQuit when Windows ends the session.
+    SESSION_END = "session_end"
 
 
 @dataclass
@@ -57,6 +75,10 @@ class HealthProviders:
     retention: Any = None
     connection: Any = None
     pdf: Optional[Callable[[], Any]] = None
+    threads: Optional[Callable[[], Optional[int]]] = count_process_threads
+    operations: Optional[Callable[[], OperationCounts]] = None
+    raster_mb: Optional[Callable[[], Optional[float]]] = None
+    logging_faults: Optional[Callable[[], Any]] = None
 
 
 def _value_or_na(value: object) -> object:
@@ -138,19 +160,42 @@ def read_health(providers: HealthProviders, reason: HealthReason) -> "OrderedDic
         r = providers.pdf()
         return (r.sections, round(r.max_hold_ms, 1), round(r.max_wait_ms, 1))
 
+    def threads() -> tuple:
+        return (providers.threads() if providers.threads is not None else NA,)
+
+    def raster() -> tuple:
+        if providers.raster_mb is None:
+            return (NA,)
+        value = providers.raster_mb()
+        return (NA if value is None else round(value, 1),)
+
+    def operations() -> tuple:
+        if providers.operations is None:
+            return (NA, NA, NA)
+        counts = providers.operations()
+        return (counts.ingests, counts.opens, counts.update_runs)
+
+    def log_errors() -> tuple:
+        if providers.logging_faults is None:
+            return (NA,)
+        return (providers.logging_faults().count,)
+
     _fill(reading, ("up_h",), uptime)
     _fill(reading, ("page",), page)
     _fill(reading, ("busy",), busy)
     _fill(reading, ("ws_mb", "priv_mb", "handles", "gdi", "user"), counters)
     _fill(reading, ("py_blocks",), lambda: (sys.getallocatedblocks(),))
     _fill(reading, ("widgets", "top", "hidden_dialogs"), widgets)
-    _fill(reading, ("threads_py",), lambda: (threading.active_count(),))
+    _fill(reading, ("threads_os",), threads)
     _fill(reading, ("retained", "retained_oldest_s"), retention)
     _fill(reading, (
         "gc_n0", "gc_n1", "gc_n2", "gc_max0_ms", "gc_max1_ms", "gc_max2_ms", "gc_over", "gc_off", "gc_frozen",
     ), collector)
     _fill(reading, ("db_refused", "db_off_owner"), database)
     _fill(reading, ("pdf_sections", "pdf_max_hold_ms", "pdf_max_wait_ms"), pdf)
+    _fill(reading, ("raster_mb",), raster)
+    _fill(reading, ("n_ingest", "n_open", "n_update_run"), operations)
+    _fill(reading, ("log_errors",), log_errors)
     return reading
 
 

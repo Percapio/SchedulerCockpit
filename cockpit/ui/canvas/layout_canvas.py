@@ -481,6 +481,10 @@ class LayoutCanvas(QWidget):
         self._current_scale = 1.0
         assert not self.has_displayed_page()
 
+    def raster_cache_bytes(self) -> int:
+        """Patch 15 §5: the bytes the raster cache holds now (0 once unloaded)."""
+        return self._raster_cache.total_bytes()
+
     def unload(self) -> None:
         """Release every audit-scoped structure and invalidate any render job in
         flight without blocking on the worker.

@@ -26,6 +26,7 @@ class PdfStep(StrEnum):
     PAGE_SIZES = "page_sizes"
     PAGE_RASTER = "page_raster"
     CLOSE = "close"
+    STORE_EMPTY = "store_empty"
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,14 @@ class _TicketLock:
         with self._condition:
             self._serving += 1
             self._condition.notify_all()
+
+    def try_acquire(self) -> bool:
+        """Takes the lock only when no thread holds it or waits for it; never waits (Patch 15 §3.2)."""
+        with self._condition:
+            if self._next_ticket != self._serving:
+                return False
+            self._next_ticket += 1
+            return True
 
 
 _LOCK = _TicketLock()
@@ -112,6 +121,43 @@ def pdf_section(step: PdfStep) -> Iterator[None]:
                 _max_hold_ms = held_ms
                 _longest_step = step.value
             _max_wait_ms = max(_max_wait_ms, wait_ms)
+
+
+@contextlib.contextmanager
+def pdf_section_if_free(step: PdfStep) -> Iterator[bool]:
+    """Enters a PDF section only if it is free right now (INV-P1, for the post-ingest probe, Patch 15 §3.2).
+
+    pre:  none
+    post: yields true inside the section when no thread held or waited for the lock, or when the calling thread
+          is already inside a section; yields false, without waiting and without entering, otherwise. A section
+          entered here counts like pdf_section's
+    raises: whatever the step raises
+    """
+    global _sections, _max_hold_ms, _max_wait_ms, _longest_step
+    depth = getattr(_DEPTH, "depth", 0)
+    if depth:
+        _DEPTH.depth = depth + 1
+        try:
+            yield True
+        finally:
+            _DEPTH.depth = depth
+        return
+    if not _LOCK.try_acquire():
+        yield False
+        return
+    entered = time.perf_counter()
+    _DEPTH.depth = 1
+    try:
+        yield True
+    finally:
+        _DEPTH.depth = 0
+        held_ms = (time.perf_counter() - entered) * 1000.0
+        _LOCK.release()
+        with _STATS_LOCK:
+            _sections += 1
+            if held_ms > _max_hold_ms:
+                _max_hold_ms = held_ms
+                _longest_step = step.value
 
 
 def pdf_reading() -> PdfReading:

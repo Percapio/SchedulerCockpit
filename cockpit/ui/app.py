@@ -40,6 +40,15 @@ def _show_failure_dialog(e: AppConfigError) -> None:
             text += f"  • {attempt.candidate_path}\\v1\n"
         text += "\nWorkaround: either delete the data in the location you don't want to use, OR set the COCKPIT_APP_DATA environment variable to the location you do want to use. Restart Cockpit after either change."
         msg.setText(text)
+    elif e.error_reason == "override_unusable":
+        # Patch 15 §10.2 (F29): an override that can't be used is refused, not silently replaced.
+        attempt = e.probe_history[0] if e.probe_history else None
+        where = attempt.candidate_path if attempt is not None else "(unknown)"
+        why = attempt.error if attempt is not None and attempt.error else "it can't be written to"
+        msg.setText(
+            f"COCKPIT_APP_DATA points at {where}, which Cockpit can't write to ({why}).\n\n"
+            "Fix the folder, or remove the variable to use the default location, then restart Cockpit."
+        )
     else:
         msg.setText(str(e))
         
@@ -76,6 +85,12 @@ def main() -> None:
     fault_file = open(fault_path, "a", buffering=1, encoding="utf-8")
     # Kept for paths where main raises before finish_process; a clean exit closes the file itself.
     atexit.register(fault_file.close)
+    # Patch 15 §9: faulthandler's entries carry no time; this marker lets the census attribute them to a session.
+    from cockpit.ui.fault_log import session_marker
+    try:
+        fault_file.write(session_marker(build_info.version) + "\n")
+    except OSError:
+        pass
     faulthandler.enable(file=fault_file, all_threads=True)
     
     install_crash_reporter(
@@ -178,6 +193,19 @@ def main() -> None:
         holiday_svc=bootstrapped.holiday_svc,
         collector=collector,
     )
+
+    # Patch 15 §4 (F23): wired as soon as the window exists, so a Windows session end that arrives during the
+    # startup cleanup dialog's nested loop is still recorded. The health logger joins once it is built.
+    from cockpit.thread_retention import thread_retention as _thread_retention
+    from cockpit.ui.process_exit import ExitFlushables, ExitRecord
+    from cockpit.ui.session_end import SessionEnd, install_session_end
+
+    exit_record = ExitRecord()
+    exit_flushables = ExitFlushables(settings, fault_file)
+    health_holder: list = [None]
+    install_session_end(
+        app, window, exit_flushables, lambda: health_holder[0], _thread_retention(), exit_record, SessionEnd(),
+    )
     window.show()
 
     # A one-shot, not a visibility listener: showEvent would re-fire on every
@@ -200,6 +228,7 @@ def main() -> None:
     from cockpit.layout.pdf_access import pdf_reading
     from cockpit.thread_retention import thread_retention
     from cockpit.ui.health import HealthLogger, HealthProviders, HealthReason
+    from cockpit.ui.logging_faults import logging_faults
 
     health = HealthLogger(
         HealthProviders(
@@ -211,22 +240,30 @@ def main() -> None:
             retention=thread_retention(),
             connection=bootstrapped.conn,
             pdf=pdf_reading,
+            # Patch 15 §5: the counters the census fits growth against, the raster cache and log faults.
+            operations=window.operation_counts,
+            raster_mb=window.health_raster_mb,
+            logging_faults=logging_faults,
         ),
         config.health_interval_ms,
     )
+    health_holder[0] = health
 
     def begin_session() -> None:
         collector.freeze_startup_heap()
         health.log_now(HealthReason.STARTUP)
         health.start()
+        # Patch 15 §3.2 and §6: the probe tick starts once the session's first health line is in.
+        window.start_probe_timer(collector)
 
     # Scheduled after the startup cleanup dialog has closed, so its nested loop can't run it early.
     QTimer.singleShot(0, begin_session)
 
     # Patch 14 §4 (INV-X1): the process ends without interpreter finalization, after explicit flushes.
-    from cockpit.ui.process_exit import ExitFlushables, finish_process
+    # Patch 15 §4.3: the exit record tells it whether a session end already logged the exit.
+    from cockpit.ui.process_exit import finish_process
 
-    finish_process(app.exec(), window, ExitFlushables(settings, fault_file), health, thread_retention())
+    finish_process(app.exec(), window, exit_flushables, health, thread_retention(), exit_record=exit_record)
 
 
 if __name__ == "__main__":

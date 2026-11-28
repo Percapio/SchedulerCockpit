@@ -81,6 +81,13 @@ class AppConfig:
     gc_full_budget_ms: int = 150
     # Patch 14 §10.2: one health line this often; COCKPIT_HEALTH_INTERVAL_MS overrides it.
     health_interval_ms: int = 900_000
+    # Patch 15 §8 (F26): logs and crash reports are kept this many days; COCKPIT_LOG_RETENTION_DAYS overrides it.
+    log_retention_days: int = 91
+
+    @property
+    def crash_dir(self) -> pathlib.Path:
+        """Where the crash reporter writes once the configuration is resolved (Patch 15 §8)."""
+        return self.file_storage_root.parent / "crash_reports"
 
 
 @dataclass(frozen=True)
@@ -99,7 +106,7 @@ def _build_candidates() -> tuple[Candidate, ...]:
     if "COCKPIT_APP_DATA" in os.environ and os.environ["COCKPIT_APP_DATA"].strip():
         candidates.append(Candidate(
             path=pathlib.Path(os.environ["COCKPIT_APP_DATA"]),
-            label="$COCKPIT_APP_DATA override"
+            label=OVERRIDE_LABEL
         ))
         
     if sys.platform == "win32":
@@ -179,12 +186,35 @@ def _probe_candidate(path: pathlib.Path) -> ProbeAttempt:
     )
 
 
+OVERRIDE_LABEL = "$COCKPIT_APP_DATA override"
+
+
 def resolve_app_data_root() -> ResolveOutcome:
     """
     Intent: Determine the application data root by probing candidate paths
             in priority order.
+    Post:   Patch 15 §10.2 (F29): with COCKPIT_APP_DATA set and not blank, that folder is the root when its
+            probe succeeds, whatever the other candidates hold; the probe history holds that one attempt.
+            Without it, discovery is unchanged.
+    Raises: AppConfigError("override_unusable") when the override's probe fails; otherwise as before.
     """
     candidates = _build_candidates()
+    override = next((c for c in candidates if c.label == OVERRIDE_LABEL), None)
+    if override is not None:
+        attempt = _probe_candidate(override.path)
+        attempt = dataclasses.replace(
+            attempt,
+            candidate_label=override.label,
+            pre_existing_db=(override.path / "v1" / "local_audit.db").exists(),
+        )
+        if attempt.success:
+            return ResolveOutcome(chosen_root=override.path, probe_history=(attempt,))
+        raise AppConfigError(
+            f"COCKPIT_APP_DATA points at {override.path}, which Cockpit can't write to",
+            probe_history=(attempt,),
+            error_reason="override_unusable",
+        )
+
     claimed = _detect_claimed(candidates)
 
     if len(claimed) > 1:
@@ -263,7 +293,24 @@ def resolve_config(root: pathlib.Path | None = None, probe_history: tuple[ProbeA
         log_level=log_level,
         probe_history=probe_history,
         health_interval_ms=health_interval_from_environment(AppConfig.health_interval_ms),
+        log_retention_days=retention_days_from_environment(AppConfig.log_retention_days),
     )
+
+
+def retention_days_from_environment(default_days: int) -> int:
+    """COCKPIT_LOG_RETENTION_DAYS, when it names a positive whole number of days (Patch 15 §8)."""
+    raw = os.environ.get("COCKPIT_LOG_RETENTION_DAYS", "").strip()
+    if not raw:
+        return default_days
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("COCKPIT_LOG_RETENTION_DAYS=%r isn't a whole number; keeping %d days", raw, default_days)
+        return default_days
+    if value <= 0:
+        logger.warning("COCKPIT_LOG_RETENTION_DAYS=%d isn't positive; keeping %d days", value, default_days)
+        return default_days
+    return value
 
 
 def health_interval_from_environment(default_ms: int) -> int:

@@ -33,7 +33,11 @@ from cockpit.ui.busy_state import (
     OPERATION_WORDING, PARKED_WORDING, BusyState, Entry, Operation, ui_may_write, unavailable_reason,
 )
 import logging
+from cockpit.ui.collector import monotonic_ms as _monotonic_ms
 logger = logging.getLogger(__name__)
+
+# Patch 15 §6: how often the logging notice may come back while new faults keep arriving.
+LOG_NOTICE_REPEAT_MS = 1_800_000
 
 # FETCH_WATCHDOG_TIMEOUT_MS is imported above from qt_lifecycle: the source-root
 # probe in settings_dialog scans the same shares on the same clock, and a widget
@@ -118,6 +122,21 @@ class MainWindow(QMainWindow):
         self._placements_latch: _IngestLatch | None = None
         self._settings_dialog = None
         self._closing = False
+        # Patch 15 §5: operations since launch, for the health line's n_ingest, n_open and n_update_run.
+        self._operation_ingests = 0
+        self._operation_opens = 0
+        self._operation_update_runs = 0
+        # Patch 15 §4.3: set when a session end closed the connection, so the teardown leaves it alone.
+        self._connection_closed = False
+        # Patch 15 §3.2 and §6: the probe tick, its state, and the logging notice.
+        self._probe_timer = None
+        self._probe_collector = None
+        self._probe_armed = False
+        self._probe_last_ms = _monotonic_ms()
+        self._last_input_ms = _monotonic_ms()
+        self._probe_census = None
+        self._log_faults_noticed = 0
+        self._log_notice_at_ms = None
         # Set once a close has closed the connection; a later close does nothing.
         self._closed = False
         # Phase 55b §5.6: the update run's watchdog bound; tests shorten it.
@@ -606,6 +625,8 @@ class MainWindow(QMainWindow):
         ):
             if hasattr(self, "_idle_timer"):
                 self._idle_timer.start()
+            # Patch 15 §3.2: the probe runs only after PROBE_QUIET_MS without input.
+            self._last_input_ms = _monotonic_ms()
         return super().eventFilter(obj, event)
         
     def _show_drop_area(self) -> None:
@@ -637,6 +658,9 @@ class MainWindow(QMainWindow):
                 return
             self._sync_mpn_library_state()
             self._audit_view.load(audit_id)
+            # Patch 15 §5: an open from the Audit List counts when it left a view; a failed load doesn't.
+            if self._audit_view.has_loaded_view():
+                self._operation_opens += 1
             
         QTimer.singleShot(0, do_load)
             
@@ -792,10 +816,13 @@ class MainWindow(QMainWindow):
         self._fetch_dialog.fetch_requested.connect(lambda jn: self._start_job_fetch(jn, root_path))
         self._fetch_dialog.rejected.connect(self._on_fetch_dialog_cancelled)
         
-        # Don't use exec() here because we want to run the fetch concurrently and let the dialog close or update
-        # Wait, if it's a modal dialog and we show() it, we can't block. Wait, QDialog.exec() runs a nested event loop.
-        # If we use exec(), the signals still fire! So exec() is fine, we just close it from the signal handlers.
-        self._fetch_dialog.exec()
+        # exec() runs a nested event loop, so the fetch's signals still arrive and close the dialog.
+        # Patch 15 §10.1 (F28): once exec() returns the dialog is Python-owned; dropping the reference deletes it,
+        # so hidden_dialogs reads 0 at rest. Every other use checks for None.
+        try:
+            self._fetch_dialog.exec()
+        finally:
+            self._fetch_dialog = None
 
     def _start_job_fetch(self, job_number: str, root_path: pathlib.Path) -> None:
         if self._operation_in_flight:
@@ -1111,6 +1138,20 @@ class MainWindow(QMainWindow):
             return "drop"
         return "other"
 
+    def operation_counts(self):
+        """Patch 15 §5: operations since launch, for the health line and the probe."""
+        from cockpit.ui.health import OperationCounts
+        return OperationCounts(
+            ingests=self._operation_ingests,
+            opens=self._operation_opens,
+            update_runs=self._operation_update_runs,
+        )
+
+    def health_raster_mb(self) -> float | None:
+        """Patch 15 §5: the raster cache's bytes, in MiB."""
+        size = self._audit_view.raster_cache_bytes()
+        return None if size is None else size / (1024.0 * 1024.0)
+
     def health_busy(self) -> str:
         """Patch 14 §10.1: the running operation, or "none", for the health line and the collector."""
         return self._busy.operation.value if self._busy.operation is not None else "none"
@@ -1171,6 +1212,9 @@ class MainWindow(QMainWindow):
         run.finished.connect(self._on_update_run_finished)
         self._update_run = run
         self._begin(operation)
+        # Patch 15 §5: only runs the operator started; the post-ingest placements check is part of its ingest.
+        if operation == Operation.UPDATE_CHECK:
+            self._operation_update_runs += 1
         run.start()
         return True
 
@@ -1605,6 +1649,7 @@ class MainWindow(QMainWindow):
         self._pending_plan = plan
         
         self._begin(Operation.INGEST)
+        self._operation_ingests += 1  # Patch 15 §5
         self._placements_latch = _IngestLatch()
         self.drop_area.setEnabled(False)
         self.progress_view.reset()
@@ -1753,6 +1798,8 @@ class MainWindow(QMainWindow):
 
     def _on_worker_finished(self) -> None:
         self._end_operation()
+        # Patch 15 §3.2: every ended ingest arms the probe, whatever its outcome; each one parsed and allocated.
+        self._probe_armed = True
         latch = self._placements_latch
         if latch is not None:
             latch.worker_done = True
@@ -1784,6 +1831,10 @@ class MainWindow(QMainWindow):
                 "An ingest is currently in flight. Are you sure you want to cancel and exit?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
+            # Patch 15 §4.3: a Windows session end that arrived while the question was open has already done
+            # what it needs; nothing here may act on a window that is ending.
+            if self._closing:
+                return
             if confirmed == QMessageBox.StandardButton.Yes:
                 self._close_requested = True
                 if self._worker:
@@ -1805,6 +1856,8 @@ class MainWindow(QMainWindow):
         # _closing is set first, so the handlers the endings below run skip their refreshes and the
         # last-run line.
         self._closing = True
+        if self._probe_timer is not None:
+            self._probe_timer.stop()
         if self._busy.operation in (Operation.JOB_FETCH, Operation.DRAWING_FETCH):
             self._abandon_fetch_worker()
             fetch_dialog = getattr(self, "_fetch_dialog", None)
@@ -1839,11 +1892,129 @@ class MainWindow(QMainWindow):
         # closes (Phase 54 section 7.2).
         self.shutdown_render_thread()
 
-        if close_connection:
+        # Patch 15 §4.3: a session end may already have closed the connection.
+        if close_connection and not self._connection_closed:
             from cockpit.persistence.connection import run_idle_maintenance
             run_idle_maintenance(self._bootstrapped.conn)
             self._bootstrapped.conn.close()
+            self._connection_closed = True
         self._closed = True
+
+    def start_probe_timer(self, collector=None) -> None:
+        """Patch 15 §3.2 and §6: starts the repeating probe tick (app.main calls it once the session has begun).
+
+        post: the tick runs every PROBE_TICK_MS until begin_session_end or _teardown; the interval clock starts now
+        """
+        from cockpit.ui.probe import PROBE_TICK_MS, CensusState
+        self._probe_collector = collector
+        self._probe_census = CensusState()
+        self._probe_last_ms = _monotonic_ms()
+        if self._probe_timer is None:
+            self._probe_timer = QTimer(self)
+            self._probe_timer.setInterval(PROBE_TICK_MS)
+            self._probe_timer.timeout.connect(self._on_probe_tick)
+        self._probe_timer.start()
+
+    def _on_probe_tick(self) -> None:
+        """One probe tick (Patch 15 §3.2): the logging notice, then the probe when every condition holds."""
+        self._check_logging_faults()
+        if self._closing or self._closed:
+            return
+        from cockpit.ui.probe import PROBE_INTERVAL_MS, PROBE_QUIET_MS, ProbeReason
+        now = _monotonic_ms()
+        if self.health_page() != "list" or self._busy.operation is not None:
+            return
+        if QApplication.activeModalWidget() is not None:
+            return
+        if now - self._last_input_ms < PROBE_QUIET_MS:
+            return
+        if self._probe_armed:
+            reason = ProbeReason.INGEST
+        elif now - self._probe_last_ms >= PROBE_INTERVAL_MS:
+            reason = ProbeReason.INTERVAL
+        else:
+            return
+        self.run_probe(reason)
+
+    def run_probe(self, reason) -> str:
+        """Runs one probe now and logs its line (Patch 15 §3.2); the tick checks the conditions first."""
+        import gc as _gc
+        from cockpit.layout.renderer import empty_store
+        from cockpit.ui.collector import CollectionTrigger
+        from cockpit.ui.probe import CensusState, format_probe, probe_after_work
+        from cockpit.ui.process_counters import read_process_counters
+        self._probe_armed = False
+        self._probe_last_ms = _monotonic_ms()
+        if self._probe_census is None:
+            self._probe_census = CensusState()
+        collector = self._probe_collector
+        if collector is not None:
+            def collect_full() -> None:
+                collector.collect_full_now(CollectionTrigger.PROBE)
+        else:
+            def collect_full() -> None:
+                _gc.collect(2)
+        reading = probe_after_work(
+            reason, self.operation_counts(), collect_full, empty_store, read_process_counters, self._probe_census,
+        )
+        line = format_probe(reading)
+        logging.getLogger("cockpit.probe").info("%s", line)
+        return line
+
+    def _check_logging_faults(self) -> None:
+        """Patch 15 §6: a sticky notice when the log can't be written, repeated while new faults keep arriving."""
+        from cockpit.ui.logging_faults import logging_faults
+        faults = logging_faults()
+        if faults.count <= self._log_faults_noticed:
+            return
+        now = _monotonic_ms()
+        if self._log_notice_at_ms is not None and now - self._log_notice_at_ms < LOG_NOTICE_REPEAT_MS:
+            return
+        self._log_faults_noticed = faults.count
+        self._log_notice_at_ms = now
+        try:
+            self.toast.show_notice(
+                "Cockpit can't write its log",
+                f"{faults.first_error or 'error'}, {faults.count} record(s). It keeps working; tell support.",
+            )
+        except Exception:
+            pass
+
+    def is_closed(self) -> bool:
+        """Patch 15 §4.2: whether _teardown has run."""
+        return self._closed
+
+    def begin_session_end(self) -> None:
+        """Patch 15 §4.2, step 1: nothing new starts once Windows is ending the session.
+
+        post: _closing is set; the idle, midnight and probe timers are stopped
+        raises: nothing
+        """
+        self._closing = True
+        for name in ("_idle_timer", "_midnight_timer", "_probe_timer"):
+            timer = getattr(self, name, None)
+            if timer is not None:
+                timer.stop()
+
+    def close_connection_for_session_end(self) -> str:
+        """Patch 15 §4.2, step 5: closes the connection unless a worker holds its scope.
+
+        post: with no scope holder, the connection is closed (SQLite checkpoints and deletes the WAL) and
+              _connection_closed is set; with one, it stays open, and SQLite rolls the worker's savepoint back
+              at the next open. The outcome is logged at INFO and returned
+        raises: whatever close() raises; end_session_now isolates the step
+        """
+        if self._connection_closed:
+            return "already closed"
+        conn = self._bootstrapped.conn
+        holder = conn.scope_holder() if hasattr(conn, "scope_holder") else None
+        if holder is not None:
+            logger.info("Session end: the connection stays open; %s holds it", holder)
+            return f"held by {holder}"
+        conn.close()
+        self._connection_closed = True
+        logger.info("Session end: the connection is closed")
+        return "closed"
 
     def shutdown_for_exit(self) -> None:
         """Tears the window down for exit when the event loop ended without an accepted close (Patch 14 §4.2).

@@ -1,7 +1,7 @@
 """App bootstrapping module."""
 
 import logging
-from logging.handlers import RotatingFileHandler
+import os
 import shutil
 import sqlite3
 import sys
@@ -101,38 +101,63 @@ def bootstrap(
         logger.removeHandler(handler)
         
     formatter = logging.Formatter('%(asctime)s - %(threadName)s - %(name)s - %(levelname)s - %(message)s')
-    
-    file_handler = RotatingFileHandler(
-        config.log_path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
-    )
+
+    from cockpit.ui.runtime import runtime_kind
+    from cockpit._build_info import get_build_info
+    from cockpit.ui.logging_faults import CountingLogHandler, install_primary_handler
+    build_info = get_build_info()
+
+    # Patch 15 §6 (F24): weekly files kept by age (§8), every failed record counted, and the file opened on the
+    # first record (delay=True inside the handler), so an unopenable log can't stop Cockpit starting.
+    file_handler = CountingLogHandler(config.log_path, config.log_retention_days)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-    
-    stderr_handler = logging.StreamHandler(sys.stderr)
-    stderr_handler.setFormatter(formatter)
-    stderr_handler.setLevel(logging.WARNING)
-    logger.addHandler(stderr_handler)
+    install_primary_handler(file_handler)
+    # Patch 15 §9: the census opens a session at this line, before anything else the session logs.
+    logging.getLogger("cockpit").info("Session start: pid=%d version=%s", os.getpid(), build_info.version)
 
+    # Patch 15 §6 (D6): a windowed build has no stderr; a handler on None failed on every WARNING.
+    if sys.stderr is not None:
+        stderr_handler = logging.StreamHandler(sys.stderr)
+        stderr_handler.setFormatter(formatter)
+        stderr_handler.setLevel(logging.WARNING)
+        logger.addHandler(stderr_handler)
+
+    duplicate_dir = None
     if config.log_duplicate_to_install_dir:
         install_log_path = install_dir() / "log.txt"
         try:
-            install_handler = RotatingFileHandler(
-                install_log_path, maxBytes=10 * 1024 * 1024, backupCount=2, encoding="utf-8"
-            )
+            # The handler opens its file on the first record (delay=True), so the folder's writability is checked
+            # here, where the old handler's eager open used to fail and warn. Its later faults aren't surfaced: it is
+            # an optional copy (Patch 15 §6).
+            with open(install_log_path, "a", encoding="utf-8"):
+                pass
+            install_handler = CountingLogHandler(install_log_path, config.log_retention_days)
             install_handler.setFormatter(formatter)
             logger.addHandler(install_handler)
+            duplicate_dir = install_log_path.parent
             logger.info("Duplicate log destination: %s", install_log_path)
         except OSError as e:
             # Install dir may be read-only (e.g. Program Files without elevation)
             logger.warning("Could not open install-folder log at %s: %s — primary log at %s", install_log_path, e, config.log_path)
 
-    from cockpit.ui.runtime import runtime_kind
-    from cockpit._build_info import get_build_info
-    build_info = get_build_info()
-    
     logging.getLogger("cockpit").info("Primary log: %s", config.log_path)
     logging.getLogger("cockpit").info("Build info: version=%s commit=%s runtime=%s",
                                        build_info.version, build_info.commit, runtime_kind().value)
+
+    # Patch 15 §8 (F26): logs and crash reports past the retention window, in every place they are written.
+    import time as _time
+    from cockpit.ui.retention import prune_by_age, retention_targets
+    prune_by_age(
+        retention_targets(
+            log_dir=config.log_path.parent,
+            crash_dir=config.crash_dir,
+            data_root=config.app_data_root.parent,
+            duplicate_dir=duplicate_dir,
+        ),
+        config.log_retention_days,
+        _time.time(),
+    )
 
     # Format the probe history
     probe_summary = []

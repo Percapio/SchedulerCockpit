@@ -6,7 +6,7 @@ import fitz  # PyMuPDF
 
 from cockpit.ingestion.errors import MalformedPdfError
 from cockpit.persistence.errors import InvalidArgumentError
-from cockpit.layout.pdf_access import PdfStep, pdf_section
+from cockpit.layout.pdf_access import PdfStep, pdf_section, pdf_section_if_free
 
 
 @dataclass(frozen=True)
@@ -135,3 +135,24 @@ def _raster(doc, page_index: int, target_pixel_height: int) -> RenderedPage:
         finally:
             pix = None
             page = None
+
+
+def empty_store() -> bool:
+    """Empties MuPDF's store if no other thread is inside PyMuPDF or waiting for it (Patch 15 §3.2, F32).
+
+    pre:  any thread; fitz is imported only here and in parser.py (Patch 14 §9.1)
+    post: true after fitz.TOOLS.store_shrink(100) ran inside pdf_section_if_free(STORE_EMPTY); false, having
+          touched nothing, when the PDF lock was taken or queued for
+    raises: nothing; a PyMuPDF error is logged at WARNING and returns false
+    """
+    import logging
+
+    try:
+        with pdf_section_if_free(PdfStep.STORE_EMPTY) as entered:
+            if not entered:
+                return False
+            fitz.TOOLS.store_shrink(100)
+            return True
+    except Exception as error:
+        logging.getLogger(__name__).warning("Emptying MuPDF's store failed: %s", type(error).__name__)
+        return False

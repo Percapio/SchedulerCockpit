@@ -31,6 +31,7 @@ class CollectionTrigger(StrEnum):
     FULL_FORCED = "full_forced"
     FREEZE = "freeze"
     EXPLICIT = "explicit"
+    PROBE = "probe"
 
 
 @dataclass(frozen=True)
@@ -201,6 +202,24 @@ class CollectorHandle:
     def request_full(self) -> None:
         """Asks for a full collection at the next tick (idle maintenance calls it)."""
         self.state.full_requested = True
+
+    def collect_full_now(self, trigger: "CollectionTrigger") -> None:
+        """One full collection, now, on the calling (GUI) thread (Patch 15 §3.2).
+
+        pre:  GUI thread, as INV-T1 requires
+        post: generation 2 was collected with state.trigger naming trigger; last_full_ms is now and any pending
+              full request is cleared, so the next tick doesn't repeat it; the deferred lines are emitted
+        raises: whatever the collection raises
+        """
+        state = self.state
+        state.trigger = trigger
+        try:
+            self._gc.collect(2)
+        finally:
+            state.trigger = None
+        state.full_requested = False
+        state.last_full_ms = self._clock()
+        self.emit_deferred_lines()
 
     def tick(self) -> None:
         """One collector tick: at most one collection, then the lines the gc callback deferred.

@@ -250,6 +250,16 @@ class GatedConnection(sqlite3.Connection):
         self._gate.admit(verb="CLOSE")
         super().close()
 
+    def scope_holder(self) -> Optional[str]:
+        """The name of the worker that holds the connection's scope, or None (Patch 15 §4.2).
+
+        pre:  any thread
+        post: read under the gate's lock; never refuses
+        """
+        gate = self._gate
+        with gate._lock:
+            return gate.scope_holder if gate.scope_ident is not None else None
+
     def __exit__(self, exc_type, exc_value, traceback):
         self._gate.admit(verb="COMMIT")
         return super().__exit__(exc_type, exc_value, traceback)

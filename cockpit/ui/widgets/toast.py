@@ -99,6 +99,22 @@ class Toast(QWidget):
 
         self._show_toast()
 
+    def show_notice(self, title: str, subtitle: str) -> None:
+        """A toast that stays until it is clicked (Patch 15 §6, D8): for a condition the operator must not miss."""
+        self.title_label.setText(title)
+        if subtitle:
+            self.subtitle_label.setText(subtitle)
+            self.subtitle_label.show()
+        else:
+            self.subtitle_label.hide()
+        self.setProperty("severity", "info")
+        self.style().unpolish(self)
+        self.style().polish(self)
+        self._timer.stop()
+        self._position_bottom_right()
+        self.show()
+        self.raise_()
+
     def _show_toast(self) -> None:
         self._position_bottom_right()
         self.show()

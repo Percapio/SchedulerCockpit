@@ -297,6 +297,14 @@ class AuditView(QWidget):
         self._center_pager.load(audit_id, self._library_bom_lines(audit_id))
         self.audit_loaded.emit(audit_id)
 
+    def has_loaded_view(self) -> bool:
+        """Patch 15 §5: whether the last load left the session with a view (a failed load doesn't)."""
+        return self._session.current_view() is not None
+
+    def raster_cache_bytes(self) -> int | None:
+        """Patch 15 §5: the drawing's raster cache, in bytes."""
+        return self._layout_canvas.raster_cache_bytes()
+
     # --- Phase 58 §6: X-ray mode ---
 
     def set_xray_mode_memory(self, load, store) -> None:
